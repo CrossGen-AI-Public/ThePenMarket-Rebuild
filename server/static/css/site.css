@@ -111,7 +111,7 @@ code{font-family:Menlo,Consolas,monospace;font-size:.9em;background:var(--grey);
 .hero-fallback{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:40px 0}
 .hero-fallback img{max-height:100%;width:auto;max-width:100%;object-fit:contain;mix-blend-mode:multiply}
 .hero-stage.is-3d .hero-fallback{display:none}
-.hotspots{position:absolute;inset:0;pointer-events:none}
+.hotspots{position:absolute;inset:0;pointer-events:none;overflow:hidden}
 .hotspot{position:absolute;transform:translate(-50%,-50%);width:30px;height:30px;border-radius:50%;background:var(--white);box-shadow:0 2px 10px rgba(0,0,0,.18);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:500;line-height:1;color:var(--ink)}
 .hotspot-label{position:absolute;transform:translate(0,-50%);background:var(--grey);color:var(--muted);font-size:14px;padding:8px 14px;border-radius:6px;white-space:nowrap}
 .hotspot-label::before{content:"";position:absolute;left:-44px;top:50%;width:44px;border-top:2px dashed var(--line-2)}
@@ -122,7 +122,7 @@ code{font-family:Menlo,Consolas,monospace;font-size:.9em;background:var(--grey);
 .hero-cats a[aria-current]::after{width:2px}
 @media (max-width:1100px){
   .hero-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
-  .hero-cats{grid-column:1/-1;flex-direction:row;justify-content:center;padding-top:var(--s4);gap:var(--s5)}
+  .hero-cats{grid-column:1/-1;flex-direction:row;flex-wrap:wrap;justify-content:center;padding-top:var(--s4);gap:12px var(--s5);white-space:normal}
   .hero-cats a{padding-right:0}
   .hero-cats a::after{display:none}
   .hero-stage{height:560px}
@@ -132,6 +132,7 @@ code{font-family:Menlo,Consolas,monospace;font-size:.9em;background:var(--grey);
   .hero-grid{grid-template-columns:minmax(0,1fr)}
   .hero-copy{padding-top:28px}
   .hero-stage{order:-1;height:380px}
+  .hotspot-label{display:none!important}
   .hero-bg{width:100%;top:-120px;bottom:auto;height:520px;border-bottom-right-radius:120px}
   .hero-thumbs{grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
   .hero-thumb-row{flex-direction:column;align-items:flex-start;gap:6px;padding:10px}

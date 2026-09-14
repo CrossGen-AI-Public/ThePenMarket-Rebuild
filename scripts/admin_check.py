@@ -12,6 +12,19 @@ email, password = os.environ["ADMIN_TEST_EMAIL"], os.environ["ADMIN_TEST_PASSWOR
 os.makedirs(out, exist_ok=True)
 bad = []
 
+def shot(pg, name, full=True):
+    """Chromium under SwiftShader occasionally refuses a capture mid-paint; settle and retry."""
+    for i in range(4):
+        try:
+            pg.wait_for_load_state("networkidle", timeout=10000)
+        except Exception:
+            pass
+        try:
+            pg.screenshot(path=f"{out}/{name}.png", full_page=full); return
+        except Exception as e:
+            if i == 3: raise
+            time.sleep(1)
+
 def wait_text(loc, pred, what, timeout=15):
     for _ in range(int(timeout * 10)):
         if pred(loc.inner_text().strip()): return
@@ -34,12 +47,12 @@ with sync_playwright() as p:
     pg.on("response", lambda r: bad.append(f"http {r.status}: {r.url[:120]}") if r.status >= 500 else None)
 
     pg.goto(f"{base}/admin/login/", wait_until="load")
-    pg.screenshot(path=f"{out}/admin-login-1440.png", full_page=True)
+    shot(pg, "admin-login-1440")
     pg.fill("#email", email); pg.fill("#password", password)
     with pg.expect_navigation(wait_until="load"):
         pg.click(".admin-box button[type=submit]")
     if "/admin/verify/" in pg.url:
-        pg.screenshot(path=f"{out}/admin-verify-1440.png", full_page=True)
+        shot(pg, "admin-verify-1440")
         code = None
         for _ in range(20):
             code = latest_code()
@@ -57,29 +70,29 @@ with sync_playwright() as p:
     pg.goto(f"{base}{href}", wait_until="load")
     assert pg.locator("#admBar").count() == 1, "editing bar missing"
     assert pg.evaluate("document.documentElement.classList.contains('editing')"), "editing class missing"
-    pg.screenshot(path=f"{out}/admin-product-1440.png", full_page=True)
+    shot(pg, "admin-product-1440")
     title = pg.locator("[data-edit=title]"); before = title.inner_text().strip()
     title.click(); pg.wait_for_selector("[data-edit=title] input")
     pg.fill("[data-edit=title] input", before + " (gate)"); pg.click("[data-edit=title] .save")
     wait_text(title, lambda t: "(gate)" in t, "the edited title")
-    pg.screenshot(path=f"{out}/admin-product-edited-1440.png", full_page=True)
+    shot(pg, "admin-product-edited-1440")
     title.click(); pg.wait_for_selector("[data-edit=title] input"); pg.fill("[data-edit=title] input", before); pg.click("[data-edit=title] .save")
     wait_text(title, lambda t: t == before, "the title to be put back")
     # preview as a customer, then back
     with pg.expect_navigation(wait_until="load"):
         pg.click("#admBar button:has-text('Preview as customer')")
     assert pg.locator("#admBar").count() == 0 and pg.locator(".adm-pill").count() == 1, "preview mode did not hide the editing bar"
-    pg.screenshot(path=f"{out}/admin-preview-1440.png", full_page=False)
+    shot(pg, "admin-preview-1440", full=False)
     with pg.expect_navigation(wait_until="load"):
         pg.click(".adm-pill button")
     assert pg.locator("#admBar").count() == 1, "leaving preview did not restore the editing bar"
     # history shows the two edits
     pg.goto(f"{base}/admin/history/", wait_until="load")
     assert pg.locator("td:has-text('(gate)')").count() >= 1, "history missing the edit"
-    pg.screenshot(path=f"{out}/admin-history-1440.png", full_page=True)
+    shot(pg, "admin-history-1440")
     # phone width
     ctx2 = b.new_context(viewport={"width": 390, "height": 844}, storage_state=ctx.storage_state())
-    m = ctx2.new_page(); m.goto(f"{base}{href}", wait_until="load"); m.screenshot(path=f"{out}/admin-product-390.png", full_page=True)
+    m = ctx2.new_page(); m.goto(f"{base}{href}", wait_until="load"); shot(m, "admin-product-390")
     over = m.evaluate("document.documentElement.scrollWidth - document.documentElement.clientWidth")
     if over > 0: bad.append(f"overflow {over}px at 390 on the product page with editing on")
     b.close()

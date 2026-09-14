@@ -393,6 +393,64 @@ pub async fn reset(AxState(state): AxState<State>, Extension(cookie): Extension<
     Ok(Redirect::to("/admin/login/?notice=reset").into_response())
 }
 
+#[derive(Template)]
+#[template(path = "admin/password.html")]
+pub struct PasswordTpl {
+    pub page: PageMeta,
+    pub error: String,
+    pub done: bool,
+}
+
+#[derive(Deserialize)]
+pub struct PasswordForm {
+    pub current: String,
+    pub password: String,
+    pub password2: String,
+    pub csrf: String,
+}
+
+pub async fn password_form(AxState(state): AxState<State>, Extension(cookie): Extension<CsrfCookie>, super::Auth(_admin): super::Auth) -> AppResult {
+    html(&PasswordTpl { page: meta(&state, "Change password | ThePenMarket.com", "/admin/password/", &cookie), error: String::new(), done: false })
+}
+
+/// Signed-in password change: the current password is required (a walked-away laptop can't
+/// change it), the new one goes through the same policy and breach check as a reset, and every
+/// other session is signed out.
+pub async fn password(AxState(state): AxState<State>, Extension(cookie): Extension<CsrfCookie>, super::Auth(admin): super::Auth, ConnectInfo(peer): ConnectInfo<SocketAddr>, headers: HeaderMap, Form(form): Form<PasswordForm>) -> AppResult {
+    if let Some(r) = rate_limited(&state, &headers, peer, &cookie) {
+        return Ok(r);
+    }
+    if !security::csrf_ok(&state.cfg.csrf_secret, &cookie.0, &form.csrf) {
+        return Err(AppError::Forbidden("The form expired. Reload the page and try again.".into()));
+    }
+    let page = meta(&state, "Change password | ThePenMarket.com", "/admin/password/", &cookie);
+    let acc = store::account_by_id(&state.pool, admin.account_id).await?.ok_or(AppError::NotFound)?;
+    let mut error = String::new();
+    if !auth::verify_password(&form.current, &acc.password_hash) {
+        store::record_failure(&state.pool, acc.id).await?;
+        error = "Your current password is wrong.".into();
+    } else if form.password != form.password2 {
+        error = "The two new passwords don't match.".into();
+    } else if let Err(e) = auth::password_policy(&form.password) {
+        error = e;
+    } else if auth::verify_password(&form.password, &acc.password_hash) {
+        error = "That's the same as your current password. Pick a new one.".into();
+    } else if let Some(n) = auth::breached_count(&state.http, &form.password).await {
+        if n > 0 {
+            error = "That password shows up in lists criminals already have. Pick a different one.".into();
+        }
+    }
+    if !error.is_empty() {
+        return html(&PasswordTpl { page, error, done: false });
+    }
+    let hash = auth::hash_password(&form.password)?;
+    store::set_password(&state.pool, acc.id, &hash).await?;
+    store::revoke_other_sessions(&state.pool, acc.id, admin.session_id).await?;
+    store::touch_step_up(&state.pool, admin.session_id).await?;
+    store::audit(&state.pool, "admin.password_changed", serde_json::json!({"email": acc.email, "ip": ip_of(&headers, peer)})).await?;
+    html(&PasswordTpl { page, error: String::new(), done: true })
+}
+
 fn fmt_time(t: chrono::DateTime<Utc>) -> String {
     t.with_timezone(&chrono_tz_offset()).format("%b %-d, %Y, %-I:%M %p").to_string()
 }
@@ -429,6 +487,7 @@ fn describe(kind: &str, d: &serde_json::Value) -> (String, String) {
         "admin.logout" => ("Signed out".into(), String::new()),
         "admin.reset_requested" => ("Password reset link e-mailed".into(), String::new()),
         "admin.password_reset" => ("Password changed".into(), "All other sessions signed out".into()),
+        "admin.password_changed" => ("Password changed".into(), "Other devices signed out".into()),
         "admin.device_revoked" => ("Device forgotten".into(), String::new()),
         "admin.step_up" => ("Password re-entered".into(), String::new()),
         "admin.preview" => (if d.get("on").and_then(|v| v.as_bool()).unwrap_or(false) { "Preview as customer: on" } else { "Preview as customer: off" }.into(), String::new()),

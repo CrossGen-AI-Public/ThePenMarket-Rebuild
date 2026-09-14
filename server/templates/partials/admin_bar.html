@@ -14,6 +14,7 @@
   <form method="post" action="/admin/preview/"><input type="hidden" name="csrf" value="{{ page.admin_csrf }}"><input type="hidden" name="on" value="1"><input type="hidden" name="back" value="{{ page.current_path }}"><button type="submit" class="adm-btn">Preview as customer</button></form>
   <a class="adm-btn" href="/admin/history/">History</a>
   <a class="adm-btn" href="/admin/devices/">Devices</a>
+  <a class="adm-btn" href="/admin/password/">Password</a>
   <form method="post" action="/admin/logout/"><input type="hidden" name="csrf" value="{{ page.admin_csrf }}"><button type="submit" class="adm-btn">Sign out</button></form>
 </div>
 {% endif %}

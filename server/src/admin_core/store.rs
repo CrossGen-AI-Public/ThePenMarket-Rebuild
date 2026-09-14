@@ -119,6 +119,12 @@ pub async fn revoke_all_sessions(pool: &PgPool, account_id: i32) -> anyhow::Resu
     Ok(())
 }
 
+/// Everything but the session that just changed the password.
+pub async fn revoke_other_sessions(pool: &PgPool, account_id: i32, keep_session_id: i32) -> anyhow::Result<()> {
+    sqlx::query("UPDATE admin_session SET revoked_at = now() WHERE account_id = $1 AND id <> $2 AND revoked_at IS NULL").bind(account_id).bind(keep_session_id).execute(pool).await?;
+    Ok(())
+}
+
 pub async fn set_preview(pool: &PgPool, session_id: i32, on: bool) -> anyhow::Result<()> {
     sqlx::query("UPDATE admin_session SET preview = $2 WHERE id = $1").bind(session_id).bind(on).execute(pool).await?;
     Ok(())

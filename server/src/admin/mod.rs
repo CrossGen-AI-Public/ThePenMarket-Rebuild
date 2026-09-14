@@ -124,6 +124,7 @@ pub fn router() -> Router<State> {
         .route("/admin/reset/{token}/", get(handlers::reset_form).post(handlers::reset))
         .route("/admin/devices/", get(handlers::devices))
         .route("/admin/devices/{id}/revoke/", post(handlers::revoke_device))
+        .route("/admin/password/", get(handlers::password_form).post(handlers::password))
         .route("/admin/history/", get(handlers::history))
         .route("/admin/history.csv", get(handlers::history_csv))
         .route("/admin/preview/", post(handlers::preview))

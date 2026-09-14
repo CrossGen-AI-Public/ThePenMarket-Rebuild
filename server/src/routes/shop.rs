@@ -470,7 +470,10 @@ pub async fn product(AxState(state): AxState<State>, Path(slug): Path<String>) -
     if let Some(i) = images.first() {
         page.og_image = state.abs(&i.large);
     }
-    let img_urls: Vec<String> = images.iter().map(|i| state.abs(&i.full)).collect();
+    let mut img_urls: Vec<String> = images.iter().map(|i| state.abs(&i.full)).collect();
+    if img_urls.is_empty() {
+        img_urls.push(state.abs("/static/img/og-default.jpg"));
+    }
     let offer = serde_json::json!({
         "@type": "Offer",
         "url": state.abs(&format!("/product/{slug}/")),

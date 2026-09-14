@@ -124,6 +124,10 @@ async fn not_found_page(AxState(state): AxState<State>, req: Request, next: Next
     let res = next.run(req).await;
     let is_plain = res.headers().get(header::CONTENT_TYPE).map(|v| v.to_str().unwrap_or("").starts_with("text/plain")).unwrap_or(true);
     if res.status() == StatusCode::NOT_FOUND && is_plain && !path.starts_with("/api/") && !path.starts_with("/static/") && !path.starts_with("/media/") {
+        // A URL the router shapes but the data no longer has (a sold product from the old sitemap): the redirect table first.
+        if let Ok(Some(target)) = crate::db::redirect_for(&state.pool, &path).await {
+            return moved(&target);
+        }
         if let Ok(page) = render_404(&state, &path) {
             return page;
         }

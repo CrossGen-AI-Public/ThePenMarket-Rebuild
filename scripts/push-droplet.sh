@@ -7,8 +7,9 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 H=crossgen-droplet
 DIR=/srv/apps/thepenmarket
-ssh -o BatchMode=yes "$H" "mkdir -p $DIR/build $DIR/uploads"
-rsync -az --delete --exclude target --exclude uploads --exclude server.log server/ "$H:$DIR/build/"
+ssh -o BatchMode=yes "$H" "mkdir -p $DIR/build $DIR/uploads $DIR/media"
+rsync -az --delete --exclude /target --exclude /uploads --exclude /media --exclude server.log server/ "$H:$DIR/build/"
+rsync -az --delete server/media/ "$H:$DIR/media/"
 LOCAL_DB="$(grep '^DATABASE_URL=' "$HOME/.config/thepenmarket.env" | cut -d= -f2-)"
 pg_dump --no-owner --no-privileges "$LOCAL_DB" | gzip > /tmp/thepenmarket-db.sql.gz
 rsync -az /tmp/thepenmarket-db.sql.gz "$H:$DIR/db.sql.gz"; rm -f /tmp/thepenmarket-db.sql.gz

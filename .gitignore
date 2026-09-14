@@ -30,7 +30,7 @@ server.log
 *.jpg
 *.jpeg
 *.webp
-research/gate/
+research/gate/*
 research/dev-shots/
 research/dribbble/
 research/ebay/
@@ -38,3 +38,6 @@ research/design-canvas/
 research/design/
 # carve-outs: the site's own brand and hero assets are part of the app
 !server/static/img/**
+!research/gate/slop-exceptions.md
+!research/gate/results.txt
+!research/gate/links-report.md

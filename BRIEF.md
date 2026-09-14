@@ -68,3 +68,15 @@ Model: CrossGen's hosted model (GUIDE_AI_URL/KEY/MODEL from the box). Two run mo
 Winner: 1. A raymarched laminated-celluloid barrel is a material no other shop's site would render; a WebGL engineer would recognise it as "SDF raymarch with a procedural translucent layered material and pointer-driven rotation". Honest question (§4): a designer who has seen a hundred AI hero sections would stop on a glowing Vacumatic barrel rendered in shader code; the cliché list contains no pens, no celluloid, no laminated translucency.
 
 **Client-derivation audit (one sentence each):** serif + caps type because the canvas chose it for the Atelier voice and his product names are proper nouns; ivory/ink/navy/gold because those are the felt, ink and nib colours in his own photographs; square cards because his catalog is a ledger of one-offs with SKUs; mono for prices/SKUs because his product fields are data; the facet rail because he tells owners the faceted filter matters; the specifics table because his products carry structured fields; the guarantee beside the price because "restored, tested and guaranteed" is his Shop meta description; the marked photo slot because no bench photo exists and a stock one would be a lie; no top utility bar because Brittany had them removed.
+
+## Assumptions added during the build
+7. Copy from the design canvas is used where Nathaniel has no equivalent line and Brittany chose it with the client work: the hero headline "Pens with a past, ready for your desk.", the three edit blurbs, the expert-band headline "Every pen on this site passed through my hands." and the nib-strip one-liners. Everything else on the site is his, verbatim, or computed. Flagged for his approval.
+8. The About page omits one sentence of his own copy, "one of the fastest-growing pen retailers in the country", because no source supports it (site-spike rule: never carry an unverifiable claim silently). It quotes The Day (2022) and Dr. Tobias Goodman instead, both sourced.
+9. "Just in" and "The case" show fountain pens first (ballpoints, rollerballs and pencils stay in the shop); the newest additions on Aug 24 were pre-owned ballpoints, which would have led a vintage shop's homepage otherwise.
+10. Trading Post listings show the seller contact exactly as the live site does (the listing is the seller's public ad); whether the rebuild should put contact behind a form is a decision for Nathaniel.
+11. The hero background is one of his own product photographs (SKU 5740, Parker Duofold Geometric) under the raymarched barrel; the canvas's celluloid macro was a base64 crop too small to stretch across 1440px.
+
+## Phase log (continued)
+- Phase 4 (05:35–07:30 UTC): importer, engine, server, templates, CSS/JS, hero, guide. First gate rows green by hand (routes, console, engine fixtures Rust + JS).
+- Phase 4b (07:30 UTC on): full gate run against the systemd service on :8140; chat drive PASS (two live turns, engine cards rendered, plain-text replies).
+- Phase 5: artifact dist/index.html built (315 KB, 248 pens inlined); repo committed; droplet deploy attempted via scripts/push-droplet.sh.

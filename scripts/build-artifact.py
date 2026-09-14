@@ -43,8 +43,10 @@ html = re.sub(r'href="/(?!/)([^"#]*)(#[^"]*)?"', lambda m: f'href="{public}/{m.g
 html = re.sub(r'action="/([^"]*)"', lambda m: f'action="{public}/{m.group(1)}"', html)
 html = html.replace(f'href="{public}/#ask"', 'href="#ask"')
 # 3. head: fonts from Google (the self-hosted files are not reachable from claude.ai), CSS inline
-fonts_link = '<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">'
-html = html.replace('<link rel="stylesheet" href="/static/fonts/fonts.css">', fonts_link)
+# fonts inlined as data URIs so the preview needs no network for type (about 280 KB of woff2)
+fonts_css = open(os.path.join(srv, "static", "fonts", "fonts.css"), encoding="utf-8").read()
+fonts_css = re.sub(r"url\(/static/fonts/([^)]+)\)", lambda m: f"url({data_uri('fonts/' + m.group(1))})", fonts_css)
+html = html.replace('<link rel="stylesheet" href="/static/fonts/fonts.css">', f"<style>\n{fonts_css}\n</style>")
 css = open(os.path.join(srv, "static", "css", "site.css"), encoding="utf-8").read()
 css = css.replace("url(/static/img/hero-photo.jpg)", f"url({data_uri('img/hero-photo.jpg')})")
 html = html.replace('<link rel="stylesheet" href="/static/css/site.css">', f"<style>\n{css}\n</style>")

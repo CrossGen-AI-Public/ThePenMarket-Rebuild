@@ -1,5 +1,5 @@
 # ThePenMarket.com rebuild: one static-ish Rust binary + templates + static + media.
-# Build context: the server/ directory. Media (product photos) is copied in; the database is external.
+# Build context: the server/ directory. Media (product photos) is mounted at /app/media; the database is external.
 FROM rust:1-bookworm AS build
 WORKDIR /src
 COPY Cargo.toml Cargo.lock ./
@@ -17,7 +17,7 @@ COPY migrations ./migrations
 COPY templates ./templates
 COPY static ./static
 COPY data ./data
-COPY media ./media
+RUN mkdir -p /app/media /app/uploads
 ENV APP_DIR=/app PORT=8140 HOST=0.0.0.0
 EXPOSE 8140
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 CMD curl -sf http://127.0.0.1:8140/healthz | grep -q ok || exit 1

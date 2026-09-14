@@ -48,7 +48,7 @@ pub struct PriceRange {
 }
 
 /// A product as the pages show it: strings pre-formatted, image paths resolved.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct ProductCard {
     pub id: i32,
     pub sku: String,

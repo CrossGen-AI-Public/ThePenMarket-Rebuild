@@ -29,10 +29,23 @@ pub struct Chip {
     pub url: String,
 }
 
+pub struct CatTile {
+    pub name: String,
+    pub url: String,
+    pub image: String,
+    pub count: usize,
+}
+
 #[derive(Template)]
 #[template(path = "home.html")]
 pub struct HomeTpl {
     pub page: PageMeta,
+    pub featured: ProductCard,
+    pub featured_text: String,
+    pub featured_image: String,
+    pub hero_thumbs: Vec<ProductCard>,
+    pub cat_tiles: Vec<CatTile>,
+    pub latest_posts: Vec<PostCard>,
     pub live_total: usize,
     pub added_recent: usize,
     pub recent_label: String,
@@ -63,6 +76,32 @@ pub async fn home(AxState(state): AxState<State>) -> AppResult {
     let exclude: Vec<i32> = just_in.iter().map(|p| p.id).collect();
     let case = db::products_by_slugs_or_recent(&state.pool, 8, &exclude, true, true).await?;
     let vault = db::top_priced(&state.pool, 3).await?;
+
+    // Featured pen: the newest fountain pen with a photo; its own description and specs fill the hero.
+    let featured = just_in.first().cloned().unwrap_or_default();
+    let featured_text = if featured.id > 0 {
+        let body = db::product_body(&state.pool, featured.id).await?;
+        crate::text::summary(&body.description_text, 300)
+    } else {
+        String::new()
+    };
+    let featured_image = if featured.id > 0 {
+        db::product_images(&state.pool, featured.id).await?.first().map(|i| i.large.clone()).unwrap_or_else(|| featured.image.clone())
+    } else {
+        String::new()
+    };
+    let hero_thumbs: Vec<ProductCard> = just_in.iter().skip(1).take(3).cloned().collect();
+    let tile_image = |slug: &str| cat.pens.iter().find(|p| p.is_live() && p.category_slug == slug && !p.image.is_empty() && p.slug != featured.slug).map(|p| p.image.clone()).unwrap_or_default();
+    let sale_image = cat.pens.iter().find(|p| p.is_live() && p.sale_price_cents.is_some() && !p.image.is_empty()).map(|p| p.image.clone()).unwrap_or_default();
+    let count_cat = |slug: &str| cat.pens.iter().filter(|p| p.is_live() && p.category_slug == slug).count();
+    let cat_tiles = vec![
+        CatTile { name: "Vintage Pens".into(), url: "/product-category/vintage-pens/".into(), image: tile_image("vintage-pens"), count: count_cat("vintage-pens") },
+        CatTile { name: "Pre-Owned Pens".into(), url: "/product-category/pre-owned-pens/".into(), image: tile_image("pre-owned-pens"), count: count_cat("pre-owned-pens") },
+        CatTile { name: "Pencils".into(), url: "/product-category/pencils/".into(), image: tile_image("pencils"), count: count_cat("pencils") },
+        CatTile { name: "Inkwells & Blotters".into(), url: "/product-category/inkwells-blotters/".into(), image: tile_image("inkwells-blotters"), count: count_cat("inkwells-blotters") },
+        CatTile { name: "Best Bargains".into(), url: "/on-sale-pens/".into(), image: sale_image, count: s.on_sale },
+    ];
+    let (latest_posts, _) = db::posts(&state.pool, None, None, 1, 3).await?;
 
     // Edit photographs: one distinct pen per edit, chosen from the catalog snapshot (newest first).
     let pick = |pred: &dyn Fn(&engine::Pen) -> bool, used: &[String]| cat.pens.iter().find(|p| p.is_live() && !p.image.is_empty() && pred(p) && !used.contains(&p.slug)).map(|p| (p.image.clone(), p.short_title.clone(), p.slug.clone()));
@@ -142,6 +181,12 @@ pub async fn home(AxState(state): AxState<State>) -> AppResult {
 
     html(&HomeTpl {
         page,
+        featured,
+        featured_text,
+        featured_image,
+        hero_thumbs,
+        cat_tiles,
+        latest_posts,
         live_total: s.live_total,
         added_recent: s.added_in_newest_month,
         recent_label,

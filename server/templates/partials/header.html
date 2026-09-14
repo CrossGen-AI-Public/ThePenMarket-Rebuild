@@ -1,44 +1,37 @@
 <header class="masthead">
   <div class="wrap masthead-row">
-    <a class="wordmark" href="/" aria-label="ThePenMarket.com home">The Pen Market<span class="tld">.com</span></a>
-    <form class="search" role="search" action="/shop/" method="get">
-      <svg width="17" height="17" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="9" cy="9" r="6"></circle><path d="M13.5 13.5 L18 18"></path></svg>
-      <input type="search" name="q" placeholder="Search {{ page.nav_counts.live_total }} restored pens: brand, era, filling system, nib…" aria-label="Search the case">
-      <button type="submit" class="search-go">Search</button>
-    </form>
-    <nav class="masthead-links" aria-label="Site">
-      <a href="/guarantee/">Guarantee</a>
-      <a href="/blog/">Drippy Musings</a>
-      <a href="/contact/">Contact</a>
-      <a class="phone" href="tel:+18477085062">(847) 708-5062</a>
+    <a class="logo" href="/"><img src="/static/img/logo.png" alt="ThePenMarket.com. Est. 2007. Sell, trade and buy pens the way you want." width="1645" height="381"></a>
+    <nav class="mainnav" aria-label="Site">
+      <a href="/product-category/vintage-pens/"{% if page.section == "vintage-pens" %} aria-current="page"{% endif %}>vintage pens</a>
+      <a href="/product-category/pre-owned-pens/"{% if page.section == "pre-owned-pens" %} aria-current="page"{% endif %}>pre-owned pens</a>
+      <a href="/product-category/pencils/"{% if page.section == "pencils" %} aria-current="page"{% endif %}>pencils</a>
+      <a href="/pen-repairs/"{% if page.section == "repairs" %} aria-current="page"{% endif %}>repairs</a>
+      <a href="/sell-my-pens/"{% if page.section == "sell" %} aria-current="page"{% endif %}>sell my pens</a>
+      <a href="/trading-post/"{% if page.section == "trading-post" %} aria-current="page"{% endif %}>trading post</a>
+      <a href="/blog/"{% if page.section == "blog" %} aria-current="page"{% endif %}>blog</a>
     </nav>
-    <button class="menu-btn" type="button" aria-expanded="false" aria-controls="sheet">Menu</button>
-  </div>
-  <nav class="taxnav" aria-label="Shop">
-    <div class="wrap taxnav-row">
-      <a href="/product-category/vintage-pens/">Vintage Pens <span class="count mono">{{ page.nav_counts.vintage }}</span></a>
-      <a href="/product-category/pre-owned-pens/">Pre-Owned Pens <span class="count mono">{{ page.nav_counts.pre_owned }}</span></a>
-      <a href="/product-category/pencils/">Pencils <span class="count mono">{{ page.nav_counts.pencils }}</span></a>
-      <a href="/product-category/inkwells-blotters/">Inkwells <span class="count mono">{{ page.nav_counts.inkwells }}</span></a>
-      <a href="/product-category/camera/">Cameras</a>
-      <span class="sep" aria-hidden="true">|</span>
-      <a href="/on-sale-pens/">Best Bargains</a>
-      <a class="navy" href="/trading-post/">Trading Post</a>
-      <a href="/pen-repairs/">Repairs</a>
-      <a href="/sell-my-pens/">Sell Your Pens</a>
-      <a class="gold" href="/#ask">Ask the guide</a>
+    <div class="masthead-tools">
+      <form class="search" role="search" action="/shop/" method="get">
+        <label class="sr" for="q">Search the shop</label>
+        <input id="q" type="search" name="q" placeholder="Search {{ page.nav_counts.live_total }} pens" autocomplete="off">
+        <button type="submit" aria-label="Search"><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="9" cy="9" r="6"></circle><path d="M13.5 13.5 18 18"></path></svg></button>
+      </form>
+      <a class="tool" href="/contact/">Contact</a>
+      <a class="tool phone" href="tel:+18477085062">(847) 708-5062</a>
+      <button class="menu-btn" type="button" aria-expanded="false" aria-controls="sheet">Menu</button>
     </div>
-  </nav>
+  </div>
   <div id="sheet" class="sheet" hidden>
     <div class="wrap">
-      <form class="search sheet-search" role="search" action="/shop/" method="get">
-        <input type="search" name="q" placeholder="Search the case" aria-label="Search the case">
-        <button type="submit" class="search-go">Go</button>
+      <form class="sheet-search" role="search" action="/shop/" method="get">
+        <label class="sr" for="q2">Search the shop</label>
+        <input id="q2" type="search" name="q" placeholder="Search {{ page.nav_counts.live_total }} pens">
+        <button type="submit" class="btn">Search</button>
       </form>
       <div class="sheet-cols">
         <div>
-          <h2 class="eyebrow">Shop</h2>
-          <a href="/shop/">The whole case</a>
+          <h2>Shop</h2>
+          <a href="/shop/">All pens</a>
           <a href="/product-category/vintage-pens/">Vintage Pens ({{ page.nav_counts.vintage }})</a>
           <a href="/product-category/pre-owned-pens/">Pre-Owned Pens ({{ page.nav_counts.pre_owned }})</a>
           <a href="/product-category/pencils/">Pencils ({{ page.nav_counts.pencils }})</a>
@@ -47,16 +40,16 @@
           <a href="/on-sale-pens/">Best Bargains</a>
         </div>
         <div>
-          <h2 class="eyebrow">Buy, sell, trade</h2>
+          <h2>Buy, sell, trade</h2>
           <a href="/trading-post/">Trading Post</a>
           <a href="/pen-repairs/">Pen Repairs</a>
           <a href="/sell-my-pens/">How Do I Sell My Pens?</a>
           <a href="/guarantee/">Our Guarantee</a>
-          <a href="/#ask">Ask the guide</a>
+          <a href="/#ask">Ask the Pen Market</a>
         </div>
         <div>
-          <h2 class="eyebrow">Read and reach us</h2>
-          <a href="/blog/">Drippy Musings</a>
+          <h2>Read and reach us</h2>
+          <a href="/blog/">Blog</a>
           <a href="/about-us/">About Us</a>
           <a href="/contact/">Contact Us</a>
           <a href="tel:+18477085062">(847) 708-5062</a>

@@ -32,6 +32,7 @@ async fn main() -> anyhow::Result<()> {
         http: reqwest::Client::builder().timeout(Duration::from_secs(60)).build()?,
         catalog: RwLock::new(Arc::new(initial)),
         pool: pool.clone(),
+        asset_v: app::asset_version(&cfg.static_dir),
         cfg: cfg.clone(),
     });
 

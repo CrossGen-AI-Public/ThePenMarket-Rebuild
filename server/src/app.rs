@@ -64,8 +64,25 @@ pub struct AppState {
     pub guide_limiter: RateLimiter,
     pub form_limiter: RateLimiter,
     pub http: reqwest::Client,
+    /// Short hash of the CSS and JS files, appended to their URLs so a redeploy never pairs new HTML
+    /// with a stylesheet the browser cached from the previous build (static files are cached 7 days).
+    pub asset_v: String,
 }
 pub type State = Arc<AppState>;
+
+/// FNV-1a over the bytes of the site's own CSS and JS, as 8 hex characters.
+pub fn asset_version(static_dir: &std::path::Path) -> String {
+    let mut h: u64 = 0xcbf29ce484222325;
+    for rel in ["css/site.css", "fonts/fonts.css", "js/site.js", "js/engine.js", "js/guide.js"] {
+        if let Ok(bytes) = std::fs::read(static_dir.join(rel)) {
+            for b in bytes {
+                h ^= b as u64;
+                h = h.wrapping_mul(0x100000001b3);
+            }
+        }
+    }
+    format!("{:08x}", (h >> 32) as u32 ^ h as u32)
+}
 
 impl AppState {
     pub fn catalog(&self) -> Arc<Catalog> {
@@ -135,6 +152,7 @@ pub struct PageMeta {
     pub csrf: String,
     pub nav_counts: NavCounts,
     pub section: String,
+    pub asset_v: String,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -161,6 +179,7 @@ impl PageMeta {
             csrf: String::new(),
             nav_counts: NavCounts { vintage: pick("vintage-pens"), pre_owned: pick("pre-owned-pens"), pencils: pick("pencils"), inkwells: pick("inkwells-blotters"), live_total: s.live_total },
             section: String::new(),
+            asset_v: state.asset_v.clone(),
         }
     }
     pub fn with_jsonld(mut self, blocks: Vec<serde_json::Value>) -> Self {

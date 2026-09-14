@@ -119,6 +119,6 @@
 </section>
 {% endblock %}
 {% block scripts %}
-<script src="/static/js/engine.js" defer></script>
-<script src="/static/js/guide.js" defer></script>
+<script src="/static/js/engine.js?v={{ page.asset_v }}" defer></script>
+<script src="/static/js/guide.js?v={{ page.asset_v }}" defer></script>
 {% endblock %}

@@ -17,8 +17,8 @@
 <meta name="theme-color" content="#1C222C">
 <link rel="icon" href="/static/img/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/static/img/apple-touch-icon.png">
-<link rel="stylesheet" href="/static/fonts/fonts.css">
-<link rel="stylesheet" href="/static/css/site.css">
+<link rel="stylesheet" href="/static/fonts/fonts.css?v={{ page.asset_v }}">
+<link rel="stylesheet" href="/static/css/site.css?v={{ page.asset_v }}">
 {% if !page.jsonld.is_empty() %}<script type="application/ld+json">{{ page.jsonld|safe }}</script>{% endif %}
 {% block head %}{% endblock %}
 </head>
@@ -29,7 +29,7 @@
 {% block content %}{% endblock %}
 </main>
 {% include "partials/footer.html" %}
-<script src="/static/js/site.js" defer></script>
+<script src="/static/js/site.js?v={{ page.asset_v }}" defer></script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

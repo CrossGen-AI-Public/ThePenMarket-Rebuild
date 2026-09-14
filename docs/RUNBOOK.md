@@ -41,7 +41,11 @@ Output under `research/gate/` (results.txt, per-row logs, shots/).
 - Everything else: 64 KB request bodies.
 
 ## The admin (Nathaniel's sign-in, click-to-edit, preview)
-Spec: `docs/spec/0001-admin-login-click-to-edit-preview.md`. Sign-in page: `/admin/login/` (not linked anywhere; `robots.txt` disallows `/admin/`).
+Spec: `docs/spec/0001-admin-login-click-to-edit-preview.md`. Sign-in page: **https://penmarket.crossgen-ai.com/admin/login/** (not linked anywhere; `robots.txt` disallows `/admin/`). Nathaniel's account is `nathaniel@thepenmarket.com`; he changes his password at `/admin/password/` (Password button in the editing bar).
+**Until SMTP is configured, his first sign-in from each new device needs the six-digit code read from the droplet's mail log:**
+```
+ssh crossgen-droplet "grep 'code is' /srv/apps/thepenmarket/uploads/admin-mail.log | tail -1"
+```
 ```
 cd ~/thepenmarket/server
 ADMIN_PASSWORD='…' ./target/release/admin create nathaniel@example.com --name Nathaniel   # first account; password checked against the policy and HIBP

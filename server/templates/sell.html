@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="wrap">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Home</a><span aria-hidden="true">›</span><span aria-current="page">How Do I Sell My Pens?</span></nav>
+  <header class="archive-head">
+    <p class="eyebrow">Cash to consignment</p>
+    <h1>Sell My Pens!</h1>
+    <p class="lede">Looking to cash in on your pen collection? Perhaps you inherited a collection you don’t want? If you’ve been asking ‘How do I sell my pens?’, let us help. We are usually looking for more vintage pens and pre-owned luxury pens to restore and sell on our site. Depending upon what you have, we can offer several options from cash to consignment.</p>
+  </header>
+</div>
+<div class="wrap two-col">
+  <div>
+    <section class="block">
+      <h2>What we are not looking for</h2>
+      <p>{{ exclusion_line }}</p>
+    </section>
+    <section class="block">
+      <h2>How it works</h2>
+      <ol>
+        <li>Please contact us with this form, and let us know what you have.</li>
+        <li>If you aren’t sure what you have, please include a photo to help us get an idea about what you are looking to sell and what condition it might be in.</li>
+        <li>Nathaniel answers with the options that fit: an offer, consignment, or a pointer to the Trading Post ({{ listing_price }} a listing, you keep the pen until it sells).</li>
+      </ol>
+      <p class="sig">Lookin’ forward to hearin’ from ya!</p>
+    </section>
+    <section class="block faq">
+      <h2>Questions people ask</h2>
+      {% for f in faqs %}<details><summary>{{ f.q }}</summary><p>{{ f.a }}</p></details>{% endfor %}
+    </section>
+  </div>
+  <aside class="form-col">
+    <section class="block form-block">
+      <h2>Tell us what you have</h2>
+      <form class="form" method="post" action="/sell-my-pens/" enctype="multipart/form-data">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <input class="hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+        <label for="s-name">Name <span class="req">(Required)</span></label>
+        <input id="s-name" name="name" required maxlength="200" autocomplete="name">
+        <label for="s-phone">Phone</label>
+        <input id="s-phone" name="phone" type="tel" maxlength="40" autocomplete="tel" placeholder="(999) 999-9999">
+        <label for="s-email">Email <span class="req">(Required)</span></label>
+        <input id="s-email" name="email" type="email" required maxlength="200" autocomplete="email">
+        <label for="s-message">Message</label>
+        <textarea id="s-message" name="message" rows="5" maxlength="4000" placeholder="Makers, models, how many, condition"></textarea>
+        <label for="s-photo">Upload Image <span class="muted">(up to 10 MB)</span></label>
+        <input id="s-photo" name="photo" type="file" accept="image/*">
+        <button class="btn btn-navy" type="submit">Submit <span class="demo-tag">Demo</span></button>
+        <p class="demo-note">Demo: stored on this server, not e-mailed. On the live site this reaches info@thepenmarket.com. Or call (847) 708-5062.</p>
+      </form>
+    </section>
+  </aside>
+</div>
+{% endblock %}

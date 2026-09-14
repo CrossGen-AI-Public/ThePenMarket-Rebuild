@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% import "partials/macros.html" as m %}
+{% block content %}
+<div class="wrap">
+  <nav class="crumbs" aria-label="Breadcrumb">
+    {% for c in crumbs %}{% if !loop.first %}<span aria-hidden="true">›</span>{% endif %}{% if loop.last %}<span aria-current="page">{{ c.0 }}</span>{% else %}<a href="{{ c.1 }}">{{ c.0 }}</a>{% endif %}{% endfor %}
+  </nav>
+  <header class="archive-head">
+    <h1>{{ heading }}</h1>
+    <p class="lede">{{ intro }}</p>
+    {% if !term_definition.is_empty() %}<div class="definition"><p class="eyebrow">What “{{ heading }}” means here</p><p>{{ term_definition }}</p></div>{% endif %}
+  </header>
+</div>
+
+<div class="wrap shop-layout">
+  <aside class="rail" id="rail">
+    <div class="rail-head">
+      <h2 class="eyebrow">Refine</h2>
+      {% if !applied.is_empty() %}<a class="rail-clear" href="{{ clear_url }}">Clear all</a>{% endif %}
+    </div>
+    {% if !applied.is_empty() %}
+    <div class="chips applied">
+      {% for a in applied %}<a class="chip chip-applied" href="{{ a.remove_url }}" title="Remove">{{ a.label }} <span aria-hidden="true">×</span></a>{% endfor %}
+    </div>
+    {% endif %}
+    <form class="rail-search" method="get" action="{{ base_path }}">
+      <label class="sr" for="railq">Search within</label>
+      <input id="railq" type="search" name="q" value="{{ q }}" placeholder="Search within these">
+      {% for h in hidden_fields %}<input type="hidden" name="{{ h.0 }}" value="{{ h.1 }}">{% endfor %}
+      <button class="btn btn-ghost btn-sm" type="submit">Go</button>
+    </form>
+    {% for g in facets %}
+    <details class="facet" open>
+      <summary>{{ g.label }}</summary>
+      <ul class="facet-list" data-facet="{{ g.key }}">
+        {% for o in g.options %}
+        <li class="{% if o.selected %}is-selected{% endif %}{% if loop.index > 8 %} is-extra{% endif %}"><a href="{{ o.url }}" rel="nofollow"><span class="box" aria-hidden="true"></span><span class="fname">{{ o.name }}</span><span class="fcount mono">{{ o.count }}</span></a></li>
+        {% endfor %}
+      </ul>
+      {% if g.options.len() > 8 %}<button type="button" class="facet-more" data-more>See all {{ g.options.len() }}</button>{% endif %}
+    </details>
+    {% endfor %}
+    <div class="facet">
+      <p class="eyebrow">Sold pens</p>
+      <a class="rail-link" href="{{ base_path }}?sold=1" rel="nofollow">Include sold pens</a>
+    </div>
+  </aside>
+
+  <section class="results">
+    <div class="results-bar">
+      <span class="results-count"><strong class="mono">{{ total }}</strong> {% if total == 1 %}result{% else %}results{% endif %}</span>
+      <form class="sort" method="get" action="{{ base_path }}">
+        {% if !q.is_empty() %}<input type="hidden" name="q" value="{{ q }}">{% endif %}
+        {% for h in hidden_fields %}<input type="hidden" name="{{ h.0 }}" value="{{ h.1 }}">{% endfor %}
+        <label for="sort">Sort</label>
+        <select id="sort" name="sort" data-autosubmit>
+          <option value="newest"{% if sort == "newest" %} selected{% endif %}>Newest first</option>
+          <option value="price-asc"{% if sort == "price-asc" %} selected{% endif %}>Price: low to high</option>
+          <option value="price-desc"{% if sort == "price-desc" %} selected{% endif %}>Price: high to low</option>
+          <option value="name"{% if sort == "name" %} selected{% endif %}>Name</option>
+        </select>
+        <noscript><button class="btn btn-ghost btn-sm" type="submit">Apply</button></noscript>
+      </form>
+      <div class="view" role="group" aria-label="View">
+        <button type="button" class="view-btn is-on" data-view="grid" aria-pressed="true">Grid</button>
+        <button type="button" class="view-btn" data-view="list" aria-pressed="false">List</button>
+      </div>
+      <button type="button" class="btn btn-ghost btn-sm rail-toggle" aria-controls="rail" aria-expanded="false">Filters</button>
+    </div>
+
+    {% if items.is_empty() %}
+    <div class="empty">
+      <p>Nothing in the case matches that. Loosen a filter, or <a href="/#ask">ask the guide</a> what comes closest.</p>
+    </div>
+    {% else %}
+    <div class="grid grid-3 results-grid" id="resultsGrid">
+      {% for p in items %}{% call m::card(p) %}{% endfor %}
+    </div>
+    {% endif %}
+
+    {% if pages.len() > 1 %}
+    <nav class="pagination" aria-label="Pages">
+      {% if !prev_url.is_empty() %}<a class="page-prev" href="{{ prev_url }}" rel="prev">‹ Previous</a>{% endif %}
+      {% for pg in pages %}{% if pg.current %}<span class="page-n is-current" aria-current="page">{{ pg.n }}</span>{% else %}<a class="page-n" href="{{ pg.url }}">{{ pg.n }}</a>{% endif %}{% endfor %}
+      {% if !next_url.is_empty() %}<a class="page-next" href="{{ next_url }}" rel="next">Next ›</a>{% endif %}
+    </nav>
+    {% endif %}
+
+    {% if !related_posts.is_empty() %}
+    <section class="related-posts">
+      <h2>From Drippy Musings</h2>
+      <div class="grid grid-3">{% for post in related_posts %}{% call m::postcard(post) %}{% endfor %}</div>
+    </section>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

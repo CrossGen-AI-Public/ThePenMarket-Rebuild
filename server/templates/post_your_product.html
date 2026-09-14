@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="wrap narrow">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Home</a><span aria-hidden="true">›</span><a href="/trading-post/">Trading Post</a><span aria-hidden="true">›</span><span aria-current="page">Post Your Product</span></nav>
+  <p class="eyebrow">Trading Post · {{ listing_price }} a listing</p>
+  <h1>Post Your Product</h1>
+  <p class="lede">One item, one listing, {{ listing_price }}. You keep your pen until someone pays you. Unlimited Posts members ({{ unlimited_price }} a year) list as many as they like.</p>
+  <form class="form" method="post" action="/post-your-product/" enctype="multipart/form-data">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input class="hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+    <label for="item">Pens and Pencils <span class="req">(Required)</span></label>
+    <input id="item" name="item" required maxlength="200" placeholder="e.g. Pelikan Souveran M800">
+    <label for="era">Era <span class="req">(Required)</span></label>
+    <input id="era" name="era" required maxlength="100" placeholder="e.g. 1980-present">
+    <label for="price">Price <span class="req">(Required)</span></label>
+    <input id="price" name="price" required maxlength="60" placeholder="e.g. $450.00">
+    <label for="contact">Contact <span class="req">(Required)</span></label>
+    <input id="contact" name="contact" required maxlength="200" placeholder="Name and e-mail, shown on the listing">
+    <label for="description">Description</label>
+    <textarea id="description" name="description" rows="6" maxlength="4000"></textarea>
+    <label for="photo">File <span class="muted">(one photo, JPEG, PNG or WebP, up to 10 MB)</span></label>
+    <input id="photo" name="photo" type="file" accept="image/*">
+    <div class="price-line"><span>Price</span><span class="mono">{{ listing_price }}.00</span></div>
+    <button class="btn btn-navy" type="submit">Submit listing <span class="demo-tag">Demo</span></button>
+    <p class="demo-note">Demo: this build stores the listing on the server, takes no payment and publishes nothing. On the live site the {{ listing_price }} fee is charged at submission and the listing goes to review.</p>
+  </form>
+</div>
+{% endblock %}

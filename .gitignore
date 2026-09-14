@@ -1,0 +1,40 @@
+# client data: never committed
+backup/
+research/docs/crawl-*/
+scrape/
+server/media/
+server/uploads/
+
+# secrets and env
+*.env
+.env
+.env.*
+!.env.example
+
+# build
+server/target/
+target/
+node_modules/
+__pycache__/
+
+# runner and logs
+headless.log
+excalidraw.log
+run_chain.sh
+run_penmarket.sh
+*.log
+server.log
+
+# screenshots and agent-run artifacts stay out of the repo (CrossGen ADR-0001)
+*.png
+*.jpg
+*.jpeg
+*.webp
+research/gate/
+research/dev-shots/
+research/dribbble/
+research/ebay/
+research/design-canvas/
+research/design/
+# carve-outs: the site's own brand and hero assets are part of the app
+!server/static/img/**

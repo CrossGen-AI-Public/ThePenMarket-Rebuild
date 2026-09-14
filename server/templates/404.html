@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="wrap narrow">
+  <p class="eyebrow">404</p>
+  <h1>That page is not in the case.</h1>
+  <p class="lede">Nothing lives at <code>{{ path }}</code>. Every old address from the previous site is forwarded, so this one was probably mistyped or never existed.</p>
+  <form class="search inline-search" role="search" action="/shop/" method="get">
+    <input type="search" name="q" placeholder="Search the pens" aria-label="Search the case">
+    <button type="submit" class="btn btn-navy">Search</button>
+  </form>
+  <p><a href="/shop/">The whole case</a> · <a href="/blog/">Drippy Musings</a> · <a href="/trading-post/">Trading Post</a> · <a href="/contact/">Contact</a></p>
+</div>
+{% endblock %}

@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="wrap narrow">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Home</a><span aria-hidden="true">›</span><span aria-current="page">{{ heading }}</span></nav>
+  <h1>{{ heading }}</h1>
+  <p class="mono small muted">Last reviewed {{ modified }}</p>
+  <div class="prose">{{ body_html|safe }}</div>
+</div>
+{% endblock %}

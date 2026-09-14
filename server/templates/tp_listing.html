@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% import "partials/macros.html" as m %}
+{% block content %}
+<article class="wrap product listing-page">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Home</a><span aria-hidden="true">›</span><a href="/trading-post/">Trading Post</a><span aria-hidden="true">›</span><span aria-current="page">{{ l.title }}</span></nav>
+  <div class="gallery">
+    <figure class="gallery-main">{% if !l.image_large.is_empty() %}<a href="{{ l.image_large }}" target="_blank" rel="noopener"><img src="{{ l.image_large }}" alt="{{ l.image_alt }}" decoding="async"></a>{% else %}<div class="noimg mono">NO PHOTO</div>{% endif %}<figcaption class="mono small muted">Seller’s photo</figcaption></figure>
+  </div>
+  <div class="buybox">
+    <p class="eyebrow">Trading Post · private seller · <time datetime="{{ l.iso_date }}">{{ l.date }}</time></p>
+    <h1>{{ l.title }}</h1>
+    <div class="price-row"><span class="price mono">{{ l.price }}</span><span class="chip">Classified listing</span></div>
+    <table class="specs">
+      <tbody>
+        {% if !l.era.is_empty() %}<tr><th scope="row">Era</th><td>{{ l.era }}</td></tr>{% endif %}
+        <tr><th scope="row">Price</th><td>{{ l.price }}</td></tr>
+        <tr><th scope="row">Contact</th><td>{{ l.contact }}</td></tr>
+      </tbody>
+    </table>
+    <div class="prose">{{ l.description_html|safe }}</div>
+    <p class="muted small">The sale is between you and the seller: ThePenMarket.com does not see, possess or speak for the quality of Trading Post pens, and the transaction does not pass through our hands. Problems: <a href="mailto:{{ tp_email }}">{{ tp_email }}</a>.</p>
+    <p><a class="btn btn-ghost" href="/trading-post/">Return to Trading Post</a></p>
+  </div>
+</article>
+{% if !more.is_empty() %}
+<section class="wrap band">
+  <div class="band-head"><h2>More on the Trading Post</h2><a class="band-link" href="/trading-post/">All listings</a></div>
+  <div class="grid grid-4">{% for x in more %}{% call m::listingcard(x) %}{% endfor %}</div>
+</section>
+{% endif %}
+{% endblock %}

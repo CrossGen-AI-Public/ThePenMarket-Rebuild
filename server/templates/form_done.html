@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="wrap narrow">
+  <p class="eyebrow">Demo submission</p>
+  <h1>{{ heading }}</h1>
+  {% for l in lines %}{% if !l.is_empty() %}<p>{{ l }}</p>{% endif %}{% endfor %}
+  <p><a class="btn btn-navy" href="{{ back_url }}">{{ back_label }}</a></p>
+</div>
+{% endblock %}

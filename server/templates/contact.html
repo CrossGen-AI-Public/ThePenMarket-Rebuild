@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="wrap">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Home</a><span aria-hidden="true">›</span><span aria-current="page">Contact</span></nav>
+  <header class="archive-head">
+    <p class="eyebrow">You got questions? We got answers.</p>
+    <h1>Reach Out to Our Team</h1>
+    <p class="lede">At ThePenMarket.com we pride ourselves on our customer service. If you have any questions about our vintage pens, pre-owned modern pens, pen repairs or are looking to learn more about selling your pen collection, we would love to hear from you. Please upload a photo if you are looking for a repair estimate or are hoping to sell your pen collection. Thanks!</p>
+  </header>
+</div>
+<div class="wrap two-col">
+  <div>
+    <section class="block contact-card">
+      <h2>ThePenMarket.com</h2>
+      <address>
+        P.O. Box 1086<br>
+        Norwich, CT 06360-1086<br>
+        <a href="tel:+18477085062">(847) 708-5062</a><br>
+        <a href="mailto:info@thepenmarket.com">info@thepenmarket.com</a>
+      </address>
+      <p class="muted">Trading Post problems: <a href="mailto:tradingpost@thepenmarket.com">tradingpost@thepenmarket.com</a></p>
+      <p><a href="https://www.facebook.com/pages/Thepenmarketcom/427549874033020" rel="noopener" target="_blank">Facebook</a> · <a href="https://www.instagram.com/thepenmarketdotcom" rel="noopener" target="_blank">Instagram</a></p>
+      <p class="muted small">Mail order only: there is no shop to visit. Online since 2007.</p>
+    </section>
+    <section class="block">
+      <h2>Faster answers</h2>
+      <ul>
+        <li><a href="/pen-repairs/">Pen Repairs</a>: what he restores, how to ship a pen, the estimate form.</li>
+        <li><a href="/sell-my-pens/">How Do I Sell My Pens?</a>: cash to consignment.</li>
+        <li><a href="/guarantee/">Our Guarantee</a>: 14-day returns, 30-day repair promise.</li>
+        <li><a href="/#ask">Ask the Pen Market</a>: the AI guide over the catalog, day or night.</li>
+      </ul>
+    </section>
+  </div>
+  <aside class="form-col">
+    <section class="block form-block">
+      <h2>Send a message</h2>
+      <form class="form" method="post" action="/contact/" enctype="multipart/form-data">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <input class="hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+        <label for="c-name">Name <span class="req">(Required)</span></label>
+        <input id="c-name" name="name" required maxlength="200" autocomplete="name">
+        <label for="c-phone">Phone</label>
+        <input id="c-phone" name="phone" type="tel" maxlength="40" autocomplete="tel" placeholder="(999) 999-9999">
+        <label for="c-email">Email <span class="req">(Required)</span></label>
+        <input id="c-email" name="email" type="email" required maxlength="200" autocomplete="email">
+        <label for="c-photo">Upload a File <span class="muted">(optional photo, up to 10 MB)</span></label>
+        <input id="c-photo" name="photo" type="file" accept="image/*">
+        <label for="c-message">Message</label>
+        <textarea id="c-message" name="message" rows="6" maxlength="4000"></textarea>
+        <button class="btn btn-navy" type="submit">Submit <span class="demo-tag">Demo</span></button>
+        <p class="demo-note">Demo: stored on this server, not e-mailed. On the live site this reaches info@thepenmarket.com.</p>
+      </form>
+    </section>
+  </aside>
+</div>
+{% endblock %}

@@ -1,0 +1,32 @@
+# crossgen-handoff.yml — registers this repo with the CrossGen review-and-deploy bot on sparky
+# (ADR-0001 stages 5–8; routing per ADR-0002). Human SSOT; the bot reads its mirror at
+# ~/.crossgen-handoff/repos.d/thepenmarket.env.
+
+repo: CrossGen-AI-Public/ThePenMarket-Rebuild
+
+# Client demo with no customer data and no money movement.
+permissions: none
+
+# Engine fixtures in Rust and JS, plus the WordPress import parsers. No network, no secrets.
+test_cmd: "cd server && cargo test --release --lib && cd .. && node scripts/test-engine-js.mjs"
+
+# Runs in the production checkout after the bot refreshes it to origin/main: release build, re-import,
+# restart the user service on :8140, health-check.
+deploy_cmd: "bash scripts/deploy.sh"
+
+deploy_target: sparky
+sparky_path: ~/thepenmarket
+
+danger_globs:
+  - "server/src/guide.rs"
+  - "server/src/engine.rs"
+  - "server/src/security.rs"
+  - "scripts/deploy.sh"
+  - "scripts/deploy-droplet.sh"
+  - "server/ops/**"
+
+hard_globs:
+  - "server/src/engine.rs"
+  - "server/migrations/**"
+
+escalation_contact: "brittany@crossgen-ai.com"

@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% import "partials/macros.html" as m %}
+{% block content %}
+<div class="wrap">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Home</a><span aria-hidden="true">›</span>{% if current_category.is_empty() %}<span aria-current="page">Drippy Musings</span>{% else %}<a href="/blog/">Drippy Musings</a><span aria-hidden="true">›</span><span aria-current="page">{{ heading }}</span>{% endif %}</nav>
+  <header class="archive-head">
+    <p class="eyebrow">{% if current_category.is_empty() %}The blog since 2013{% else %}Drippy Musings{% endif %}</p>
+    <h1>{{ heading }}</h1>
+    <p class="lede">{{ intro }}</p>
+  </header>
+</div>
+
+{% if !series.is_empty() %}
+<section class="wrap band">
+  <div class="band-head"><h2>Start here</h2><span class="muted">The four posts new collectors are sent first</span></div>
+  <div class="grid grid-4">{% for post in series %}{% call m::postcard(post) %}{% endfor %}</div>
+</section>
+{% endif %}
+
+<div class="wrap shop-layout">
+  <aside class="rail" id="rail">
+    <form class="rail-search" method="get" action="/blog/">
+      <label class="sr" for="blogq">Search posts</label>
+      <input id="blogq" type="search" name="q" value="{{ q }}" placeholder="Search {{ total }} posts">
+      <button class="btn btn-ghost btn-sm" type="submit">Go</button>
+    </form>
+    <details class="facet" open>
+      <summary>Categories</summary>
+      <ul class="facet-list">
+        <li class="{% if current_category.is_empty() %}is-selected{% endif %}"><a href="/blog/"><span class="box" aria-hidden="true"></span><span class="fname">All posts</span></a></li>
+        {% for c in categories %}<li class="{% if c.slug == current_category %}is-selected{% endif %}"><a href="/category/{{ c.slug }}/"><span class="box" aria-hidden="true"></span><span class="fname">{{ c.name }}</span><span class="fcount mono">{{ c.count }}</span></a></li>{% endfor %}
+      </ul>
+    </details>
+  </aside>
+  <section class="results">
+    <div class="results-bar"><span class="results-count"><strong class="mono">{{ total }}</strong> posts</span><button type="button" class="btn btn-ghost btn-sm rail-toggle" aria-controls="rail" aria-expanded="false">Categories</button></div>
+    {% if posts.is_empty() %}<div class="empty"><p>No posts match. <a href="/blog/">All posts</a>.</p></div>{% else %}
+    <div class="grid grid-2 posts-grid">{% for post in posts %}{% call m::postcard(post) %}{% endfor %}</div>
+    {% endif %}
+    {% if pages.len() > 1 %}
+    <nav class="pagination" aria-label="Pages">
+      {% if !prev_url.is_empty() %}<a class="page-prev" href="{{ prev_url }}" rel="prev">‹ Newer</a>{% endif %}
+      {% for pg in pages %}{% if pg.current %}<span class="page-n is-current" aria-current="page">{{ pg.n }}</span>{% else %}<a class="page-n" href="{{ pg.url }}">{{ pg.n }}</a>{% endif %}{% endfor %}
+      {% if !next_url.is_empty() %}<a class="page-next" href="{{ next_url }}" rel="next">Older ›</a>{% endif %}
+    </nav>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

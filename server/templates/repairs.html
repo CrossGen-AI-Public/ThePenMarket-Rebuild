@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% import "partials/macros.html" as m %}
+{% block content %}
+<div class="wrap">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Home</a><span aria-hidden="true">›</span><span aria-current="page">Pen Repairs</span></nav>
+  <header class="archive-head">
+    <p class="eyebrow">The bench · free estimate</p>
+    <h1>Vintage Pen Repairs</h1>
+    <p class="lede">Ink sac spring a leak? Vacumatic won’t fill? Got a family heirloom you want to get restored? You’ve come to the right place. At ThePenMarket.com, we have more than 20 years of experience restoring classic writing instruments.</p>
+  </header>
+</div>
+<div class="wrap two-col">
+  <div>
+    <section class="block">
+      <h2>What Can We Repair</h2>
+      <ul class="scope-list">{% for s in scope %}<li>{{ s }}</li>{% endfor %}</ul>
+      <p class="note">*Please note that we are no longer restoring European, Nozac and Sheaffer piston fillers.</p>
+      <p class="muted small">Restored examples of each system are in the case right now:</p>
+      <ul class="inline-list">{% for c in repairable_counts %}<li><a href="{{ c.1 }}">{{ c.0 }}</a> <span class="mono muted">{{ c.2 }}</span></li>{% endfor %}</ul>
+    </section>
+    <section class="block">
+      <h2>Safe Shipping Guidelines</h2>
+      <p>To ensure your pen arrives safely:</p>
+      <ol>{% for s in shipping %}<li>{{ s }}</li>{% endfor %}</ol>
+    </section>
+    <section class="block before-after">
+      <h2>Before and after</h2>
+      <div class="pair">
+        <figure><img src="/media/uploads/2025/01/675dcf0d153f2_VacBefore-960.jpg" alt="Vintage fountain pen with cap removed, before restoration" loading="lazy" decoding="async"><figcaption class="mono small">BEFORE</figcaption></figure>
+        <figure><img src="/media/uploads/2025/01/675dcf0d47e03_VacAfter-960.jpg" alt="Vintage fountain pen with cap on beige surface, after restoration" loading="lazy" decoding="async"><figcaption class="mono small">AFTER</figcaption></figure>
+      </div>
+    </section>
+    <section class="block">
+      <h2>Important Notes about Restoration</h2>
+      <p>Restoring a pen is generally safe, but due to the age and materials of vintage pens, there is a small risk of damage. By submitting your pen for restoration, you acknowledge these risks and waive any claims in the event of damage. Rest assured we will handle your pen with the utmost care. Your satisfaction is our #1 goal.</p>
+    </section>
+    <section class="block faq">
+      <h2>Questions people ask</h2>
+      {% for f in faqs %}<details><summary>{{ f.q }}</summary><p>{{ f.a }}</p></details>{% endfor %}
+    </section>
+  </div>
+  <aside class="form-col">
+    <section class="block form-block" id="estimate">
+      <h2>Get Free Repair Estimate</h2>
+      <p>We look forward to helping you bring your pen back to life! If possible, please upload a photo of your pen or pens to be repaired. Discounts are available for shipments of 5 or more pens.</p>
+      <form class="form" method="post" action="/pen-repairs/" enctype="multipart/form-data">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <input class="hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+        <label for="r-name">Name <span class="req">(Required)</span></label>
+        <input id="r-name" name="name" required maxlength="200" autocomplete="name">
+        <label for="r-phone">Phone</label>
+        <input id="r-phone" name="phone" type="tel" maxlength="40" autocomplete="tel" placeholder="(999) 999-9999">
+        <label for="r-email">Email <span class="req">(Required)</span></label>
+        <input id="r-email" name="email" type="email" required maxlength="200" autocomplete="email">
+        <label for="r-message">Message</label>
+        <textarea id="r-message" name="message" rows="5" maxlength="4000" placeholder="What is the pen, and what does it do or not do?"></textarea>
+        <label for="r-photo">Upload a File <span class="muted">(photo of the pen, up to 10 MB)</span></label>
+        <input id="r-photo" name="photo" type="file" accept="image/*">
+        <button class="btn btn-navy" type="submit">Send estimate request <span class="demo-tag">Demo</span></button>
+        <p class="demo-note">Demo: stored on this server, not e-mailed. On the live site this reaches info@thepenmarket.com. Or call (847) 708-5062.</p>
+      </form>
+    </section>
+  </aside>
+</div>
+{% if !bench_posts.is_empty() %}
+<section class="wrap band">
+  <div class="band-head"><h2>Notes from the Work Bench</h2><a class="band-link" href="/category/notes-from-the-work-bench/">All bench posts</a></div>
+  <div class="grid grid-4">{% for post in bench_posts %}{% call m::postcard(post) %}{% endfor %}</div>
+</section>
+{% endif %}
+{% endblock %}

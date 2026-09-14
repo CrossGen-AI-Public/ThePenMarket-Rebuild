@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="wrap narrow">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Home</a><span aria-hidden="true">›</span><span aria-current="page">Guarantee</span></nav>
+  <p class="eyebrow">{{ return_days }}-day returns · {{ fix_days }}-day repair promise</p>
+  <h1>Our Guarantee</h1>
+  <p class="lede">Customer satisfaction is our top priority at ThePenMarket.com, and we will do whatever it takes to make you happy with your purchase.</p>
+  <section class="block">
+    <h2>Guarantee</h2>
+    <p>{{ terms }}</p>
+    <dl class="ledger wide">
+      <div><dt>Return window</dt><dd>{{ return_days }} days from receiving it, same condition, via insured U.S. Mail. Full price of the item refunded, not including the shipping.</dd></div>
+      <div><dt>Repair promise</dt><dd>Problems we might have missed, found within the first {{ fix_days }} days: let us know and we’ll do what we can to fix it.</dd></div>
+    </dl>
+  </section>
+  <section class="block">
+    <h2>Trading Post</h2>
+    <p>ThePenMarket.com is not responsible for any transactions made via our Trading Post. We do not see, possess or speak for the quality of those pens. However, should you have any difficulty with any pen dealer, we will do our best to mediate the situation. We go to great lengths to maintain the integrity of the Trading Post to protect its reputation as a dependable market place for writing instrument enthusiasts.</p>
+  </section>
+  <section class="block faq">
+    <h2>Questions people ask</h2>
+    {% for f in faqs %}<details><summary>{{ f.q }}</summary><p>{{ f.a }}</p></details>{% endfor %}
+  </section>
+  <p class="muted small">The old site also carried an unedited WooCommerce “Refund and Returns Policy” page that contradicted this one; it now forwards here.</p>
+  <p><a class="btn btn-navy" href="/shop/">Browse the case</a> <a class="btn btn-ghost" href="/contact/">Contact us</a></p>
+</div>
+{% endblock %}

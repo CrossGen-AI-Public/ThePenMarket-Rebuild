@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% import "partials/macros.html" as m %}
+{% block content %}
+<div class="wrap">
+  <nav class="crumbs" aria-label="Breadcrumb">
+    <a href="/">Home</a><span aria-hidden="true">›</span><a href="/shop/">Shop</a><span aria-hidden="true">›</span><a href="/product-category/{{ p.category_slug }}/">{{ p.category }}</a><span aria-hidden="true">›</span><span aria-current="page">{{ p.short_title }}</span>
+  </nav>
+</div>
+
+<article class="wrap product">
+  <div class="gallery" id="gallery">
+    <figure class="gallery-main">
+      {% if let Some(first) = images.first() %}
+      <a href="{{ first.full }}" id="galleryLink" target="_blank" rel="noopener"><img id="galleryImg" src="{{ first.large }}" alt="{{ first.alt }}" width="{{ first.width }}" height="{{ first.height }}" decoding="async"></a>
+      {% else %}<div class="noimg mono">NO PHOTO</div>{% endif %}
+      <figcaption class="mono small muted">His own photographs · click for full size</figcaption>
+    </figure>
+    {% if images.len() > 1 %}
+    <div class="thumbs" role="list">
+      {% for im in images %}<button type="button" class="thumb{% if loop.first %} is-on{% endif %}" data-large="{{ im.large }}" data-full="{{ im.full }}" data-alt="{{ im.alt }}" aria-label="Photo {{ loop.index }}"><img src="{{ im.thumb }}" alt="" loading="lazy" decoding="async"></button>{% endfor %}
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="buybox">
+    <p class="eyebrow">{{ p.category }}{% if !p.brand.is_empty() %} · <a href="/brand/{{ p.brand_slug }}/">{{ p.brand }}</a>{% endif %}</p>
+    <h1>{{ p.title }}</h1>
+    <p class="lede-short">
+      {% if is_membership %}One calendar year of unlimited Trading Post listings.{% else %}{% if !p.mechanism.is_empty() %}{{ p.mechanism }}{% endif %}{% if !p.era.is_empty() %}, {{ p.era }}{% endif %}{% if !p.nib.is_empty() %}, {{ p.nib }} nib{% endif %}{% if !p.length_cm.is_empty() %}, {{ p.length_cm }} capped{% endif %}.{% endif %}
+    </p>
+    <div class="price-row">
+      <span class="price mono">{% if p.on_sale %}<s>{{ p.price }}</s> {{ p.sale_price }}{% else %}{{ p.price }}{% endif %}</span>
+      {% if p.sold %}<span class="chip chip-sold">Sold</span>{% else if p.on_sale %}<span class="chip chip-sale">On sale</span>{% else %}<span class="chip chip-navy">{% if p.category_slug == "vintage-pens" %}Restored{% else if p.category_slug == "pre-owned-pens" %}Pre-owned{% else %}In stock{% endif %}</span>{% endif %}
+      {% if !p.sku.is_empty() %}<span class="mono muted">SKU {{ p.sku }}</span>{% endif %}
+    </div>
+    <dl class="buy-facts">
+      <div><dt>Availability</dt><dd>{% if p.sold %}Sold. One of a kind, so it will not be restocked; the page stays for reference.{% else %}One in stock, one of a kind.{% endif %}</dd></div>
+      <div><dt>Returns</dt><dd>{{ return_days }} days for a full refund of the item price, via insured U.S. Mail. Problems found within {{ fix_days }} days get fixed.</dd></div>
+      {% if !is_membership %}<div><dt>Condition</dt><dd>{% if p.category_slug == "vintage-pens" %}Restored, tested and guaranteed.{% else %}Pre-owned, tested and guaranteed.{% endif %} Flaws are stated in the description.</dd></div>{% endif %}
+    </dl>
+    {% if !p.sold %}
+    <details class="demo-buy">
+      <summary class="btn btn-navy btn-wide">{% if is_membership %}Start membership{% else %}Buy this pen{% endif %} <span class="demo-tag">Demo — checkout not connected</span></summary>
+      <div class="demo-explain">
+        <p>This preview build has no payment processor connected: nothing here can take a card, and no order is created. On the live site this button adds the item to a WooCommerce cart.</p>
+        <p>To buy this item today: call <a href="tel:+18477085062">(847) 708-5062</a> or e-mail <a href="mailto:info@thepenmarket.com?subject={{ p.title }}%20(SKU%20{{ p.sku }})">info@thepenmarket.com</a> with the SKU.</p>
+      </div>
+    </details>
+    {% endif %}
+    <p class="buy-links"><a href="{{ ask_url }}">Ask the guide about this pen</a> · <a href="/guarantee/">Our Guarantee</a>{% if repairable %} · <a href="/pen-repairs/">On his repair list</a>{% endif %}</p>
+  </div>
+
+  <div class="product-body">
+    <section class="specifics">
+      <h2>Item specifics</h2>
+      <table class="specs">
+        <tbody>
+        {% for s in specs %}<tr><th scope="row">{{ s.label }}</th><td>{% if !s.url.is_empty() %}<a href="{{ s.url }}">{{ s.value }}</a>{% else %}{{ s.value }}{% endif %}</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </section>
+    <section class="description">
+      <h2>Description from Nathaniel</h2>
+      <div class="prose">{{ description_html|safe }}</div>
+    </section>
+  </div>
+</article>
+
+{% if !related.is_empty() %}
+<section class="wrap band">
+  <div class="band-head"><h2>Also in the case</h2><a class="band-link" href="/product-category/{{ p.category_slug }}/">All {{ p.category }}</a></div>
+  <div class="grid grid-4">{% for r in related %}{% call m::card(r) %}{% endfor %}</div>
+</section>
+{% endif %}
+{% if !related_posts.is_empty() %}
+<section class="wrap band">
+  <div class="band-head"><h2>From Drippy Musings</h2></div>
+  <div class="grid grid-3">{% for post in related_posts %}{% call m::postcard(post) %}{% endfor %}</div>
+</section>
+{% endif %}
+{% endblock %}

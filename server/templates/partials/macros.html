@@ -1,0 +1,40 @@
+{% macro card(p) %}
+<article class="card{% if p.sold %} is-sold{% endif %}">
+  <a class="card-img" href="{{ p.url }}" tabindex="-1" aria-hidden="true">
+    {% if !p.image.is_empty() %}<img src="{{ p.image }}" alt="" loading="lazy" decoding="async">{% else %}<span class="noimg mono">NO PHOTO</span>{% endif %}
+  </a>
+  <div class="card-body">
+    <div class="card-meta mono">{% if !p.listed.is_empty() %}{{ p.listed }} · {% endif %}{% if !p.sku.is_empty() %}SKU {{ p.sku }}{% endif %}</div>
+    <h3 class="card-title"><a href="{{ p.url }}">{{ p.short_title }}</a></h3>
+    <div class="card-price mono">{% if p.on_sale %}<s>{{ p.price }}</s> {{ p.sale_price }}{% else %}{{ p.price }}{% endif %}</div>
+    <div class="chips">
+      {% if !p.era_short.is_empty() %}<span class="chip">{{ p.era_short }}</span>{% endif %}
+      {% if !p.mechanism.is_empty() %}<span class="chip">{{ p.mechanism }}</span>{% endif %}
+      {% if p.sold %}<span class="chip chip-sold">Sold</span>{% else if p.on_sale %}<span class="chip chip-sale">On sale</span>{% else if p.category_slug == "vintage-pens" %}<span class="chip chip-navy">Restored</span>{% else if p.category_slug == "pre-owned-pens" %}<span class="chip chip-navy">Pre-owned</span>{% endif %}
+    </div>
+  </div>
+</article>
+{% endmacro %}
+
+{% macro postcard(post) %}
+<article class="postcard">
+  <a class="postcard-img" href="{{ post.url }}" tabindex="-1" aria-hidden="true">{% if !post.image.is_empty() %}<img src="{{ post.image }}" alt="" loading="lazy" decoding="async">{% endif %}</a>
+  <div class="postcard-body">
+    <div class="card-meta mono">{{ post.date }}{% if !post.category.is_empty() %} · <a href="/category/{{ post.category_slug }}/">{{ post.category }}</a>{% endif %} · {{ post.minutes }} MIN</div>
+    <h3 class="postcard-title"><a href="{{ post.url }}">{{ post.title }}</a></h3>
+    {% if !post.excerpt.is_empty() %}<p class="postcard-excerpt">{{ post.excerpt }}</p>{% endif %}
+  </div>
+</article>
+{% endmacro %}
+
+{% macro listingcard(l) %}
+<article class="card listing">
+  <a class="card-img" href="{{ l.url }}" tabindex="-1" aria-hidden="true">{% if !l.image.is_empty() %}<img src="{{ l.image }}" alt="" loading="lazy" decoding="async">{% else %}<span class="noimg mono">NO PHOTO</span>{% endif %}</a>
+  <div class="card-body">
+    <div class="card-meta mono">{{ l.date }}{% if !l.era.is_empty() %} · ERA {{ l.era }}{% endif %}</div>
+    <h3 class="card-title"><a href="{{ l.url }}">{{ l.title }}</a></h3>
+    <div class="card-price mono">{{ l.price }}</div>
+    <div class="chips"><span class="chip">Trading Post</span><span class="chip">Private seller</span></div>
+  </div>
+</article>
+{% endmacro %}

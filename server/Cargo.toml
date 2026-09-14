@@ -1,0 +1,52 @@
+[package]
+name = "thepenmarket"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+description = "ThePenMarket.com rebuild: Axum + SQLx + Postgres + Askama, one binary."
+default-run = "thepenmarket"
+
+[[bin]]
+name = "thepenmarket"
+path = "src/main.rs"
+
+[[bin]]
+name = "import"
+path = "src/bin/import.rs"
+
+[dependencies]
+axum = { version = "0.8", features = ["macros", "form", "query", "multipart"] }
+tokio = { version = "1", features = ["full"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["fs", "set-header", "trace", "limit", "compression-gzip"] }
+sqlx = { version = "0.8", features = ["runtime-tokio", "tls-rustls", "postgres", "chrono", "migrate", "json", "bigdecimal"] }
+askama = "0.14"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", features = ["serde"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+dotenvy = "0.15"
+csv = "1"
+regex = "1"
+rand = "0.9"
+sha2 = "0.10"
+hmac = "0.12"
+hex = "0.4"
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
+anyhow = "1"
+html-escape = "0.2"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 4
+strip = true
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"

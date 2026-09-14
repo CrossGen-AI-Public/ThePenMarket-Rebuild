@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% import "partials/macros.html" as m %}
+{% block content %}
+<article class="wrap post">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Home</a><span aria-hidden="true">›</span><a href="/blog/">Drippy Musings</a>{% if !post.category.is_empty() %}<span aria-hidden="true">›</span><a href="/category/{{ post.category_slug }}/">{{ post.category }}</a>{% endif %}</nav>
+  <header class="post-head">
+    {% if !post.category.is_empty() %}<p class="eyebrow"><a href="/category/{{ post.category_slug }}/">{{ post.category }}</a></p>{% endif %}
+    <h1>{{ post.title }}</h1>
+    <p class="byline mono">BY <a href="/about-us/">{{ author|upper }}</a> · <time datetime="{{ post.iso_date }}">{{ post.date|upper }}</time> · {{ post.minutes }} MIN READ</p>
+  </header>
+  {% if !post.image.is_empty() %}<figure class="post-hero"><img src="{{ post.image }}" alt="{{ post.image_alt }}" decoding="async"></figure>{% endif %}
+  <div class="prose post-body">{{ body_html|safe }}</div>
+  <footer class="post-foot">
+    <p class="mono small muted">Last reviewed {{ modified }} · Drippy Musings is the ThePenMarket.com blog</p>
+    <p class="sig">Nathaniel Cerf · <a href="/about-us/">About us</a> · <a href="/contact/">Ask us anything</a></p>
+  </footer>
+</article>
+{% if !related_pens.is_empty() %}
+<section class="wrap band">
+  <div class="band-head"><h2>In the case now</h2><a class="band-link" href="/shop/">The whole case</a></div>
+  <div class="grid grid-4">{% for p in related_pens %}{% call m::card(p) %}{% endfor %}</div>
+</section>
+{% endif %}
+{% if !more.is_empty() %}
+<section class="wrap band">
+  <div class="band-head"><h2>More {{ post.category }}</h2><a class="band-link" href="/category/{{ post.category_slug }}/">All posts in {{ post.category }}</a></div>
+  <div class="grid grid-3">{% for pc in more %}{% call m::postcard(pc) %}{% endfor %}</div>
+</section>
+{% endif %}
+{% endblock %}

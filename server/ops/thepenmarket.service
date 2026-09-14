@@ -1,0 +1,25 @@
+[Unit]
+Description=ThePenMarket.com rebuild (Axum + Postgres) on :8140
+Documentation=https://github.com/CrossGen-AI-Public/ThePenMarket-Rebuild
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+# %h = the user's home dir; APP_DIR is where templates, static, media and uploads live.
+WorkingDirectory=%h/thepenmarket/server
+ExecStart=%h/thepenmarket/server/target/release/thepenmarket
+Restart=on-failure
+RestartSec=5
+Environment=APP_DIR=%h/thepenmarket/server
+Environment=PORT=8140
+Environment=HOST=0.0.0.0
+Environment=SITE_ORIGIN=http://100.117.164.79:8140
+Environment=RUST_LOG=info,sqlx=warn
+# DATABASE_URL, CSRF_SECRET and the three GUIDE_AI_* lines (the hosted model crossgen-ai.com uses).
+EnvironmentFile=%h/.config/thepenmarket.env
+StandardOutput=append:%h/thepenmarket/server/server.log
+StandardError=append:%h/thepenmarket/server/server.log
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="wrap">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Home</a><span aria-hidden="true">›</span><span aria-current="page">About Us</span></nav>
+  <header class="archive-head">
+    <p class="eyebrow">About Us</p>
+    <h1>Your Hub for Buying, Selling and Trading Pens</h1>
+    <p class="lede">ThePenMarket.com is a place where folks can buy, sell and trade pens of any era. Whether you’re a seasoned collector, a newcomer to fountain pens, or simply looking to sell a pen that’s no longer in use, this marketplace caters to all pen enthusiasts.</p>
+  </header>
+</div>
+<div class="wrap about-grid">
+  <figure class="about-photo" id="nathaniel-cerf">
+    <img src="/media/uploads/2025/01/675de49e29803_Nathaniel-Cerf-Profile-1-of-1-scaled.jpg" alt="Nathaniel Cerf, owner of ThePenMarket.com" decoding="async">
+    <figcaption class="mono small">NATHANIEL CERF · OWNER AND RESTORER</figcaption>
+  </figure>
+  <div class="about-copy">
+    <section class="block">
+      <h2>Our Origins</h2>
+      <p>Owner Nathaniel Cerf has been a fountain pen junkie since the age of 9, when he first found his late grandfather’s Sheaffer Lifetime Balance and began writing with it. Years later, while teaching a fencing class in Sioux Falls, South Dakota, Cerf met a fountain pen repairman who began teaching him the art and science of vintage pen repair. Cerf soon mastered the intricacies of restoring lever-fillers, button-fillers, crescent-fillers, Vacumatics, TouchDowns and … eventually … Sheaffer Snorkels.</p>
+    </section>
+    <section class="block">
+      <h2>From Hobby to Business</h2>
+      <p>With a growing collection of restored pens, Cerf started selling them at a local antique store, quickly realizing the demand for classic pens. After moving to the Chicagoland area, he recognized the limited online options for pen enthusiasts. In 2007 he expanded the venture to the internet with the help of Chris &amp; Ruth Gagliano at Computer Friendly Associates. These days ThePenMarket.com can also be found on <a href="https://www.facebook.com/pages/Thepenmarketcom/427549874033020" rel="noopener" target="_blank">Facebook</a> and <a href="https://www.instagram.com/thepenmarketdotcom" rel="noopener" target="_blank">Instagram</a>, and ships from Norwich, Connecticut.</p>
+    </section>
+    <section class="block">
+      <h2>In his words</h2>
+      <blockquote>
+        <p>“I think people really like the experience of unplugging (from the computer) and actually having a tactile moment.”</p>
+        <p>“Parker and Sheaffer pens from probably the 1920s into the 1940s and 1950s, which was really sort of the golden age of fountain pens.”</p>
+        <footer>Nathaniel Cerf, in <cite><a href="https://www.theday.com/local-news/20220406/norwich-resident-specializes-in-modern-vintage-pens/" rel="noopener" target="_blank">The Day</a></cite>, April 6, 2022</footer>
+      </blockquote>
+      <blockquote>
+        <p>“He’s very sociable and interesting, but he’s also sincere, ethical and knowledgeable and he does a very good job with these fountain and dip pens.”</p>
+        <footer>Dr. Tobias Goodman, president of the North Stonington Historical Society, in the same article</footer>
+      </blockquote>
+    </section>
+    <section class="block">
+      <h2>Customer Commitment</h2>
+      <p>Providing exceptional customer service is our top priority. If you’re searching for a specific pen, we’ll go above and beyond to help you find it. Have questions about our fine writing instruments? Reach out, we’re here to assist you.</p>
+      <p><a class="btn btn-navy" href="/contact/">Ask Us Anything</a></p>
+    </section>
+    <section class="block">
+      <h2>By the numbers</h2>
+      <dl class="ledger wide">
+        <div><dt>Restored and pre-owned items in the case</dt><dd class="mono">{{ live_total }}</dd></div>
+        <div><dt>Drippy Musings posts since 2013</dt><dd class="mono">{{ post_count }}</dd></div>
+        <div><dt>Live Trading Post listings</dt><dd class="mono">{{ listing_count }}</dd></div>
+        <div><dt>Online since</dt><dd class="mono">2007</dd></div>
+      </dl>
+    </section>
+  </div>
+</div>
+<div class="wrap about-photos">
+  <figure><img src="/media/uploads/2025/01/675de2d05c48a_CartersInxFront.jpg" alt="Carter's Inx inkwell, front" loading="lazy" decoding="async"><figcaption class="mono small">CARTER’S INX INKWELL</figcaption></figure>
+  <figure><img src="/media/uploads/2025/01/675de90e5768b_2018-DC-Pen-Show-960.jpg" alt="ThePenMarket.com table at the 2018 DC Pen Show" loading="lazy" decoding="async"><figcaption class="mono small">2018 DC PEN SHOW</figcaption></figure>
+</div>
+{% endblock %}

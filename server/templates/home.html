@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+{% import "partials/macros.html" as m %}
+{% block head %}<link rel="preload" as="image" href="/static/img/hero-photo.jpg">{% endblock %}
+{% block content %}
+<section class="hero" id="hero">
+  <div class="hero-scene" aria-hidden="true"><canvas id="scene"></canvas></div>
+  <div class="wrap hero-grid">
+    <div class="hero-copy">
+      <p class="kicker">Restored one at a time · Online since 2007 · Norwich, Connecticut</p>
+      <h1>Pens with a past, ready for your desk.</h1>
+      <p class="hero-strip mono">{{ live_total }} IN THE CASE · 14-DAY RETURNS · 30-DAY REPAIR PROMISE · ONE OF EACH</p>
+      <div class="hero-actions">
+        <a class="btn btn-gold" href="/shop/">Browse the case</a>
+        <a class="btn btn-ghost-light" href="#ask">Ask the guide</a>
+      </div>
+    </div>
+    <aside class="hero-card" id="heroCard">
+      <div class="eyebrow">In the case today</div>
+      <dl class="ledger">
+        {% for c in cat_counts %}<div><dt>{{ c.name }}</dt><dd class="mono">{{ c.count }}</dd></div>{% endfor %}
+        <div><dt>Price range</dt><dd class="mono">{{ price_min }} to {{ price_max }}</dd></div>
+        <div><dt>Grail-grade pens</dt><dd class="mono">{{ grail_count }}</dd></div>
+        <div><dt>Brands with stock</dt><dd class="mono">{{ brands_with_stock }}</dd></div>
+      </dl>
+      <p class="hero-card-foot">Counted from the catalog when this page was built, not typed in.</p>
+    </aside>
+  </div>
+</section>
+
+<section class="wrap band" id="just-in">
+  <div class="band-head">
+    <h2>Just in</h2>
+    {% if !recent_label.is_empty() %}<span class="mono navy live">● {{ recent_label }}</span>{% endif %}
+    <a class="band-link" href="/shop/?sort=newest">All new arrivals</a>
+  </div>
+  <div class="grid grid-5">
+    {% for p in just_in %}{% call m::card(p) %}{% endfor %}
+  </div>
+</section>
+
+<section class="wrap band" id="edits">
+  <div class="band-head">
+    <h2>This week’s edits</h2>
+    <span class="muted">Chosen by hand, described honestly</span>
+  </div>
+  <div class="grid grid-3 edits">
+    {% for e in edits %}
+    <a class="edit" href="{{ e.url }}">
+      <div class="edit-img">{% if !e.image.is_empty() %}<img src="{{ e.image }}" alt="{{ e.image_alt }}" loading="lazy" decoding="async">{% endif %}</div>
+      <h3>{{ e.title }}</h3>
+      <p>{{ e.blurb }}</p>
+      <span class="mono edit-stat">{{ e.stat }}</span>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="wrap band" id="case">
+  <div class="band-head">
+    <h2>The case</h2>
+    <span class="mono muted">{% for c in cat_counts %}{% if !loop.first %} · {% endif %}{{ c.count }} {{ c.name|upper }}{% endfor %}</span>
+  </div>
+  <div class="chips chips-row">
+    {% for c in chips %}<a class="chip chip-link" href="{{ c.url }}">{{ c.label }}</a>{% endfor %}
+  </div>
+  <div class="grid grid-4">
+    {% for p in case %}{% call m::card(p) %}{% endfor %}
+  </div>
+  <p class="band-more"><a class="btn btn-navy" href="/shop/">Browse the full catalog</a></p>
+</section>
+
+<section class="expert" id="expert">
+  <div class="wrap expert-grid">
+    <div class="expert-photo" aria-label="Photo slot">
+      <div class="photo-slot"><span class="mono">PHOTO SLOT</span><span>Nathaniel at the restoration bench, loupe and nib block. No such photo exists in the site backup; this space is reserved rather than filled with a stock image.</span></div>
+    </div>
+    <div class="expert-copy">
+      <h2>Every pen on this site passed through my hands.</h2>
+      <p>Owner Nathaniel Cerf has been a fountain pen junkie since the age of 9, when he first found his late grandfather’s Sheaffer Lifetime Balance and began writing with it. Years later, while teaching a fencing class in Sioux Falls, South Dakota, Cerf met a fountain pen repairman who began teaching him the art and science of vintage pen repair.</p>
+      <ul class="checklist">
+        <li>Restored: lever-fillers, button-fillers, crescent-fillers, Vacumatics, TouchDowns and Sheaffer Snorkels</li>
+        <li>Described honestly, capped length and flaws included</li>
+        <li>Return it within 14 days for a full refund of the item price</li>
+        <li>Problems found within 30 days: “let us know and we’ll do what we can to fix it”</li>
+      </ul>
+      <p class="sig">Nathaniel Cerf, owner and restorer · <a href="/about-us/">About us</a> · <a href="/guarantee/">Our Guarantee</a></p>
+    </div>
+  </div>
+</section>
+
+<section class="vault" id="vault">
+  <div class="wrap">
+    <div class="band-head">
+      <h2>The vault</h2>
+      <span class="mono gold">{{ grail_count }} GRAIL-GRADE PENS · {{ grail_range }}</span>
+    </div>
+    <div class="grid grid-3 vault-grid">
+      {% for p in vault %}
+      <a class="vault-item" href="{{ p.url }}">
+        <div class="vault-img">{% if !p.image.is_empty() %}<img src="{{ p.image }}" alt="{{ p.image_alt }}" loading="lazy" decoding="async">{% endif %}</div>
+        <h3>{{ p.short_title }}</h3>
+        <span class="mono">{% if p.on_sale %}{{ p.sale_price }}{% else %}{{ p.price }}{% endif %}</span>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<section class="wrap band" id="nibs">
+  <div class="band-head">
+    <h2>Know your nibs</h2>
+    <span class="muted">What the line actually looks like</span>
+  </div>
+  <div class="grid grid-5 nibs">
+    {% for n in nibs %}
+    <a class="nib" href="{{ n.url }}">
+      {% if n.slug == "flex" %}<svg class="nib-line nib-flex" viewBox="0 0 120 40" aria-hidden="true"><path d="M6 31 C 28 8, 46 6, 58 18 S 90 34, 114 12 L 114 14.5 C 92 40, 60 30, 56 24 S 30 12, 6 33 Z"/></svg>{% else %}<svg class="nib-line nib-{{ n.slug }}" viewBox="0 0 120 40" aria-hidden="true"><path d="M6 30 C 30 8, 50 8, 60 20 S 90 32, 114 12"/></svg>{% endif %}
+      <h3>{{ n.name }}</h3>
+      <p>{{ n.line }}</p>
+      <span class="mono muted">{{ n.count }} IN STOCK</span>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="ask" id="ask">
+  <div class="wrap ask-grid">
+    <div class="ask-copy">
+      <p class="eyebrow">Ask the Pen Market</p>
+      <h2>Tell it what you want to write with.</h2>
+      <p>“A flexible nib under $200”, “can you fix my grandfather’s Vacumatic”, “do you buy Cross Century pens”. Every price, count and date in its answers is computed from the catalog and from the policies on this site, never guessed. It is an AI assistant, not Nathaniel; when the question needs him, it says so and hands you the phone number.</p>
+      <ul class="checklist small">
+        <li>Prices and stock come from the live catalog</li>
+        <li>Repair scope and guarantee dates come from the published pages</li>
+        <li>Estimates and offers come only from Nathaniel: (847) 708-5062</li>
+      </ul>
+      <p class="muted small">Start with one of the questions on the right, or write your own.</p>
+    </div>
+    <div class="guide-phone" id="guidePhone">
+      <div class="who"><span class="dot"></span><strong>Ask the Pen Market</strong><small>AI assistant · catalog numbers only</small></div>
+      <div id="chat" class="chat" aria-live="polite"></div>
+      <div id="quick" class="quick"></div>
+      <div class="chat-input">
+        <input id="chatIn" type="text" placeholder="Ask about a pen, a repair, or selling…" aria-label="Your question" autocomplete="off" maxlength="600">
+        <button id="chatSend" type="button" class="btn btn-navy btn-sm">Send</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="wrap band" id="start">
+  <div class="band-head">
+    <h2>How do I start collecting pens?</h2>
+    <a class="band-link" href="/category/how-do-i-start-collecting-pens/">The whole series</a>
+  </div>
+  <div class="grid grid-3">
+    {% for post in starter_posts %}{% call m::postcard(post) %}{% endfor %}
+  </div>
+</section>
+
+<section class="strip3">
+  <div class="wrap grid grid-3">
+    <div class="strip-item">
+      <p class="eyebrow">Sell to us</p>
+      <h2>Collections bought for cash or consigned.</h2>
+      <p>Looking to cash in on your pen collection? Perhaps you inherited a collection you don’t want? Depending upon what you have, we can offer several options from cash to consignment.</p>
+      <a class="btn btn-navy" href="/sell-my-pens/">Get an offer</a>
+    </div>
+    <div class="strip-item">
+      <p class="eyebrow">Trading Post</p>
+      <h2>Our classifieds. {{ tp_listing_price }} a listing.</h2>
+      <p>Sell your pens directly to our customers on our classified ads section. It only costs {{ tp_listing_price }} per listing, and you keep your pen until someone pays you. Unlimited Posts: {{ unlimited_price }} a year.</p>
+      <a class="btn btn-navy" href="/trading-post/">See the listings</a>
+    </div>
+    <div class="strip-item">
+      <p class="eyebrow">The bench</p>
+      <h2>Repairs: lever to Snorkel.</h2>
+      <p>Ink sac spring a leak? Vacumatic won’t fill? Got a family heirloom you want to get restored? More than 20 years of experience restoring classic writing instruments. Free estimate.</p>
+      <a class="btn btn-navy" href="/pen-repairs/">Send a pen</a>
+    </div>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script src="/static/vendor/three.min.js" defer></script>
+<script src="/static/js/hero.js" defer></script>
+<script src="/static/js/engine.js" defer></script>
+<script src="/static/js/guide.js" defer></script>
+{% endblock %}

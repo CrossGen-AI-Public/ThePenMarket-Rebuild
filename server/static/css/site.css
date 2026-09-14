@@ -54,8 +54,8 @@ code{font-family:Menlo,Consolas,monospace;font-size:.9em;background:var(--grey);
 
 /* masthead: small logo left, lowercase nav centred, three icons right (the reference's header) */
 .masthead{position:relative;z-index:20;background:transparent}
-.masthead-row{display:grid;grid-template-columns:200px minmax(0,1fr) auto;align-items:center;gap:var(--s5);padding-top:30px;padding-bottom:22px}
-.logo{display:block;width:200px}
+.masthead-row{display:grid;grid-template-columns:250px minmax(0,1fr) auto;align-items:center;gap:var(--s5);padding-top:30px;padding-bottom:22px}
+.logo{display:block;width:250px}
 .logo img{width:100%;height:auto}
 .mainnav{display:flex;justify-content:center;gap:40px;font-size:17px;font-weight:600;white-space:nowrap;letter-spacing:.005em}
 .mainnav a{color:var(--ink);padding:6px 0;border-bottom:2px solid transparent}
@@ -74,8 +74,8 @@ code{font-family:Menlo,Consolas,monospace;font-size:.9em;background:var(--grey);
 .sheet-cols a{display:block;padding:8px 0;border-bottom:1px solid var(--line);color:var(--ink);font-size:16px}
 @media (max-width:1000px){.mainnav{gap:24px;font-size:15px}}
 @media (max-width:820px){
-  .masthead-row{grid-template-columns:170px minmax(0,1fr);gap:var(--s4);padding-top:20px}
-  .logo{width:170px}
+  .masthead-row{grid-template-columns:190px minmax(0,1fr);gap:var(--s4);padding-top:20px}
+  .logo{width:190px}
   .mainnav{display:none}
   .masthead-tools{justify-content:flex-end;gap:10px}
   .menu-btn{display:inline-block}

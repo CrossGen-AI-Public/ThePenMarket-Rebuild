@@ -40,5 +40,9 @@ Output under `research/gate/` (results.txt, per-row logs, shots/).
 - Forms: 20 per minute per IP, 10 MB photo (re-encoded to JPEG, metadata stripped, stored under `server/uploads/`, not served).
 - Everything else: 64 KB request bodies.
 
-## The public copy (droplet)
-See `scripts/deploy-droplet.sh`. It needs a Postgres container (`thepenmarket-db` on the `web` network), a `pg_dump` of the sparky database restored into it, `/srv/apps/thepenmarket/.env`, and the Caddy block for `penmarket.crossgen-ai.com`. If the droplet copy is not up, the sparky copy is the demo.
+## The public copy (droplet): https://penmarket.crossgen-ai.com/
+Deployed 2026-09-14 by `scripts/push-droplet.sh` (from sparky) + `scripts/deploy-droplet.sh` (on the droplet, as root):
+- containers `thepenmarket` (the app, image built from `server/Dockerfile`) and `thepenmarket-db` (postgres:16-alpine, volume `thepenmarket_pgdata`) on the `web` network; Caddy block `penmarket.crossgen-ai.com` in `/root/proxy/Caddyfile`.
+- files: `/srv/apps/thepenmarket/build` (build context), `/srv/apps/thepenmarket/media` (photos, mounted read-only), `/srv/apps/thepenmarket/uploads` (form photos), `/srv/apps/thepenmarket/.env` (secrets), `db.sql.gz` (the dump restored on first run).
+- redeploy: `bash scripts/push-droplet.sh` from sparky (rsyncs, dumps the sparky database, rebuilds the image, swaps the container, health-checks). The Rust build takes about 8 minutes on the droplet's two cores.
+- rollback: `docker run` the `thepenmarket:previous` image with the same flags.

@@ -62,8 +62,8 @@ for r in routes:
     ids = set(re.findall(r'\sid="([^"]+)"', html))
     clean = re.sub(r"(?is)<script\b.*?</script>|<template\b.*?</template>|<style\b.*?</style>", "", html)
     clean = re.sub(r'(?i)<link\b[^>]*rel="(preconnect|dns-prefetch|preload|modulepreload)"[^>]*>', "", clean)
-    targets = sorted(set(re.findall(r'(?:href|src|action|data-href)="([^"]*)"', clean)))
-    for t in targets:
+    targets = sorted(set(re.findall(r'(href|src|action|data-href)="([^"]*)"', clean)))
+    for attr, t in targets:
         t = t.replace("&amp;", "&")
         res = "ok"
         if t.strip() == "":
@@ -88,7 +88,8 @@ for r in routes:
             path = t if t.startswith("/") else "/" + t
             path = path.split("#")[0]
             c = check_internal(path)
-            res = f"ok {c}" if str(c).startswith(("2", "3")) else f"FAIL {c}"
+            # a POST-only form action answers 405 to GET: the route exists
+            res = f"ok {c}" if str(c).startswith(("2", "3")) or (attr == "action" and c == 405) else f"FAIL {c}"
         if res.startswith("FAIL"):
             fails += 1
             print(f"FAIL  [/{r}] {t}  ({res})")

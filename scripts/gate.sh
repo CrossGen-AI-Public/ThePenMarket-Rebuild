@@ -10,7 +10,7 @@ BASE="${1:-http://127.0.0.1:8140}"; LABEL="${2:-local}"
 P="$(cd "$(dirname "$0")/.." && pwd)"; S="$HOME/.claude/skills/new-customer/scripts"; OUT="$P/research/gate"; mkdir -p "$OUT/shots"
 export CHROME="${CHROME:-/usr/bin/chromium-browser}"
 RES="$OUT/results.txt"; : > "$RES"
-ROUTES="shop/ on-sale-pens/ product-category/vintage-pens/ product-category/pre-owned-pens/ product-category/pencils/ brand/parker/ era/04-1930-1939/ nib/fine/ pw-filling-mechanism/lever-filler/ pw-price-range/03-100-500range/ product/vintage-pens-montblanc-644/ product/pre-owned-pens-namiki-white-tiger/ product/unlimited-posts/ blog/ category/how-do-i-start-collecting-pens/ how-do-i-restore-a-parker-vacumatic/ trading-post/ trading-post/montblanc-fountain-pen/ post-your-product/ pen-repairs/ sell-my-pens/ contact/ guarantee/ about-us/ privacy/"
+ROUTES="shop/ on-sale-pens/ product-category/vintage-pens/ product-category/pre-owned-pens/ product-category/pencils/ brand/parker/ era/04-1930-1939/ nib/fine/ pw-filling-mechanism/lever-filler/ pw-price-range/03-100-500range/ product/vintage-pens-montblanc-644/ product/pre-owned-pens-namiki-pilot-white-tiger/ product/unlimited-posts/ blog/ category/how-do-i-start-collecting-pens/ how-do-i-restore-a-parker-vacumatic/ trading-post/ trading-post/montblanc-fountain-pen/ post-your-product/ pen-repairs/ sell-my-pens/ contact/ guarantee/ about-us/ privacy/"
 run() { local name="$1"; shift; echo; echo "===== $name"; if "$@" > "$OUT/$name.log" 2>&1; then echo "$name PASS" >> "$RES"; else echo "$name FAIL" >> "$RES"; fi; tail -n 14 "$OUT/$name.log"; }
 
 engine() { (cd "$P/server" && cargo test --release --lib 2>&1 | tail -5 | grep -q "test result: ok") && node "$P/scripts/test-engine-js.mjs"; }

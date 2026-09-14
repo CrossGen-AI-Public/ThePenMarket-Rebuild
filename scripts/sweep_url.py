@@ -14,7 +14,7 @@ JS = """() => {
   const sw = Math.max(d.documentElement.scrollWidth, d.body.scrollWidth);
   const clipped = (e) => { for (let a = e.parentElement; a && a !== d.body && a !== d.documentElement; a = a.parentElement) { const o = w.getComputedStyle(a); if (/hidden|clip/.test(o.overflowX) || /hidden|clip/.test(o.overflow)) return true; } return false; };
   const bad = [];
-  d.querySelectorAll('body *').forEach(e => { const r = e.getBoundingClientRect(); const cs = w.getComputedStyle(e); if (cs.display === 'none' || cs.position === 'fixed') return; if ((r.right > vw + 1 || r.left < -1) && r.width > 0 && !clipped(e)) bad.push(e.tagName.toLowerCase() + (e.id ? '#' + e.id : '') + '.' + [...e.classList].slice(0, 3).join('.') + ' R' + Math.round(r.right)); });
+  d.querySelectorAll('body *').forEach(e => { const r = e.getBoundingClientRect(); const cs = w.getComputedStyle(e); if (cs.display === 'none' || cs.position === 'fixed') return; const offLeft = cs.position === 'absolute' && r.right <= 0; if (offLeft) return; if ((r.right > vw + 1 || r.left < -1) && r.width > 0 && !clipped(e)) bad.push(e.tagName.toLowerCase() + (e.id ? '#' + e.id : '') + '.' + [...e.classList].slice(0, 3).join('.') + ' R' + Math.round(r.right)); });
   return { vw, sw, bad: bad.slice(0, 6) };
 }"""
 total = 0

@@ -2,7 +2,8 @@
 
 A concept rebuild of [thepenmarket.com](https://thepenmarket.com) (Nathaniel Cerf's vintage pen shop, Norwich CT) for a CrossGen AI pitch: one Rust binary (Axum + SQLx + PostgreSQL + Askama), the client's whole catalog imported from his site backup, every old URL forwarded, SEO and AEO built in, and "Ask the Pen Market", an AI guide whose numbers come from a Rust engine over the live catalog while CrossGen's hosted model only talks.
 
-- Live demo (Tailscale): http://100.117.164.79:8140/
+- Public demo: https://penmarket.crossgen-ai.com/ (droplet, Docker, its own Postgres container)
+- Tailscale demo: http://100.117.164.79:8140/ (sparky, user systemd service)
 - Shareable preview: `dist/index.html` (the homepage + the assistant in claude.ai sample mode, catalog snapshot inlined)
 - Brief, decisions and assumptions: `BRIEF.md`; run log: `PROGRESS.md`; client report: `REPORT.md`
 - Operations: `docs/RUNBOOK.md`

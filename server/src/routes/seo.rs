@@ -36,7 +36,7 @@ fn today() -> String {
 pub async fn robots(AxState(state): AxState<State>) -> AppResult {
     let o = state.origin();
     text(format!(
-        "User-agent: *\nAllow: /\nAllow: /llms.txt\nDisallow: /api/\nDisallow: /healthz\nDisallow: /uploads/\nDisallow: /post-your-product/\nDisallow: /mailing-list/\nDisallow: /*?*sort=\nDisallow: /*?*page=\n\nUser-agent: GPTBot\nAllow: /\n\nUser-agent: ClaudeBot\nAllow: /\n\nUser-agent: PerplexityBot\nAllow: /\n\nUser-agent: Google-Extended\nAllow: /\n\nSitemap: {o}/sitemap.xml\nSitemap: {o}/sitemap-products.xml\nSitemap: {o}/sitemap-categories.xml\nSitemap: {o}/sitemap-terms.xml\nSitemap: {o}/sitemap-posts.xml\nSitemap: {o}/sitemap-pages.xml\nSitemap: {o}/sitemap-trading-post.xml\n"
+        "User-agent: *\nAllow: /\nAllow: /llms.txt\nDisallow: /admin/\nDisallow: /api/\nDisallow: /healthz\nDisallow: /uploads/\nDisallow: /post-your-product/\nDisallow: /mailing-list/\nDisallow: /*?*sort=\nDisallow: /*?*page=\n\nUser-agent: GPTBot\nAllow: /\n\nUser-agent: ClaudeBot\nAllow: /\n\nUser-agent: PerplexityBot\nAllow: /\n\nUser-agent: Google-Extended\nAllow: /\n\nSitemap: {o}/sitemap.xml\nSitemap: {o}/sitemap-products.xml\nSitemap: {o}/sitemap-categories.xml\nSitemap: {o}/sitemap-terms.xml\nSitemap: {o}/sitemap-posts.xml\nSitemap: {o}/sitemap-pages.xml\nSitemap: {o}/sitemap-trading-post.xml\n"
     ))
 }
 

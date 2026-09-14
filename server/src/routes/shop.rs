@@ -411,6 +411,8 @@ pub struct Spec {
     pub label: String,
     pub value: String,
     pub url: String,
+    pub key: String,
+    pub slug: String,
 }
 
 #[derive(Template)]
@@ -420,6 +422,7 @@ pub struct ProductTpl {
     pub p: ProductCard,
     pub images: Vec<Image>,
     pub description_html: String,
+    pub description_text: String,
     pub specs: Vec<Spec>,
     pub related: Vec<ProductCard>,
     pub related_posts: Vec<PostCard>,
@@ -433,6 +436,10 @@ pub struct ProductTpl {
 
 pub async fn product(AxState(state): AxState<State>, Path(slug): Path<String>) -> AppResult {
     let p = db::product_by_slug(&state.pool, &slug).await?.ok_or(AppError::NotFound)?;
+    let editing = crate::admin::editing();
+    if matches!(p.status.as_str(), "draft" | "archived") && crate::admin::current().is_none() {
+        return Err(AppError::NotFound);
+    }
     let body = db::product_body(&state.pool, p.id).await?;
     let images = db::product_images(&state.pool, p.id).await?;
     let related = db::related(&state.pool, p.id, &p.brand_slug, &p.category_slug, 4).await?;
@@ -441,26 +448,26 @@ pub async fn product(AxState(state): AxState<State>, Path(slug): Path<String>) -
     let repairable = cat.pens.iter().find(|x| x.slug == slug).map(|x| x.repairable).unwrap_or(false);
 
     let mut specs = vec![];
-    if !p.mechanism.is_empty() {
-        specs.push(Spec { label: "Filling Mechanism".into(), value: p.mechanism.clone(), url: format!("/pw-filling-mechanism/{}/", p.mechanism_slug) });
+    if !p.mechanism.is_empty() || editing {
+        specs.push(Spec { label: "Filling Mechanism".into(), value: p.mechanism.clone(), url: format!("/pw-filling-mechanism/{}/", p.mechanism_slug), key: "filling_mechanism".into(), slug: p.mechanism_slug.clone() });
     }
-    if !p.era.is_empty() {
-        specs.push(Spec { label: "Era".into(), value: p.era.clone(), url: format!("/era/{}/", p.era_slug) });
+    if !p.era.is_empty() || editing {
+        specs.push(Spec { label: "Era".into(), value: p.era.clone(), url: format!("/era/{}/", p.era_slug), key: "era".into(), slug: p.era_slug.clone() });
     }
-    if !p.nib.is_empty() {
-        specs.push(Spec { label: "Nib Size".into(), value: p.nib.clone(), url: format!("/nib/{}/", p.nib_slug) });
+    if !p.nib.is_empty() || editing {
+        specs.push(Spec { label: "Nib Size".into(), value: p.nib.clone(), url: format!("/nib/{}/", p.nib_slug), key: "nib".into(), slug: p.nib_slug.clone() });
     }
-    if !p.sku.is_empty() {
-        specs.push(Spec { label: "SKU".into(), value: p.sku.clone(), url: String::new() });
+    if !p.sku.is_empty() || editing {
+        specs.push(Spec { label: "SKU".into(), value: p.sku.clone(), url: String::new(), key: "sku".into(), slug: String::new() });
     }
-    if !p.length_cm.is_empty() {
-        specs.push(Spec { label: "Capped length".into(), value: p.length_cm.clone(), url: String::new() });
+    if !p.length_cm.is_empty() || editing {
+        specs.push(Spec { label: "Capped length".into(), value: p.length_cm.clone(), url: String::new(), key: "length_cm".into(), slug: String::new() });
     }
-    if !p.brand.is_empty() {
-        specs.push(Spec { label: "Brand".into(), value: p.brand.clone(), url: format!("/brand/{}/", p.brand_slug) });
+    if !p.brand.is_empty() || editing {
+        specs.push(Spec { label: "Brand".into(), value: p.brand.clone(), url: format!("/brand/{}/", p.brand_slug), key: "brand".into(), slug: p.brand_slug.clone() });
     }
-    specs.push(Spec { label: "Category".into(), value: p.category.clone(), url: format!("/product-category/{}/", p.category_slug) });
-    specs.push(Spec { label: "Condition".into(), value: if p.sold { "Sold".into() } else if p.category_slug == "vintage-pens" { "Restored, tested and guaranteed".into() } else { "Pre-owned, tested and guaranteed".into() }, url: String::new() });
+    specs.push(Spec { label: "Category".into(), value: p.category.clone(), url: format!("/product-category/{}/", p.category_slug), key: "category".into(), slug: p.category_slug.clone() });
+    specs.push(Spec { label: "Condition".into(), value: if p.sold { "Sold".into() } else if p.category_slug == "vintage-pens" { "Restored, tested and guaranteed".into() } else { "Pre-owned, tested and guaranteed".into() }, url: String::new(), key: String::new(), slug: String::new() });
 
     let price_now = if p.on_sale { p.sale_price.clone() } else { p.price.clone() };
     let title = format!("{} | {} | ThePenMarket.com", p.title, price_now);
@@ -517,6 +524,7 @@ pub async fn product(AxState(state): AxState<State>, Path(slug): Path<String>) -
         p,
         images,
         description_html: body.description_html,
+        description_text: body.description_text,
         specs,
         related,
         related_posts,

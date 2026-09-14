@@ -15,8 +15,8 @@ pub async fn load(pool: &PgPool) -> anyhow::Result<Catalog> {
                 COALESCE(e.name,'') AS era, COALESCE(e.slug,'') AS era_slug,
                 COALESCE(n.name,'') AS nib, COALESCE(n.slug,'') AS nib_slug,
                 COALESCE(f.name,'') AS mechanism, COALESCE(f.slug,'') AS mechanism_slug, COALESCE(f.repairable,false) AS repairable,
-                (SELECT path FROM product_image i WHERE i.product_id = p.id ORDER BY position LIMIT 1) AS image,
-                (SELECT has_480 FROM product_image i WHERE i.product_id = p.id ORDER BY position LIMIT 1) AS has_480
+                (SELECT path FROM product_image i WHERE i.product_id = p.id AND i.archived_at IS NULL ORDER BY position LIMIT 1) AS image,
+                (SELECT has_480 FROM product_image i WHERE i.product_id = p.id AND i.archived_at IS NULL ORDER BY position LIMIT 1) AS has_480
          FROM product p
          JOIN category c ON c.id = p.category_id
          LEFT JOIN brand b ON b.id = p.brand_id

@@ -7,12 +7,12 @@ COPY src ./src
 COPY migrations ./migrations
 COPY templates ./templates
 COPY tests ./tests
-RUN cargo build --release --bin thepenmarket --bin import
+RUN cargo build --release --bin thepenmarket --bin import --bin admin
 
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
-COPY --from=build /src/target/release/thepenmarket /src/target/release/import /app/
+COPY --from=build /src/target/release/thepenmarket /src/target/release/import /src/target/release/admin /app/
 COPY migrations ./migrations
 COPY templates ./templates
 COPY static ./static

@@ -19,17 +19,20 @@
 <link rel="apple-touch-icon" href="/static/img/apple-touch-icon.png">
 <link rel="stylesheet" href="/static/fonts/fonts.css?v={{ page.asset_v }}">
 <link rel="stylesheet" href="/static/css/site.css?v={{ page.asset_v }}">
+{% if page.admin.is_some() %}<link rel="stylesheet" href="/static/css/admin.css?v={{ page.asset_v }}">{% endif %}
 {% if !page.jsonld.is_empty() %}<script type="application/ld+json">{{ page.jsonld|safe }}</script>{% endif %}
 {% block head %}{% endblock %}
 </head>
 <body class="section-{{ page.section }}">
 <a class="skip" href="#main">Skip to content</a>
+{% include "partials/admin_bar.html" %}
 {% include "partials/header.html" %}
 <main id="main">
 {% block content %}{% endblock %}
 </main>
 {% include "partials/footer.html" %}
 <script src="/static/js/site.js?v={{ page.asset_v }}" defer></script>
+{% if page.admin.is_some() %}<script src="/static/js/admin.js?v={{ page.asset_v }}" defer></script>{% endif %}
 {% block scripts %}{% endblock %}
 </body>
 </html>

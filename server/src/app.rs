@@ -67,6 +67,8 @@ pub struct AppState {
     /// Short hash of the CSS and JS files, appended to their URLs so a redeploy never pairs new HTML
     /// with a stylesheet the browser cached from the previous build (static files are cached 7 days).
     pub asset_v: String,
+    pub mailer: Arc<dyn crate::admin::mail::Mailer>,
+    pub admin_limiter: RateLimiter,
 }
 pub type State = Arc<AppState>;
 
@@ -153,6 +155,10 @@ pub struct PageMeta {
     pub nav_counts: NavCounts,
     pub section: String,
     pub asset_v: String,
+    /// Signed-in admin, if any (from the request's task-local; None for customers).
+    pub admin: Option<crate::admin::AdminCtx>,
+    pub admin_csrf: String,
+    pub current_path: String,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -180,6 +186,9 @@ impl PageMeta {
             nav_counts: NavCounts { vintage: pick("vintage-pens"), pre_owned: pick("pre-owned-pens"), pencils: pick("pencils"), inkwells: pick("inkwells-blotters"), live_total: s.live_total },
             section: String::new(),
             asset_v: state.asset_v.clone(),
+            admin_csrf: crate::admin::current().map(|a| a.csrf).unwrap_or_default(),
+            admin: crate::admin::current(),
+            current_path: path.to_string(),
         }
     }
     pub fn with_jsonld(mut self, blocks: Vec<serde_json::Value>) -> Self {

@@ -156,6 +156,11 @@ async fn main() -> Result<()> {
 
     let pool = PgPoolOptions::new().max_connections(4).connect(&cfg.database_url).await?;
     sqlx::migrate!("./migrations").run(&pool).await?;
+    // Once Nathaniel has edited anything in the admin, a re-import would throw his work away.
+    let edits: i64 = sqlx::query_scalar("SELECT count(*) FROM event_log WHERE kind LIKE 'admin.edit' OR kind LIKE 'admin.create' OR kind LIKE 'admin.photo%'").fetch_one(&pool).await.unwrap_or(0);
+    if edits > 0 && std::env::var("FORCE_IMPORT").ok().as_deref() != Some("1") {
+        anyhow::bail!("refusing to re-import: the admin has made {edits} change(s) that a re-import would erase. Set FORCE_IMPORT=1 to do it anyway.");
+    }
     sqlx::query("TRUNCATE product_image, product, tp_listing, post, page, redirect, category, brand, era, nib, filling_mechanism, price_range, blog_category RESTART IDENTITY CASCADE").execute(&pool).await?;
 
     let term_data: TermData = match std::fs::read_to_string(data_dir.join("terms.json")) {

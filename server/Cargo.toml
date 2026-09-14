@@ -14,6 +14,10 @@ path = "src/main.rs"
 name = "import"
 path = "src/bin/import.rs"
 
+[[bin]]
+name = "admin"
+path = "src/bin/admin.rs"
+
 [dependencies]
 axum = { version = "0.8", features = ["macros", "form", "query", "multipart"] }
 tokio = { version = "1", features = ["full"] }
@@ -37,6 +41,10 @@ hex = "0.4"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
 anyhow = "1"
 html-escape = "0.2"
+argon2 = { version = "0.5", features = ["std"] }
+sha1 = "0.10"
+lettre = { version = "0.11", default-features = false, features = ["smtp-transport", "tokio1", "tokio1-rustls-tls", "builder", "hostname"] }
+urlencoding = "2"
 
 [profile.release]
 opt-level = 3

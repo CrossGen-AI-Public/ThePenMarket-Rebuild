@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="admin-page">
+  <div class="adm-top"><div><h1>History</h1><p class="lead">Every change, when it happened, and what it was before. Nothing is ever deleted for good.</p></div><a class="btn btn-outline" href="/admin/history.csv">Download as spreadsheet</a></div>
+  <table class="adm">
+    <tr><th>When</th><th>What</th><th>Details</th><th>From</th></tr>
+    {% for r in rows %}
+    <tr><td>{{ r.when }}</td><td><b>{{ r.what }}</b></td><td>{{ r.detail }}</td><td>{{ r.from }}</td></tr>
+    {% endfor %}
+    {% if rows.is_empty() %}<tr><td colspan="4">Nothing yet.</td></tr>{% endif %}
+  </table>
+</div>
+{% endblock %}

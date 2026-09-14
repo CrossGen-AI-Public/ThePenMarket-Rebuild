@@ -7,7 +7,7 @@
   </nav>
 </div>
 
-<article class="wrap product">
+<article class="wrap product" data-product-id="{{ p.id }}" data-product-status="{{ p.status }}">
   <div class="gallery" id="gallery">
     <figure class="gallery-main">
       {% if let Some(first) = images.first() %}
@@ -16,22 +16,22 @@
       <figcaption class="mono small muted">His own photographs · click for full size</figcaption>
     </figure>
     {% if images.len() > 1 %}
-    <div class="thumbs" role="list">
-      {% for im in images %}<button type="button" class="thumb{% if loop.first %} is-on{% endif %}" data-large="{{ im.large }}" data-full="{{ im.full }}" data-alt="{{ im.alt }}" aria-label="Photo {{ loop.index }}"><img src="{{ im.thumb }}" alt="" loading="lazy" decoding="async"></button>{% endfor %}
+    <div class="thumbs" role="list" id="thumbs">
+      {% for im in images %}<button type="button" class="thumb{% if loop.first %} is-on{% endif %}" data-image-id="{{ im.id }}" data-large="{{ im.large }}" data-full="{{ im.full }}" data-alt="{{ im.alt }}" aria-label="Photo {{ loop.index }}"><img src="{{ im.thumb }}" alt="" loading="lazy" decoding="async"></button>{% endfor %}
     </div>
     {% endif %}
   </div>
 
   <div class="buybox">
     <p class="eyebrow">{{ p.category }}{% if !p.brand.is_empty() %} · <a href="/brand/{{ p.brand_slug }}/">{{ p.brand }}</a>{% endif %}</p>
-    <h1>{{ p.title }}</h1>
+    <h1 data-edit="title">{{ p.title }}</h1>
     <p class="lede-short">
       {% if is_membership %}One calendar year of unlimited Trading Post listings.{% else %}{% if !p.mechanism.is_empty() %}{{ p.mechanism }}{% endif %}{% if !p.era.is_empty() %}, {{ p.era }}{% endif %}{% if !p.nib.is_empty() %}, {{ p.nib }} nib{% endif %}{% if !p.length_cm.is_empty() %}, {{ p.length_cm }} capped{% endif %}.{% endif %}
     </p>
     <div class="price-row">
-      <span class="price mono">{% if p.on_sale %}<s>{{ p.price }}</s> {{ p.sale_price }}{% else %}{{ p.price }}{% endif %}</span>
+      <span class="price mono"><span data-edit="price"{% if p.on_sale %} class="was"{% endif %}>{{ p.price }}</span> <span data-edit="sale_price" class="sale-edit">{{ p.sale_price }}</span></span>
       {% if p.sold %}<span class="chip chip-sold">Sold</span>{% else if p.on_sale %}<span class="chip chip-sale">On sale</span>{% else %}<span class="chip chip-navy">{% if p.category_slug == "vintage-pens" %}Restored{% else if p.category_slug == "pre-owned-pens" %}Pre-owned{% else %}In stock{% endif %}</span>{% endif %}
-      {% if !p.sku.is_empty() %}<span class="mono muted">SKU {{ p.sku }}</span>{% endif %}
+      <span class="mono muted">SKU <span data-edit="sku">{{ p.sku }}</span></span>
     </div>
     <dl class="buy-facts">
       <div><dt>Availability</dt><dd>{% if p.sold %}Sold. One of a kind, so it will not be restocked; the page stays for reference.{% else %}One in stock, one of a kind.{% endif %}</dd></div>
@@ -53,15 +53,15 @@
   <div class="product-body">
     <section class="specifics">
       <h2>Item specifics</h2>
-      <table class="specs">
+      <table class="specs" id="specs">
         <tbody>
-        {% for s in specs %}<tr><th scope="row">{{ s.label }}</th><td>{% if !s.url.is_empty() %}<a href="{{ s.url }}">{{ s.value }}</a>{% else %}{{ s.value }}{% endif %}</td></tr>{% endfor %}
+        {% for s in specs %}<tr data-spec="{{ s.key }}"><th scope="row">{{ s.label }}</th><td data-edit="{{ s.key }}" data-slug="{{ s.slug }}">{% if !s.url.is_empty() %}<a href="{{ s.url }}">{{ s.value }}</a>{% else %}{{ s.value }}{% endif %}</td></tr>{% endfor %}
         </tbody>
       </table>
     </section>
     <section class="description">
       <h2>Description from Nathaniel</h2>
-      <div class="prose">{{ description_html|safe }}</div>
+      <div class="prose" data-edit="description" data-text="{{ description_text }}">{{ description_html|safe }}</div>
     </section>
   </div>
 </article>

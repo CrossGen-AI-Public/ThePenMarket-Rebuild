@@ -1,0 +1,65 @@
+/* Admin affordances, loaded only for a signed-in session. Same type and red as the site. */
+.adm-bar{position:sticky;top:0;z-index:60;display:flex;align-items:center;gap:14px;padding:10px 5vw;background:#1B1B1B;color:#fff;font-family:var(--sans);font-size:15px;flex-wrap:wrap}
+.adm-bar b{font-weight:600}
+.adm-note{color:#bdbdbd}
+.adm-sp{flex:1 1 auto}
+.adm-bar form{margin:0}
+.adm-btn{display:inline-flex;align-items:center;font:inherit;font-weight:500;color:#fff;background:transparent;border:1px solid rgba(255,255,255,.4);padding:8px 14px;border-radius:6px;cursor:pointer;text-decoration:none}
+.adm-btn:hover{border-color:#fff;text-decoration:none}
+.adm-red{background:var(--red);border-color:var(--red)}
+.adm-red:hover{background:var(--red-dark);border-color:var(--red-dark)}
+.adm-pill{position:fixed;top:18px;right:24px;z-index:60;display:flex;align-items:center;gap:12px;background:#1B1B1B;color:#fff;font:15px var(--sans);padding:10px 12px 10px 16px;border-radius:999px;box-shadow:0 6px 20px rgba(0,0,0,.2);margin:0}
+.adm-pill b{color:#ff8a8f;font-weight:600}
+.adm-pill button{font:inherit;font-weight:600;background:#fff;color:#1B1B1B;border:0;border-radius:999px;padding:6px 12px;cursor:pointer}
+/* editable things */
+.editing [data-edit]{position:relative;cursor:text;outline:1px dashed transparent;outline-offset:6px;border-radius:4px;transition:outline-color .12s}
+.editing [data-edit]:hover{outline-color:var(--red)}
+.editing [data-edit]::after{content:"✎";position:absolute;top:-6px;right:-30px;width:24px;height:24px;border-radius:50%;background:#fff;border:1.5px solid var(--red);color:var(--red);font-size:12px;line-height:22px;text-align:center;box-shadow:0 2px 6px rgba(0,0,0,.12);pointer-events:none}
+.editing td[data-edit]::after,.editing .prose[data-edit]::after{right:8px;top:8px}
+.editing [data-edit].is-editing{outline:2px dashed var(--red)}
+.editing [data-edit].is-editing::after{display:none}
+.editing [data-edit].is-empty::before{content:"Click to add";color:var(--muted);font-style:italic}
+.adm-editor{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-family:var(--sans)}
+.adm-editor input,.adm-editor select{font:600 18px var(--sans);padding:8px 10px;border:2px solid var(--red);border-radius:6px;min-width:140px;background:#fff;color:#1B1B1B}
+.adm-editor textarea{font:16px/1.6 var(--sans);width:100%;min-height:260px;padding:12px;border:2px solid var(--red);border-radius:6px;background:#fff;color:#1B1B1B}
+.adm-editor .save,.adm-editor .cancel{font:600 15px var(--sans);padding:9px 16px;border:0;border-radius:6px;cursor:pointer}
+.adm-editor .save{background:var(--red);color:#fff}
+.adm-editor .cancel{background:#eee;color:#1B1B1B}
+.adm-editor .hint{width:100%;font-size:13px;color:var(--muted)}
+.adm-status{display:inline-flex;gap:8px;align-items:center;margin:8px 0 14px;font-family:var(--sans);font-size:15px}
+.adm-status select{font:600 15px var(--sans);padding:7px 10px;border:1px solid var(--line-2);border-radius:6px;background:#fff}
+.adm-photos{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:10px;font-family:var(--sans);font-size:14px}
+.adm-photos .thumb{cursor:grab;position:relative}
+.adm-photos .thumb.dragging{opacity:.4}
+.adm-photos .thumb .rm{position:absolute;top:-8px;right:-8px;width:22px;height:22px;border-radius:50%;background:#1B1B1B;color:#fff;border:0;font-size:13px;line-height:22px;cursor:pointer}
+.adm-add-photo{display:inline-flex;align-items:center;justify-content:center;width:88px;height:64px;border:2px dashed var(--red);border-radius:6px;color:var(--red);font-weight:600;cursor:pointer;background:#fff}
+.adm-add-photo input{display:none}
+.adm-toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:#1B1B1B;color:#fff;font:15px var(--sans);padding:12px 18px;border-radius:8px;box-shadow:0 10px 30px rgba(0,0,0,.25);z-index:80;max-width:min(90vw,520px)}
+.adm-toast.err{background:var(--red-dark)}
+.adm-modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:90;padding:20px}
+.adm-modal form{background:#fff;color:#1B1B1B;border-radius:14px;padding:26px 28px;width:min(420px,100%);font-family:var(--sans);display:grid;gap:12px}
+.adm-modal h2{font:600 22px var(--sans);margin:0}
+.adm-modal p{margin:0;color:var(--ink-2);font-size:15px}
+.adm-modal input{font:17px var(--sans);padding:12px;border:1px solid var(--line-2);border-radius:8px;width:100%}
+.adm-modal .row{display:flex;gap:10px;justify-content:flex-end}
+.adm-hidden-note{display:inline-block;background:#1B1B1B;color:#fff;font:600 12px var(--sans);padding:5px 9px;border-radius:6px;letter-spacing:.04em;margin-left:8px;vertical-align:middle}
+.section-admin .admin-box{max-width:460px;margin:60px auto;background:#fff;border-radius:14px;padding:40px 36px;box-shadow:0 20px 60px rgba(0,0,0,.08);font-family:var(--sans)}
+.section-admin .admin-box img{width:220px;margin:0 auto 24px;display:block}
+.section-admin .admin-box h1{font:600 24px var(--sans);margin:0 0 6px}
+.section-admin .admin-box p{color:var(--ink-2);font-size:15px;margin:0 0 18px}
+.section-admin .admin-box label{display:block;font-weight:600;font-size:14px;margin:12px 0 6px}
+.section-admin .admin-box input[type=email],.section-admin .admin-box input[type=password],.section-admin .admin-box input[type=text]{width:100%;font:17px var(--sans);padding:13px 14px;border:1px solid var(--line-2);border-radius:8px;background:#fff}
+.section-admin .admin-box .row{display:flex;justify-content:space-between;align-items:center;font-size:14px;margin-top:8px}
+.section-admin .admin-box .btn{width:100%;margin-top:20px;padding:15px;border-radius:8px;font-size:17px}
+.section-admin .admin-box .err{background:var(--red-soft);color:var(--red-dark);padding:12px 14px;border-radius:8px;font-size:15px;margin-bottom:12px}
+.section-admin .admin-box .ok{background:#eef6ef;color:#2E6B47;padding:12px 14px;border-radius:8px;font-size:15px;margin-bottom:12px}
+.section-admin .admin-box .note{font-size:13px;color:var(--muted);text-align:center;margin-top:14px}
+.section-admin .admin-box .code{display:flex;gap:8px;justify-content:center}
+.section-admin .admin-box .code input{font:600 30px var(--sans);text-align:center;letter-spacing:.3em;padding:12px;border:2px solid var(--red);border-radius:8px;width:100%}
+.section-admin .admin-page{max-width:1100px;margin:32px auto;padding:0 5vw;font-family:var(--sans)}
+.section-admin .admin-page h1{font:600 30px var(--sans);margin:0 0 6px}
+.section-admin .admin-page p.lead{color:var(--ink-2);margin:0 0 22px}
+.section-admin table.adm{width:100%;border-collapse:collapse;font-size:15px}
+.section-admin table.adm th{text-align:left;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:10px 12px;border-bottom:2px solid var(--line)}
+.section-admin table.adm td{padding:12px;border-bottom:1px solid var(--line);vertical-align:top}
+.section-admin .adm-top{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:8px}

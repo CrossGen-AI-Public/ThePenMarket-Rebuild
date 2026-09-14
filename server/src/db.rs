@@ -170,9 +170,9 @@ impl From<ProductRow> for ProductCard {
 
 const PRODUCT_SELECT: &str = "SELECT p.id, p.sku, p.slug, p.title, p.short_title, p.status, p.price_cents, p.sale_price_cents, p.length_mm::float8 AS length_mm, p.listed_year, p.listed_month, p.is_subscription,
         c.name AS category, c.slug AS category_slug, b.name AS brand, b.slug AS brand_slug, e.name AS era, e.slug AS era_slug, n.name AS nib, n.slug AS nib_slug, f.name AS mechanism, f.slug AS mechanism_slug,
-        (SELECT path FROM product_image i WHERE i.product_id = p.id ORDER BY position LIMIT 1) AS image,
-        (SELECT alt FROM product_image i WHERE i.product_id = p.id ORDER BY position LIMIT 1) AS image_alt,
-        (SELECT has_480 FROM product_image i WHERE i.product_id = p.id ORDER BY position LIMIT 1) AS has_480
+        (SELECT path FROM product_image i WHERE i.product_id = p.id AND i.archived_at IS NULL ORDER BY position LIMIT 1) AS image,
+        (SELECT alt FROM product_image i WHERE i.product_id = p.id AND i.archived_at IS NULL ORDER BY position LIMIT 1) AS image_alt,
+        (SELECT has_480 FROM product_image i WHERE i.product_id = p.id AND i.archived_at IS NULL ORDER BY position LIMIT 1) AS has_480
         FROM product p JOIN category c ON c.id = p.category_id LEFT JOIN brand b ON b.id = p.brand_id LEFT JOIN era e ON e.id = p.era_id LEFT JOIN nib n ON n.id = p.nib_id LEFT JOIN filling_mechanism f ON f.id = p.filling_mechanism_id";
 
 #[derive(Clone, Debug, Default)]
@@ -371,6 +371,7 @@ pub async fn product_body(pool: &PgPool, id: i32) -> anyhow::Result<ProductBody>
 
 #[derive(Clone, Debug)]
 pub struct Image {
+    pub id: i32,
     pub full: String,
     pub large: String,
     pub thumb: String,
@@ -380,7 +381,7 @@ pub struct Image {
 }
 
 pub async fn product_images(pool: &PgPool, id: i32) -> anyhow::Result<Vec<Image>> {
-    let rows = sqlx::query("SELECT path, alt, width, height, has_480, has_960 FROM product_image WHERE product_id = $1 ORDER BY position").bind(id).fetch_all(pool).await?;
+    let rows = sqlx::query("SELECT id, path, alt, width, height, has_480, has_960 FROM product_image WHERE product_id = $1 AND archived_at IS NULL ORDER BY position").bind(id).fetch_all(pool).await?;
     Ok(rows
         .iter()
         .map(|r| {
@@ -388,6 +389,7 @@ pub async fn product_images(pool: &PgPool, id: i32) -> anyhow::Result<Vec<Image>
             let has_480: bool = r.get("has_480");
             let has_960: bool = r.get("has_960");
             Image {
+                id: r.get("id"),
                 full: format!("/media/{p}"),
                 large: if has_960 { format!("/media/{}", variant_rel(&p, 960)) } else { format!("/media/{p}") },
                 thumb: if has_480 { format!("/media/{}", variant_rel(&p, 480)) } else { format!("/media/{p}") },
@@ -632,7 +634,7 @@ pub async fn save_form(pool: &PgPool, kind: &str, fields: serde_json::Value, pho
 
 // ---------- sitemaps ----------
 pub async fn sitemap_products(pool: &PgPool) -> anyhow::Result<Vec<(String, String)>> {
-    let rows = sqlx::query("SELECT slug, updated_at FROM product ORDER BY slug").fetch_all(pool).await?;
+    let rows = sqlx::query("SELECT slug, updated_at FROM product WHERE status IN ('live', 'sold') ORDER BY slug").fetch_all(pool).await?;
     Ok(rows.iter().map(|r| (format!("/product/{}/", r.get::<String, _>("slug")), r.get::<chrono::DateTime<chrono::Utc>, _>("updated_at").format("%Y-%m-%d").to_string())).collect())
 }
 
@@ -647,7 +649,7 @@ pub async fn sitemap_listings(pool: &PgPool) -> anyhow::Result<Vec<(String, Stri
 }
 
 pub async fn term_slugs_with_products(pool: &PgPool, table: &str, fk: &str) -> anyhow::Result<Vec<String>> {
-    let sql = format!("SELECT t.slug FROM {table} t WHERE EXISTS (SELECT 1 FROM product p WHERE p.{fk} = t.id) ORDER BY t.sort_order, t.name");
+    let sql = format!("SELECT t.slug FROM {table} t WHERE EXISTS (SELECT 1 FROM product p WHERE p.{fk} = t.id AND p.status IN ('live', 'sold')) ORDER BY t.sort_order, t.name");
     let rows = sqlx::query(&sql).fetch_all(pool).await?;
     Ok(rows.iter().map(|r| r.get::<String, _>("slug")).collect())
 }

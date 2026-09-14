@@ -86,3 +86,25 @@ pub fn reencode_upload(bytes: &[u8], dest: &Path) -> anyhow::Result<(u32, u32)> 
     write_jpeg(&img, dest)?;
     Ok((img.width(), img.height()))
 }
+
+/// An admin photo upload: bounded JPEG original (metadata dropped) plus the 480 and 960 variants
+/// the catalog uses, so an uploaded photo serves exactly like an imported one.
+pub fn reencode_upload_with_variants(bytes: &[u8], dest: &Path) -> anyhow::Result<Imported> {
+    let img = image::load_from_memory(bytes)?;
+    let img = if img.width() > 2400 { img.resize(2400, u32::MAX, image::imageops::FilterType::Lanczos3) } else { img };
+    if let Some(dir) = dest.parent() {
+        fs::create_dir_all(dir)?;
+    }
+    write_jpeg(&img, dest)?;
+    let (w, h) = (img.width(), img.height());
+    let mut has_480 = false;
+    let mut has_960 = false;
+    for (target, flag) in [(480u32, &mut has_480), (960u32, &mut has_960)] {
+        if w > target {
+            let resized = img.resize(target, u32::MAX, image::imageops::FilterType::Lanczos3);
+            write_jpeg(&resized, &variant_path(dest, target))?;
+            *flag = true;
+        }
+    }
+    Ok(Imported { rel: dest.to_string_lossy().to_string(), width: w, height: h, has_480, has_960 })
+}

@@ -76,6 +76,9 @@ slop() { local bad=0; for r in "" shop/ product/vintage-pens-montblanc-644/ blog
   [ "$bad" = 0 ]; }
 run slop slop
 
+# admin sign-in and click-to-edit, when a test account exists (ADMIN_TEST_EMAIL / ADMIN_TEST_PASSWORD; see docs/RUNBOOK.md)
+if [ -n "${ADMIN_TEST_EMAIL:-}" ]; then run admin python3 "$P/scripts/admin_check.py" "$BASE" "${ADMIN_MAIL_LOG:-$P/server/uploads/admin-mail.log}" "$OUT/shots"; fi
+
 if [ -n "${DEPLOYED_URL:-}" ]; then run deployed-links python3 "$P/scripts/links_url.py" "$DEPLOYED_URL" "$OUT/links-deployed.md" $ROUTES; fi
 
 echo; echo "===== GATE ($LABEL, $BASE)"; fail=0

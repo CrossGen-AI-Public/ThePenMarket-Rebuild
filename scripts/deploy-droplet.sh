@@ -3,7 +3,7 @@
 #   ssh crossgen-droplet 'bash -s' < scripts/deploy-droplet.sh
 # Expects, already on the box (put there by scripts/push-droplet.sh from sparky):
 #   /srv/apps/thepenmarket/build/   the server/ directory (Dockerfile, src, templates, static, data)
-#   /srv/apps/thepenmarket/media/   the product photos (mounted read-only into the container)
+#   /srv/apps/thepenmarket/media/   the product photos (read-write: the admin adds photos under uploads/admin/)
 #   /srv/apps/thepenmarket/db.sql.gz  a pg_dump of the sparky database
 #   /srv/apps/thepenmarket/.env     DATABASE_URL, CSRF_SECRET, GUIDE_AI_URL, GUIDE_AI_KEY, GUIDE_AI_MODEL (never printed)
 # Mirrors the codehawk pattern: no host port published, Caddy reaches the container by name on the `web`
@@ -38,7 +38,7 @@ docker image tag "$NAME:latest" "$NAME:previous" 2>/dev/null || true
 docker build -q -t "$NAME:latest" "$DIR/build" >/dev/null
 docker rm -f "$NAME" >/dev/null 2>&1 || true
 docker run -d --name "$NAME" --restart unless-stopped --network web --env-file "$DIR/.env" \
-  -e PORT=8140 -e HOST=0.0.0.0 -e APP_DIR=/app -e SITE_ORIGIN="https://$HOST" -v "$DIR/uploads:/app/uploads" -v "$DIR/media:/app/media:ro" "$NAME:latest" >/dev/null
+  -e PORT=8140 -e HOST=0.0.0.0 -e APP_DIR=/app -e SITE_ORIGIN="https://$HOST" -v "$DIR/uploads:/app/uploads" -v "$DIR/media:/app/media" "$NAME:latest" >/dev/null
 
 # 4. Caddy route (idempotent)
 if ! grep -q "^$HOST {" "$CADDYFILE"; then

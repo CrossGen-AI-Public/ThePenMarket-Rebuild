@@ -7,3 +7,6 @@ pub mod media;
 pub mod money;
 pub mod text;
 pub mod wp;
+
+/// Admin sign-in, sessions and product edits shared by the server and the `admin` CLI.
+pub mod admin_core;

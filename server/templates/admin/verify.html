@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="wrap"><div class="admin-box">
+  <h1>Is this you?</h1>
+  <p>We emailed a six-digit code to <b>{{ email_hint }}</b> because this device is new to us. Type it here.</p>
+  {% if !error.is_empty() %}<div class="err">{{ error }}</div>{% endif %}
+  <form method="post" action="/admin/verify/">
+    <input type="hidden" name="csrf" value="{{ page.csrf }}">
+    <div class="code"><input type="text" name="code" inputmode="numeric" pattern="[0-9 ]*" maxlength="7" autocomplete="one-time-code" required autofocus aria-label="Six-digit code"></div>
+    <div class="row" style="justify-content:center"><label style="margin:0;font-weight:400"><input type="checkbox" name="remember" value="1" checked> Remember this device for 90 days</label></div>
+    <button type="submit" class="btn">Continue</button>
+  </form>
+  <p class="note">Didn't get it? Check spam, or <a href="/admin/login/">sign in again</a> to send a new code.</p>
+</div></div>
+{% endblock %}

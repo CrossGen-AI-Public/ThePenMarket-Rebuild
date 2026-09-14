@@ -2,6 +2,7 @@
 //! ThePenMarket.com: one Axum binary. Server-rendered pages over Postgres, the pen guide API,
 //! sitemaps, redirects. Every public path is defined in `routes::router`.
 
+mod admin;
 mod app;
 mod catalog;
 mod db;
@@ -33,6 +34,8 @@ async fn main() -> anyhow::Result<()> {
         catalog: RwLock::new(Arc::new(initial)),
         pool: pool.clone(),
         asset_v: app::asset_version(&cfg.static_dir),
+        mailer: admin::mail::from_env(cfg.uploads_dir.join("admin-mail.log")),
+        admin_limiter: RateLimiter::new(10),
         cfg: cfg.clone(),
     });
 

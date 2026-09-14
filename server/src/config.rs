@@ -18,6 +18,8 @@ pub struct Config {
     pub guide_ai_key: String,
     pub guide_ai_model: String,
     pub guide_rate_per_min: u32,
+    /// Where lockout alerts go besides the admin (CrossGen), e.g. brittany.iversen@crossgen-ai.com.
+    pub admin_alert_email: String,
 }
 
 /// Load `~/.config/thepenmarket.env` if present (local runs), then read the environment.
@@ -62,5 +64,6 @@ pub fn load() -> anyhow::Result<Config> {
         guide_ai_key: env("GUIDE_AI_KEY"),
         guide_ai_model: env("GUIDE_AI_MODEL"),
         guide_rate_per_min: env("GUIDE_RATE_PER_MIN").parse().unwrap_or(10),
+        admin_alert_email: env("ADMIN_ALERT_EMAIL"),
     })
 }

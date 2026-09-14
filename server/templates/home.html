@@ -1,39 +1,40 @@
 {% extends "base.html" %}
 {% import "partials/macros.html" as m %}
-{% block head %}{% if !featured_image.is_empty() %}<link rel="preload" as="image" href="{{ featured_image }}">{% endif %}{% endblock %}
+{% block head %}{% endblock %}
 {% block content %}
-<section class="hero">
-  <div class="wrap hero-panel">
+<section class="hero" id="hero">
+  <div class="hero-bg" aria-hidden="true"></div>
+  <div class="wrap hero-grid">
     <div class="hero-copy">
-      <p class="kicker">What's New · Just Restored</p>
-      <h1>{{ featured.short_title }}</h1>
+      <p class="kicker">Restored vintage pens <svg class="kicker-nib" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2c3 4 5 8 5 12a5 5 0 0 1-10 0c0-4 2-8 5-12z" fill="currentColor"/><path d="M12 9v9" stroke="#fff" stroke-width="1.4"/></svg></p>
+      <h1>{{ featured.short_title|lower }}</h1>
       {% if !featured_text.is_empty() %}<p class="hero-text">{{ featured_text }}</p>{% endif %}
       <dl class="hero-specs">
         {% if !featured.era.is_empty() %}<div><dt>Era</dt><dd>{{ featured.era }}</dd></div>{% endif %}
         {% if !featured.mechanism.is_empty() %}<div><dt>Filling</dt><dd>{{ featured.mechanism }}</dd></div>{% endif %}
-        {% if !featured.nib.is_empty() %}<div><dt>Nib</dt><dd>{{ featured.nib }}</dd></div>{% endif %}
-        <div><dt>Price</dt><dd>{% if featured.on_sale %}{{ featured.sale_price }}{% else %}{{ featured.price }}{% endif %}</dd></div>
+        {% if !featured.nib.is_empty() %}<div><dt>Nib</dt><dd>{{ featured.nib }}</dd></div>{% else %}<div><dt>Price</dt><dd>{% if featured.on_sale %}{{ featured.sale_price }}{% else %}{{ featured.price }}{% endif %}</dd></div>{% endif %}
       </dl>
-      <a class="btn" href="{{ featured.url }}">See this pen</a>
+      <a class="btn btn-hero" href="{{ featured_cat_url }}">Browse {{ featured.category }}</a>
       <div class="hero-thumbs">
         {% for p in hero_thumbs %}
         <a class="hero-thumb" href="{{ p.url }}">
           <span class="hero-thumb-img">{% if !p.image.is_empty() %}<img src="{{ p.image }}" alt="" loading="lazy" decoding="async">{% endif %}</span>
-          <span class="hero-thumb-name">{{ p.short_title }}</span>
-          <span class="hero-thumb-price">{% if p.on_sale %}{{ p.sale_price }}{% else %}{{ p.price }}{% endif %}</span>
+          <span class="hero-thumb-row"><span class="hero-thumb-name">{{ p.short_title }}</span><span class="hero-thumb-price">{% if p.on_sale %}{{ p.sale_price }}{% else %}{{ p.price }}{% endif %}</span></span>
         </a>
         {% endfor %}
       </div>
     </div>
-    <div class="hero-photo">
-      {% if !featured_image.is_empty() %}<a href="{{ featured.url }}"><img src="{{ featured_image }}" alt="{{ featured.image_alt }}" decoding="async"></a>{% endif %}
+    <div class="hero-stage" id="heroStage">
+      <canvas id="scene" data-name="{{ featured.short_title }}" data-photo="{{ featured_image }}" data-trim="{{ featured_trim }}" data-pattern="{{ featured_pattern }}" data-kind="{{ featured_kind }}" data-mechanism="{{ featured.mechanism }}" data-nib="{{ featured.nib }}" data-era="{{ featured.era }}" data-url="{{ featured.url }}" aria-label="3D model of the {{ featured.short_title }}" role="img"></canvas>
+      <a class="hero-fallback" href="{{ featured.url }}">{% if !featured_image.is_empty() %}<img src="{{ featured_image }}" alt="{{ featured.image_alt }}" decoding="async">{% endif %}</a>
+      <div class="hotspots" id="hotspots" aria-hidden="true"></div>
     </div>
     <nav class="hero-cats" aria-label="Shop by category">
-      <a href="/product-category/vintage-pens/">Vintage</a>
-      <a href="/product-category/pre-owned-pens/">Pre-Owned</a>
-      <a href="/product-category/pencils/">Pencils</a>
-      <a href="/product-category/inkwells-blotters/">Inkwells</a>
-      <a href="/product-category/camera/">Cameras</a>
+      <a href="/product-category/vintage-pens/"{% if featured.category_slug == "vintage-pens" %} aria-current="true"{% endif %}>vintage</a>
+      <a href="/product-category/pre-owned-pens/"{% if featured.category_slug == "pre-owned-pens" %} aria-current="true"{% endif %}>pre-owned</a>
+      <a href="/product-category/pencils/"{% if featured.category_slug == "pencils" %} aria-current="true"{% endif %}>pencils</a>
+      <a href="/product-category/inkwells-blotters/">inkwells</a>
+      <a href="/product-category/camera/">cameras</a>
     </nav>
   </div>
 </section>
@@ -119,6 +120,8 @@
 </section>
 {% endblock %}
 {% block scripts %}
+<script src="/static/vendor/three.min.js" defer></script>
+<script src="/static/js/hero.js?v={{ page.asset_v }}" defer></script>
 <script src="/static/js/engine.js?v={{ page.asset_v }}" defer></script>
 <script src="/static/js/guide.js?v={{ page.asset_v }}" defer></script>
 {% endblock %}

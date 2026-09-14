@@ -1,9 +1,7 @@
-/* Self-hosted: Mulish and DM Sans (OFL), the two faces thepenmarket.com already uses. Latin subsets, downloaded 2026-09-14. */
-@font-face{font-family:'DM Sans';font-style:italic;font-weight:400;font-display:swap;src:url(/static/fonts/DMSans-400i.woff2) format('woff2');}
-@font-face{font-family:'DM Sans';font-style:normal;font-weight:400;font-display:swap;src:url(/static/fonts/DMSans-400.woff2) format('woff2');}
-@font-face{font-family:'DM Sans';font-style:normal;font-weight:500;font-display:swap;src:url(/static/fonts/DMSans-500.woff2) format('woff2');}
-@font-face{font-family:'DM Sans';font-style:normal;font-weight:700;font-display:swap;src:url(/static/fonts/DMSans-700.woff2) format('woff2');}
-@font-face{font-family:'Mulish';font-style:normal;font-weight:400;font-display:swap;src:url(/static/fonts/Mulish-400.woff2) format('woff2');}
-@font-face{font-family:'Mulish';font-style:normal;font-weight:600;font-display:swap;src:url(/static/fonts/Mulish-600.woff2) format('woff2');}
-@font-face{font-family:'Mulish';font-style:normal;font-weight:700;font-display:swap;src:url(/static/fonts/Mulish-700.woff2) format('woff2');}
-@font-face{font-family:'Mulish';font-style:normal;font-weight:800;font-display:swap;src:url(/static/fonts/Mulish-800.woff2) format('woff2');}
+/* Self-hosted (OFL): Playfair Display for the hero headline, Outfit for everything else, matching the design reference Brittany chose on 2026-09-14. Latin subsets. */
+@font-face{font-family:'Outfit';font-style:normal;font-weight:400;font-display:swap;src:url(/static/fonts/Outfit-400.woff2) format('woff2');}
+@font-face{font-family:'Outfit';font-style:normal;font-weight:500;font-display:swap;src:url(/static/fonts/Outfit-500.woff2) format('woff2');}
+@font-face{font-family:'Outfit';font-style:normal;font-weight:600;font-display:swap;src:url(/static/fonts/Outfit-600.woff2) format('woff2');}
+@font-face{font-family:'Outfit';font-style:normal;font-weight:700;font-display:swap;src:url(/static/fonts/Outfit-700.woff2) format('woff2');}
+@font-face{font-family:'Playfair Display';font-style:normal;font-weight:700;font-display:swap;src:url(/static/fonts/PlayfairDisplay-700.woff2) format('woff2');}
+@font-face{font-family:'Playfair Display';font-style:normal;font-weight:800;font-display:swap;src:url(/static/fonts/PlayfairDisplay-800.woff2) format('woff2');}

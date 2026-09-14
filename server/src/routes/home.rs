@@ -43,6 +43,10 @@ pub struct HomeTpl {
     pub featured: ProductCard,
     pub featured_text: String,
     pub featured_image: String,
+    pub featured_trim: String,
+    pub featured_pattern: String,
+    pub featured_kind: String,
+    pub featured_cat_url: String,
     pub hero_thumbs: Vec<ProductCard>,
     pub cat_tiles: Vec<CatTile>,
     pub latest_posts: Vec<PostCard>,
@@ -90,6 +94,26 @@ pub async fn home(AxState(state): AxState<State>) -> AppResult {
     } else {
         String::new()
     };
+    // What the 3D pen is made of, read from Nathaniel's own words about the featured pen.
+    let lower = format!("{} {}", featured.title, featured_text).to_lowercase();
+    let featured_trim = if lower.contains("chrome") || lower.contains("nickel") || lower.contains("silver") || lower.contains("steel") || lower.contains("rhodium") || lower.contains("platinum") { "silver" } else { "gold" }.to_string();
+    let featured_pattern = if lower.contains("striated") || lower.contains("striped") || lower.contains("laminated") || featured.mechanism_slug == "vacumatic" {
+        "stripes"
+    } else if lower.contains("marble") || lower.contains("pearl") || lower.contains("celluloid") || lower.contains("swirl") {
+        "marble"
+    } else {
+        "solid"
+    }
+    .to_string();
+    let featured_kind = if featured.category_slug == "pencils" || featured.mechanism_slug == "pencil" {
+        "pencil"
+    } else if matches!(featured.mechanism_slug.as_str(), "ballpoint" | "rollerball") {
+        "ballpoint"
+    } else {
+        "fountain"
+    }
+    .to_string();
+    let featured_cat_url = if featured.category_slug.is_empty() { "/shop/".to_string() } else { format!("/product-category/{}/", featured.category_slug) };
     let hero_thumbs: Vec<ProductCard> = just_in.iter().skip(1).take(3).cloned().collect();
     let tile_image = |slug: &str| cat.pens.iter().find(|p| p.is_live() && p.category_slug == slug && !p.image.is_empty() && p.slug != featured.slug).map(|p| p.image.clone()).unwrap_or_default();
     let sale_image = cat.pens.iter().find(|p| p.is_live() && p.sale_price_cents.is_some() && !p.image.is_empty()).map(|p| p.image.clone()).unwrap_or_default();
@@ -184,6 +208,10 @@ pub async fn home(AxState(state): AxState<State>) -> AppResult {
         featured,
         featured_text,
         featured_image,
+        featured_trim,
+        featured_pattern,
+        featured_kind,
+        featured_cat_url,
         hero_thumbs,
         cat_tiles,
         latest_posts,

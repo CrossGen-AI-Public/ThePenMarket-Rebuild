@@ -19,7 +19,7 @@
 <link rel="apple-touch-icon" href="/static/img/apple-touch-icon.png">
 <link rel="stylesheet" href="/static/fonts/fonts.css?v={{ page.asset_v }}">
 <link rel="stylesheet" href="/static/css/site.css?v={{ page.asset_v }}">
-{% if page.admin.is_some() %}<link rel="stylesheet" href="/static/css/admin.css?v={{ page.asset_v }}">{% endif %}
+{% if page.admin.is_some() || page.section == "admin" %}<link rel="stylesheet" href="/static/css/admin.css?v={{ page.asset_v }}">{% endif %}
 {% if !page.jsonld.is_empty() %}<script type="application/ld+json">{{ page.jsonld|safe }}</script>{% endif %}
 {% block head %}{% endblock %}
 </head>

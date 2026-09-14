@@ -18,7 +18,7 @@
 .editing td[data-edit]::after,.editing .prose[data-edit]::after{right:8px;top:8px}
 .editing [data-edit].is-editing{outline:2px dashed var(--red)}
 .editing [data-edit].is-editing::after{display:none}
-.editing [data-edit].is-empty::before{content:"Click to add";color:var(--muted);font-style:italic}
+.editing [data-edit].is-empty::before{content:"Click to add";color:var(--muted);font:italic 400 15px var(--sans);vertical-align:middle}
 .adm-editor{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-family:var(--sans)}
 .adm-editor input,.adm-editor select{font:600 18px var(--sans);padding:8px 10px;border:2px solid var(--red);border-radius:6px;min-width:140px;background:#fff;color:#1B1B1B}
 .adm-editor textarea{font:16px/1.6 var(--sans);width:100%;min-height:260px;padding:12px;border:2px solid var(--red);border-radius:6px;background:#fff;color:#1B1B1B}

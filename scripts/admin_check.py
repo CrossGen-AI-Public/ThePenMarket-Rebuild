@@ -12,6 +12,12 @@ email, password = os.environ["ADMIN_TEST_EMAIL"], os.environ["ADMIN_TEST_PASSWOR
 os.makedirs(out, exist_ok=True)
 bad = []
 
+def wait_text(loc, pred, what, timeout=15):
+    for _ in range(int(timeout * 10)):
+        if pred(loc.inner_text().strip()): return
+        time.sleep(0.1)
+    raise AssertionError(f"timed out waiting for {what}: {loc.inner_text().strip()!r}")
+
 def latest_code():
     text = open(mail_log, encoding="utf-8", errors="replace").read()
     codes = re.findall(r"code is: (\d{6})", text)
@@ -23,13 +29,15 @@ with sync_playwright() as p:
     pg = ctx.new_page()
     pg.on("console", lambda m: bad.append(f"console.{m.type}: {m.text[:160]}") if m.type == "error" else None)
     pg.on("pageerror", lambda e: bad.append(f"pageerror: {str(e)[:160]}"))
-    pg.on("requestfailed", lambda r: bad.append(f"requestfailed: {r.url[:120]}"))
+    # a form post navigates away while photos are still loading; those aborts are not failures
+    pg.on("requestfailed", lambda r: bad.append(f"requestfailed: {r.url[:120]} {r.failure}") if "ERR_ABORTED" not in str(r.failure) else None)
     pg.on("response", lambda r: bad.append(f"http {r.status}: {r.url[:120]}") if r.status >= 500 else None)
 
     pg.goto(f"{base}/admin/login/", wait_until="load")
     pg.screenshot(path=f"{out}/admin-login-1440.png", full_page=True)
-    pg.fill("#email", email); pg.fill("#password", password); pg.click("button[type=submit]")
-    pg.wait_for_load_state("load")
+    pg.fill("#email", email); pg.fill("#password", password)
+    with pg.expect_navigation(wait_until="load"):
+        pg.click(".admin-box button[type=submit]")
     if "/admin/verify/" in pg.url:
         pg.screenshot(path=f"{out}/admin-verify-1440.png", full_page=True)
         code = None
@@ -38,7 +46,9 @@ with sync_playwright() as p:
             if code: break
             time.sleep(0.5)
         assert code, "no sign-in code in the mail log"
-        pg.fill("input[name=code]", code); pg.click("button[type=submit]"); pg.wait_for_load_state("load")
+        pg.fill("input[name=code]", code)
+        with pg.expect_navigation(wait_until="load"):
+            pg.click(".admin-box button[type=submit]")
     assert "/admin/" not in pg.url or pg.url.endswith("/shop/"), f"unexpected page after sign-in: {pg.url}"
 
     # a product page with editing on
@@ -51,15 +61,17 @@ with sync_playwright() as p:
     title = pg.locator("[data-edit=title]"); before = title.inner_text().strip()
     title.click(); pg.wait_for_selector("[data-edit=title] input")
     pg.fill("[data-edit=title] input", before + " (gate)"); pg.click("[data-edit=title] .save")
-    pg.wait_for_function("document.querySelector('[data-edit=title]').innerText.includes('(gate)')")
+    wait_text(title, lambda t: "(gate)" in t, "the edited title")
     pg.screenshot(path=f"{out}/admin-product-edited-1440.png", full_page=True)
     title.click(); pg.wait_for_selector("[data-edit=title] input"); pg.fill("[data-edit=title] input", before); pg.click("[data-edit=title] .save")
-    pg.wait_for_function(f"document.querySelector('[data-edit=title]').innerText.trim() === {before!r}")
+    wait_text(title, lambda t: t == before, "the title to be put back")
     # preview as a customer, then back
-    pg.click("#admBar button:has-text('Preview as customer')"); pg.wait_for_load_state("load")
+    with pg.expect_navigation(wait_until="load"):
+        pg.click("#admBar button:has-text('Preview as customer')")
     assert pg.locator("#admBar").count() == 0 and pg.locator(".adm-pill").count() == 1, "preview mode did not hide the editing bar"
     pg.screenshot(path=f"{out}/admin-preview-1440.png", full_page=False)
-    pg.click(".adm-pill button"); pg.wait_for_load_state("load")
+    with pg.expect_navigation(wait_until="load"):
+        pg.click(".adm-pill button")
     assert pg.locator("#admBar").count() == 1, "leaving preview did not restore the editing bar"
     # history shows the two edits
     pg.goto(f"{base}/admin/history/", wait_until="load")

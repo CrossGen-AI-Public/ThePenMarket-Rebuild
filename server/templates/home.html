@@ -7,7 +7,7 @@
   <div class="wrap hero-grid">
     <div class="hero-copy">
       <p class="kicker">Restored vintage pens <svg class="kicker-nib" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2c3 4 5 8 5 12a5 5 0 0 1-10 0c0-4 2-8 5-12z" fill="currentColor"/><path d="M12 9v9" stroke="#fff" stroke-width="1.4"/></svg></p>
-      <h1>{{ featured.short_title|lower }}</h1>
+      <h1>{{ featured.short_title }}</h1>
       {% if !featured_text.is_empty() %}<p class="hero-text">{{ featured_text }}</p>{% endif %}
       <dl class="hero-specs">
         {% if !featured.era.is_empty() %}<div><dt>Era</dt><dd>{{ featured.era }}</dd></div>{% endif %}
@@ -30,11 +30,11 @@
       <div class="hotspots" id="hotspots" aria-hidden="true"></div>
     </div>
     <nav class="hero-cats" aria-label="Shop by category">
-      <a href="/product-category/vintage-pens/"{% if featured.category_slug == "vintage-pens" %} aria-current="true"{% endif %}>vintage</a>
-      <a href="/product-category/pre-owned-pens/"{% if featured.category_slug == "pre-owned-pens" %} aria-current="true"{% endif %}>pre-owned</a>
-      <a href="/product-category/pencils/"{% if featured.category_slug == "pencils" %} aria-current="true"{% endif %}>pencils</a>
-      <a href="/product-category/inkwells-blotters/">inkwells</a>
-      <a href="/product-category/camera/">cameras</a>
+      <a href="/product-category/vintage-pens/"{% if featured.category_slug == "vintage-pens" %} aria-current="true"{% endif %}>Vintage</a>
+      <a href="/product-category/pre-owned-pens/"{% if featured.category_slug == "pre-owned-pens" %} aria-current="true"{% endif %}>Pre-Owned</a>
+      <a href="/product-category/pencils/"{% if featured.category_slug == "pencils" %} aria-current="true"{% endif %}>Pencils</a>
+      <a href="/product-category/inkwells-blotters/">Inkwells</a>
+      <a href="/product-category/camera/">Cameras</a>
     </nav>
   </div>
 </section>

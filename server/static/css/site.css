@@ -212,9 +212,10 @@ code{font-family:Menlo,Consolas,monospace;font-size:.9em;background:var(--grey);
 
 /* ask: the assistant, kept plain */
 .ask{margin-top:var(--s8);background:var(--grey);padding:var(--s8) 0}
-.ask-grid{display:grid;grid-template-columns:5fr 6fr;gap:var(--s7);align-items:start}
-.ask-copy h2{font-size:clamp(26px,1rem + 1.4vw,34px);font-weight:700;margin-bottom:var(--s4)}
-.ask-copy p{color:var(--ink-2);margin-bottom:var(--s4);max-width:52ch}
+.ask-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:var(--s5);justify-items:center}
+.ask-copy{text-align:center}
+.ask-copy h2{font-size:clamp(26px,1rem + 1.4vw,34px);font-weight:700;margin-bottom:0}
+.ask-grid .guide-phone{width:min(100%,720px)}
 .guide-phone{background:var(--white);border:1px solid var(--line);border-radius:14px;overflow:hidden;display:flex;flex-direction:column;min-height:480px}
 .guide-phone .who{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line)}
 .guide-phone .who strong{font-size:16px;font-weight:600}
@@ -242,7 +243,7 @@ code{font-family:Menlo,Consolas,monospace;font-size:.9em;background:var(--grey);
 .quick button:hover{border-color:var(--ink)}
 .chat-input{display:flex;gap:8px;padding:12px 16px;border-top:1px solid var(--line)}
 .chat-input input{flex:1 1 auto;min-width:0;border:1px solid var(--line-2);padding:10px 12px;font:inherit;font-size:14px;background:var(--white)}
-@media (max-width:900px){.ask-grid{grid-template-columns:minmax(0,1fr)}.guide-phone{min-height:420px}}
+@media (max-width:900px){.guide-phone{min-height:420px}}
 @media (prefers-reduced-motion:reduce){.typing i{animation:none}.hero-cats a::after{transition:none}}
 
 /* footer: light, like his current site */

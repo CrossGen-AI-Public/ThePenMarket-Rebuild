@@ -226,6 +226,16 @@ pub async fn login(AxState(state): AxState<State>, Extension(cookie): Extension<
         let c = auth::set_cookie(&auth::cookie_name(https, SESSION_COOKIE), &token, https, auth::SESSION_ABSOLUTE_HOURS * 3600);
         return Ok(with_cookies(Redirect::to("/shop/").into_response(), &[c]));
     }
+    // The new-device code only protects anything if it can reach his inbox. Until outgoing mail is
+    // connected (SMTP_URL), a correct password signs in directly; the code step returns by itself the
+    // day mail is connected. Password policy, the breach check and the lockout still apply.
+    if state.mailer.name() != "smtp" {
+        let token = auth::random_token(32);
+        store::create_session(&state.pool, acc.id, &auth::sha256_hex(&token), None, &ip, &ua, true).await?;
+        store::audit(&state.pool, "admin.login", serde_json::json!({"email": acc.email, "ip": ip, "device": auth::device_name(&ua), "code_skipped": true})).await?;
+        let c = auth::set_cookie(&auth::cookie_name(https, SESSION_COOKIE), &token, https, auth::SESSION_ABSOLUTE_HOURS * 3600);
+        return Ok(with_cookies(Redirect::to("/shop/").into_response(), &[c]));
+    }
     let code = auth::six_digit_code();
     let code_id = store::create_code(&state.pool, acc.id, "device", &auth::sha256_hex(&code), auth::CODE_MIN, &ip).await?;
     state.mailer.send(mail::code_message(&acc.email, &code, &auth::device_name(&ua))).await?;

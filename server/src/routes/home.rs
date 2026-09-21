@@ -47,7 +47,10 @@ pub struct HomeTpl {
     pub featured_pattern: String,
     pub featured_kind: String,
     pub featured_cat_url: String,
-    pub hero_thumbs: Vec<ProductCard>,
+    pub featured_is_chosen: bool,
+    pub hero_photo: bool,
+    pub popular: Vec<ProductCard>,
+    pub google_reviews: Option<crate::reviews::Reviews>,
     pub cat_tiles: Vec<CatTile>,
     pub latest_posts: Vec<PostCard>,
     pub live_total: usize,
@@ -81,8 +84,14 @@ pub async fn home(AxState(state): AxState<State>) -> AppResult {
     let case = db::products_by_slugs_or_recent(&state.pool, 8, &exclude, true, true).await?;
     let vault = db::top_priced(&state.pool, 3).await?;
 
-    // Featured pen: the newest fountain pen with a photo; its own description and specs fill the hero.
-    let featured = just_in.first().cloned().unwrap_or_default();
+    // Featured pen: the one he chose in the admin while it is still for sale, else the newest
+    // fountain pen with a photo. Its own description and specs fill the hero.
+    let chosen = match crate::settings::featured_product(&state.pool).await? {
+        Some(id) => db::products_by_ids(&state.pool, &[id], true).await?.into_iter().next(),
+        None => None,
+    };
+    let featured_is_chosen = chosen.is_some();
+    let featured = chosen.or_else(|| just_in.first().cloned()).unwrap_or_default();
     let featured_text = if featured.id > 0 {
         let body = db::product_body(&state.pool, featured.id).await?;
         crate::text::summary(&body.description_text, 300)
@@ -114,7 +123,22 @@ pub async fn home(AxState(state): AxState<State>) -> AppResult {
     }
     .to_string();
     let featured_cat_url = if featured.category_slug.is_empty() { "/shop/".to_string() } else { format!("/product-category/{}/", featured.category_slug) };
-    let hero_thumbs: Vec<ProductCard> = just_in.iter().skip(1).take(3).cloned().collect();
+
+    // Most Popular: the pens the most different visitors opened this month. It needs real traffic to
+    // mean anything, so it stays off the page until at least four pens have three visitors each.
+    let popular_exp = crate::insights::variant(&state, "home-popular");
+    let popular_on = match &popular_exp {
+        Some(a) => a.variant == "on",
+        None => crate::settings::popular_section(&state.pool).await?,
+    };
+    let popular = if popular_on {
+        let ids = crate::insights::popular_product_ids(&state.pool, 30, 8, 3).await?;
+        if ids.len() >= 4 { db::products_by_ids(&state.pool, &ids, true).await? } else { vec![] }
+    } else {
+        vec![]
+    };
+    let hero_exp = crate::insights::variant(&state, "hero-stage");
+    let hero_photo = hero_exp.as_ref().map(|a| a.variant == "photo").unwrap_or(false);
     let tile_image = |slug: &str| cat.pens.iter().find(|p| p.is_live() && p.category_slug == slug && !p.image.is_empty() && p.slug != featured.slug).map(|p| p.image.clone()).unwrap_or_default();
     let sale_image = cat.pens.iter().find(|p| p.is_live() && p.sale_price_cents.is_some() && !p.image.is_empty()).map(|p| p.image.clone()).unwrap_or_default();
     let count_cat = |slug: &str| cat.pens.iter().filter(|p| p.is_live() && p.category_slug == slug).count();
@@ -203,6 +227,8 @@ pub async fn home(AxState(state): AxState<State>) -> AppResult {
         breadcrumb_node(&state, &[("Home", "/")]),
     ]);
 
+    page.experiments = crate::insights::exposure_attr(&[("hero-stage", &hero_exp), ("home-popular", &popular_exp)]);
+
     html(&HomeTpl {
         page,
         featured,
@@ -212,7 +238,10 @@ pub async fn home(AxState(state): AxState<State>) -> AppResult {
         featured_pattern,
         featured_kind,
         featured_cat_url,
-        hero_thumbs,
+        featured_is_chosen,
+        hero_photo,
+        popular,
+        google_reviews: state.site().google_reviews.clone(),
         cat_tiles,
         latest_posts,
         live_total: s.live_total,

@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="admin-page">
+  <div class="adm-top"><div><h1>Pages</h1><p class="lead">Permanent pages you write yourself, like a grading system or a glossary. Each one gets its own address, goes in the site map for Google, and can be linked from the footer.</p></div><a class="btn" href="/admin/pages/new/">Write a new page</a></div>
+  <table class="adm">
+    <tr><th>Title</th><th>Address</th><th>Status</th><th>In footer</th><th>Last changed</th></tr>
+    {% for r in rows %}
+    <tr><td><a href="/admin/pages/{{ r.id }}/"><b>{{ r.title }}</b></a></td><td><a href="{{ r.url }}">{{ r.url }}</a></td><td>{% if r.status == "draft" %}<span class="adm-chip">Draft</span>{% else %}Published{% endif %}</td><td>{% if r.in_footer %}Yes{% else %}No{% endif %}</td><td>{{ r.modified }}</td></tr>
+    {% endfor %}
+    {% if rows.is_empty() %}<tr><td colspan="5">No pages yet.</td></tr>{% endif %}
+  </table>
+  <p class="adm-hint">The service pages (Repairs, Sell, Guarantee, About, Contact) are built into the site and are not listed here. The questions and answers live under <a href="/admin/faqs/">FAQs</a>.</p>
+</div>
+{% endblock %}

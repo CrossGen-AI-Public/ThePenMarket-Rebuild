@@ -123,7 +123,11 @@ pub struct PostTpl {
 
 /// Root-level slugs: a post, or an old URL the redirect table knows, or a real 404.
 pub async fn post(AxState(state): AxState<State>, Path(slug): Path<String>, OriginalUri(uri): OriginalUri) -> AppResult {
-    let Some((row, body)) = db::post_by_slug(&state.pool, &slug).await? else {
+    let is_admin = crate::admin::current().is_some();
+    let Some((row, body)) = db::post_by_slug(&state.pool, &slug, is_admin).await? else {
+        if let Some(res) = crate::routes::content::custom_page(&state, &slug).await? {
+            return Ok(res);
+        }
         if let Some(target) = db::redirect_for(&state.pool, uri.path()).await? {
             return Ok(crate::app::moved(&target));
         }
@@ -145,6 +149,7 @@ pub async fn post(AxState(state): AxState<State>, Path(slug): Path<String>, Orig
     let title = format!("{} | Drippy Musings | ThePenMarket.com", row.title);
     let mut page = PageMeta::new(&state, &title, &row.meta_description, &format!("/{slug}/"));
     page.section = "blog".into();
+    page.edit_link = Some(("Edit this post".into(), format!("/admin/posts/{}/", row.id)));
     if !card.image.is_empty() {
         page.og_image = state.abs(&card.image);
     }

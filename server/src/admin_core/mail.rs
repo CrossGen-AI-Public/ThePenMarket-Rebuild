@@ -13,6 +13,8 @@ pub struct Message {
     pub to: String,
     pub subject: String,
     pub body: String,
+    /// Set on form notifications so "Reply" in his mail program answers the customer.
+    pub reply_to: Option<String>,
 }
 
 pub trait Mailer: Send + Sync {
@@ -54,9 +56,11 @@ impl Mailer for SmtpMailer {
     fn send<'a>(&'a self, msg: Message) -> BoxFuture<'a, anyhow::Result<()>> {
         Box::pin(async move {
             use lettre::AsyncTransport;
-            let email = lettre::Message::builder()
-                .from(self.from.parse()?)
-                .to(msg.to.parse()?)
+            let mut builder = lettre::Message::builder().from(self.from.parse()?).to(msg.to.parse()?);
+            if let Some(r) = msg.reply_to.as_deref().and_then(|r| r.parse().ok()) {
+                builder = builder.reply_to(r);
+            }
+            let email = builder
                 .subject(msg.subject)
                 .header(lettre::message::header::ContentType::TEXT_PLAIN)
                 .body(msg.body)?;
@@ -84,6 +88,7 @@ pub fn code_message(to: &str, code: &str, device: &str) -> Message {
     Message {
         to: to.to_string(),
         subject: format!("Your ThePenMarket.com sign-in code: {code}"),
+        reply_to: None,
         body: format!("Hi Nathaniel,\n\nSomeone is signing in to ThePenMarket.com from a new device ({device}).\n\nYour code is: {code}\n\nIt works for {} minutes. If this wasn't you, ignore this e-mail and tell Brittany.\n", super::auth::CODE_MIN),
     }
 }
@@ -92,6 +97,7 @@ pub fn reset_message(to: &str, link: &str) -> Message {
     Message {
         to: to.to_string(),
         subject: "Reset your ThePenMarket.com password".into(),
+        reply_to: None,
         body: format!("Hi Nathaniel,\n\nUse this link to choose a new password. It works once and expires in {} minutes:\n\n{link}\n\nIf you didn't ask for this, ignore this e-mail; your password has not changed.\n", super::auth::RESET_MIN),
     }
 }
@@ -100,7 +106,21 @@ pub fn lockout_message(to: &str, email: &str, ip: &str) -> Message {
     Message {
         to: to.to_string(),
         subject: "ThePenMarket.com sign-in locked for an hour".into(),
+        reply_to: None,
         body: format!("The sign-in for {email} was locked for one hour after {} wrong passwords in {} minutes (from {ip}).\n\nIf that was you, wait an hour and try again, or use Forgot password. If it wasn't, nothing got in; tell Brittany.\n", super::auth::LOCK_AFTER, super::auth::LOCK_WINDOW_MIN),
+    }
+}
+
+/// What lands in his inbox when a visitor sends a form. `fields` are (label, value) pairs.
+pub fn form_message(to: &str, what: &str, id: i32, fields: &[(String, String)], has_photo: bool, inbox_url: &str) -> Message {
+    let from = fields.iter().find(|(k, _)| k == "name").map(|(_, v)| v.as_str()).unwrap_or("a visitor");
+    let reply_to = fields.iter().find(|(k, _)| k == "email").map(|(_, v)| v.clone()).filter(|v| v.contains('@') && !v.contains(['\r', '\n']));
+    let lines: String = fields.iter().filter(|(_, v)| !v.is_empty()).map(|(k, v)| format!("{k}: {v}\n")).collect();
+    Message {
+        to: to.to_string(),
+        subject: format!("{what} #{id} from {}", from.replace(['\r', '\n'], " ")),
+        reply_to,
+        body: format!("{what} sent from ThePenMarket.com.\n\n{lines}\n{}Open it in the admin inbox: {inbox_url}\n\nReplying to this e-mail answers the person who sent it.\n", if has_photo { "A photo was attached; it is in the admin inbox.\n" } else { "" }),
     }
 }
 

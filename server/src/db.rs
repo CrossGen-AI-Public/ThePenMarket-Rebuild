@@ -273,12 +273,29 @@ pub async fn shop(pool: &PgPool, f: &ShopFilter, ranges: &[PriceRange]) -> anyho
 
     let mut qb = QueryBuilder::new(PRODUCT_SELECT);
     f.push_where(&mut qb, "");
-    qb.push(match f.sort.as_str() {
-        "price-asc" => " ORDER BY COALESCE(p.sale_price_cents, p.price_cents) ASC, p.title ",
-        "price-desc" => " ORDER BY COALESCE(p.sale_price_cents, p.price_cents) DESC, p.title ",
-        "name" => " ORDER BY p.short_title ",
-        _ => " ORDER BY p.status ASC, p.listed_year DESC NULLS LAST, p.listed_month DESC NULLS LAST, p.wp_id DESC ",
-    });
+    const VIEWS_90D: &str = "(SELECT count(DISTINCT v.visitor) FROM visit_event v WHERE v.product_id = p.id AND v.kind = 'view' AND v.at > now() - interval '90 days')";
+    let q = f.q.as_deref().map(str::trim).filter(|q| !q.is_empty());
+    match (f.sort.as_str(), q) {
+        ("price-asc", _) => {
+            qb.push(" ORDER BY COALESCE(p.sale_price_cents, p.price_cents) ASC, p.title ");
+        }
+        ("price-desc", _) => {
+            qb.push(" ORDER BY COALESCE(p.sale_price_cents, p.price_cents) DESC, p.title ");
+        }
+        ("name", _) => {
+            qb.push(" ORDER BY p.short_title ");
+        }
+        ("popular", _) => {
+            qb.push(format!(" ORDER BY p.status ASC, {VIEWS_90D} DESC, p.listed_year DESC NULLS LAST, p.listed_month DESC NULLS LAST, p.wp_id DESC "));
+        }
+        // A search with no sort chosen: best text match first, then what other visitors opened most.
+        ("" | "relevance", Some(q)) => {
+            qb.push(" ORDER BY p.status ASC, ts_rank(p.search_tsv, websearch_to_tsquery('english', ").push_bind(q.to_string()).push(format!(")) DESC, {VIEWS_90D} DESC, p.listed_year DESC NULLS LAST, p.wp_id DESC "));
+        }
+        _ => {
+            qb.push(" ORDER BY p.status ASC, p.listed_year DESC NULLS LAST, p.listed_month DESC NULLS LAST, p.wp_id DESC ");
+        }
+    }
     qb.push(" LIMIT ").push_bind(f.per_page).push(" OFFSET ").push_bind((f.page - 1).max(0) * f.per_page);
     let rows: Vec<ProductRow> = qb.build_query_as().fetch_all(pool).await?;
     let items = rows.into_iter().map(ProductCard::from).collect();
@@ -290,7 +307,12 @@ pub async fn shop(pool: &PgPool, f: &ShopFilter, ranges: &[PriceRange]) -> anyho
             a = table_alias
         ));
         f.push_where(&mut qb, dim);
-        qb.push(format!(" AND {a}.slug IS NOT NULL GROUP BY {a}.slug, {a}.name, {a}.sort_order ORDER BY {a}.sort_order, {a}.name", a = table_alias));
+        if dim == "brand" {
+            // Brands he pinned lead in his order; the rest follow by how many pens are in stock right now.
+            qb.push(" AND b.slug IS NOT NULL GROUP BY b.slug, b.name, b.pin_rank ORDER BY b.pin_rank NULLS LAST, count(*) DESC, b.name");
+        } else {
+            qb.push(format!(" AND {a}.slug IS NOT NULL GROUP BY {a}.slug, {a}.name, {a}.sort_order ORDER BY {a}.sort_order, {a}.name", a = table_alias));
+        }
         let rows = qb.build().fetch_all(pool).await?;
         let selected = match dim {
             "category" => f.category.clone(),
@@ -343,6 +365,50 @@ pub async fn products_by_slugs_or_recent(pool: &PgPool, limit: i64, exclude_ids:
     qb.push(" ORDER BY p.listed_year DESC NULLS LAST, p.listed_month DESC NULLS LAST, p.wp_id DESC LIMIT ").push_bind(limit);
     let rows: Vec<ProductRow> = qb.build_query_as().fetch_all(pool).await?;
     Ok(rows.into_iter().map(ProductCard::from).collect())
+}
+
+pub async fn pinned_brand_slugs(pool: &PgPool) -> anyhow::Result<Vec<String>> {
+    let rows = sqlx::query("SELECT slug FROM brand WHERE pin_rank IS NOT NULL ORDER BY pin_rank").fetch_all(pool).await?;
+    Ok(rows.iter().map(|r| r.get("slug")).collect())
+}
+
+/// Published custom pages he flagged for the footer, as (title, path).
+pub async fn footer_pages(pool: &PgPool) -> anyhow::Result<Vec<(String, String)>> {
+    let rows = sqlx::query("SELECT title, slug FROM page WHERE custom AND show_in_footer AND status = 'published' ORDER BY title").fetch_all(pool).await?;
+    Ok(rows.iter().map(|r| (r.get("title"), format!("/{}/", r.get::<String, _>("slug")))).collect())
+}
+
+// ---------- FAQs ----------
+#[derive(Clone, Debug, FromRow)]
+pub struct FaqRow {
+    pub id: i32,
+    pub topic: String,
+    pub question: String,
+    pub answer: String,
+    pub sort_order: i32,
+    pub status: String,
+    pub in_guide: bool,
+}
+
+pub async fn faqs(pool: &PgPool, published_only: bool) -> anyhow::Result<Vec<FaqRow>> {
+    Ok(sqlx::query_as("SELECT id, topic, question, answer, sort_order, status, in_guide FROM faq WHERE ($1 = FALSE OR status = 'published') ORDER BY topic, sort_order, id").bind(published_only).fetch_all(pool).await?)
+}
+
+pub async fn guide_faqs(pool: &PgPool) -> anyhow::Result<Vec<(String, String)>> {
+    let rows = sqlx::query("SELECT question, answer FROM faq WHERE status = 'published' AND in_guide ORDER BY topic, sort_order, id LIMIT 40").fetch_all(pool).await?;
+    Ok(rows.iter().map(|r| (r.get::<String, _>("question"), r.get::<String, _>("answer").chars().take(700).collect())).collect())
+}
+
+/// Cards for specific ids, returned in the order given (ids that are gone or not live are skipped).
+pub async fn products_by_ids(pool: &PgPool, ids: &[i32], only_live: bool) -> anyhow::Result<Vec<ProductCard>> {
+    if ids.is_empty() {
+        return Ok(vec![]);
+    }
+    let sql = format!("{PRODUCT_SELECT} WHERE p.id = ANY($1) AND ($2 = FALSE OR p.status = 'live')");
+    let rows: Vec<ProductRow> = sqlx::query_as(&sql).bind(ids.to_vec()).bind(only_live).fetch_all(pool).await?;
+    let mut cards: Vec<ProductCard> = rows.into_iter().map(ProductCard::from).collect();
+    cards.sort_by_key(|c| ids.iter().position(|i| *i == c.id).unwrap_or(usize::MAX));
+    Ok(cards)
 }
 
 pub async fn top_priced(pool: &PgPool, limit: i64) -> anyhow::Result<Vec<ProductCard>> {
@@ -479,9 +545,9 @@ impl From<PostRow> for PostCard {
 const POST_SELECT: &str = "SELECT p.id, p.slug, p.title, p.excerpt, p.meta_description, p.author_name, p.featured_path, p.featured_alt, p.published_at, p.modified_at, p.word_count, bc.name AS category_name, bc.slug AS category_slug FROM post p LEFT JOIN blog_category bc ON bc.id = p.category_id";
 
 pub async fn posts(pool: &PgPool, category: Option<&str>, q: Option<&str>, page: i64, per_page: i64) -> anyhow::Result<(Vec<PostCard>, i64)> {
-    let mut count = QueryBuilder::new("SELECT count(*) AS n FROM post p LEFT JOIN blog_category bc ON bc.id = p.category_id WHERE 1=1 ");
+    let mut count = QueryBuilder::new("SELECT count(*) AS n FROM post p LEFT JOIN blog_category bc ON bc.id = p.category_id WHERE p.status = 'published' ");
     let mut list = QueryBuilder::new(POST_SELECT);
-    list.push(" WHERE 1=1 ");
+    list.push(" WHERE p.status = 'published' ");
     for qb in [&mut count, &mut list] {
         if let Some(c) = category {
             qb.push(" AND bc.slug = ").push_bind(c.to_string());
@@ -496,9 +562,10 @@ pub async fn posts(pool: &PgPool, category: Option<&str>, q: Option<&str>, page:
     Ok((rows.into_iter().map(PostCard::from).collect(), total))
 }
 
-pub async fn post_by_slug(pool: &PgPool, slug: &str) -> anyhow::Result<Option<(PostRow, String)>> {
-    let sql = format!("{POST_SELECT} WHERE p.slug = $1");
-    let row: Option<PostRow> = sqlx::query_as(&sql).bind(slug).fetch_optional(pool).await?;
+/// `include_drafts` is true only for the signed-in admin, who can read a draft at its future URL.
+pub async fn post_by_slug(pool: &PgPool, slug: &str, include_drafts: bool) -> anyhow::Result<Option<(PostRow, String)>> {
+    let sql = format!("{POST_SELECT} WHERE p.slug = $1 AND ($2 OR p.status = 'published')");
+    let row: Option<PostRow> = sqlx::query_as(&sql).bind(slug).bind(include_drafts).fetch_optional(pool).await?;
     match row {
         Some(r) => {
             let body: String = sqlx::query("SELECT body_html FROM post WHERE id = $1").bind(r.id).fetch_one(pool).await?.get("body_html");
@@ -509,14 +576,14 @@ pub async fn post_by_slug(pool: &PgPool, slug: &str) -> anyhow::Result<Option<(P
 }
 
 pub async fn posts_by_slugs(pool: &PgPool, slugs: &[&str]) -> anyhow::Result<Vec<PostCard>> {
-    let sql = format!("{POST_SELECT} WHERE p.slug = ANY($1) ORDER BY p.published_at DESC");
+    let sql = format!("{POST_SELECT} WHERE p.slug = ANY($1) AND p.status = 'published' ORDER BY p.published_at DESC");
     let owned: Vec<String> = slugs.iter().map(|s| s.to_string()).collect();
     let rows: Vec<PostRow> = sqlx::query_as(&sql).bind(owned).fetch_all(pool).await?;
     Ok(rows.into_iter().map(PostCard::from).collect())
 }
 
 pub async fn posts_matching(pool: &PgPool, q: &str, limit: i64) -> anyhow::Result<Vec<PostCard>> {
-    let sql = format!("{POST_SELECT} WHERE p.search_tsv @@ websearch_to_tsquery('english', $1) OR p.title ILIKE $2 ORDER BY ts_rank(p.search_tsv, websearch_to_tsquery('english', $1)) DESC, p.published_at DESC LIMIT $3");
+    let sql = format!("{POST_SELECT} WHERE p.status = 'published' AND (p.search_tsv @@ websearch_to_tsquery('english', $1) OR p.title ILIKE $2) ORDER BY ts_rank(p.search_tsv, websearch_to_tsquery('english', $1)) DESC, p.published_at DESC LIMIT $3");
     let rows: Vec<PostRow> = sqlx::query_as(&sql).bind(q).bind(format!("%{q}%")).bind(limit).fetch_all(pool).await?;
     Ok(rows.into_iter().map(PostCard::from).collect())
 }
@@ -530,11 +597,11 @@ pub struct BlogCategory {
 }
 
 pub async fn blog_categories(pool: &PgPool) -> anyhow::Result<Vec<BlogCategory>> {
-    Ok(sqlx::query_as("SELECT bc.slug, bc.name, bc.description, (SELECT count(*) FROM post p WHERE p.category_id = bc.id) AS count FROM blog_category bc WHERE bc.slug <> 'uncategorized-new' ORDER BY count DESC").fetch_all(pool).await?)
+    Ok(sqlx::query_as("SELECT bc.slug, bc.name, bc.description, (SELECT count(*) FROM post p WHERE p.category_id = bc.id AND p.status = 'published') AS count FROM blog_category bc WHERE bc.slug <> 'uncategorized-new' ORDER BY count DESC").fetch_all(pool).await?)
 }
 
 pub async fn blog_category(pool: &PgPool, slug: &str) -> anyhow::Result<Option<BlogCategory>> {
-    Ok(sqlx::query_as("SELECT bc.slug, bc.name, bc.description, (SELECT count(*) FROM post p WHERE p.category_id = bc.id) AS count FROM blog_category bc WHERE bc.slug = $1").bind(slug).fetch_optional(pool).await?)
+    Ok(sqlx::query_as("SELECT bc.slug, bc.name, bc.description, (SELECT count(*) FROM post p WHERE p.category_id = bc.id AND p.status = 'published') AS count FROM blog_category bc WHERE bc.slug = $1").bind(slug).fetch_optional(pool).await?)
 }
 
 // ---------- pages ----------
@@ -549,6 +616,28 @@ pub struct Page {
 
 pub async fn page(pool: &PgPool, slug: &str) -> anyhow::Result<Option<Page>> {
     Ok(sqlx::query_as("SELECT slug, title, body_html, meta_description, modified_at FROM page WHERE slug = $1").bind(slug).fetch_optional(pool).await?)
+}
+
+#[derive(Clone, Debug, FromRow)]
+pub struct CustomPage {
+    pub id: i32,
+    pub slug: String,
+    pub title: String,
+    pub body_html: String,
+    pub meta_description: String,
+    pub status: String,
+    pub modified_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// A page written in the admin. Imported WordPress pages (custom = FALSE) keep their own routes.
+pub async fn custom_page(pool: &PgPool, slug: &str, include_drafts: bool) -> anyhow::Result<Option<CustomPage>> {
+    Ok(sqlx::query_as("SELECT id, slug, title, body_html, meta_description, status, modified_at FROM page WHERE custom AND slug = $1 AND ($2 OR status = 'published')").bind(slug).bind(include_drafts).fetch_optional(pool).await?)
+}
+
+/// Published custom pages as (title, slug), for the site map and the XML sitemap.
+pub async fn custom_pages(pool: &PgPool) -> anyhow::Result<Vec<(String, String)>> {
+    let rows = sqlx::query("SELECT title, slug FROM page WHERE custom AND status = 'published' ORDER BY title").fetch_all(pool).await?;
+    Ok(rows.iter().map(|r| (r.get("title"), r.get("slug"))).collect())
 }
 
 // ---------- trading post ----------
@@ -639,7 +728,7 @@ pub async fn sitemap_products(pool: &PgPool) -> anyhow::Result<Vec<(String, Stri
 }
 
 pub async fn sitemap_posts(pool: &PgPool) -> anyhow::Result<Vec<(String, String)>> {
-    let rows = sqlx::query("SELECT slug, modified_at FROM post ORDER BY published_at DESC").fetch_all(pool).await?;
+    let rows = sqlx::query("SELECT slug, modified_at FROM post WHERE status = 'published' ORDER BY published_at DESC").fetch_all(pool).await?;
     Ok(rows.iter().map(|r| (format!("/{}/", r.get::<String, _>("slug")), r.get::<chrono::DateTime<chrono::Utc>, _>("modified_at").format("%Y-%m-%d").to_string())).collect())
 }
 

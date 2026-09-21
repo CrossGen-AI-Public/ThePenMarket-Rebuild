@@ -291,6 +291,16 @@ pub async fn insert_image(pool: &PgPool, product_id: i32, path: &str, alt: &str,
     Ok(row.get("id"))
 }
 
+pub async fn live_image_count(pool: &PgPool, product_id: i32) -> anyhow::Result<i64> {
+    let row = sqlx::query("SELECT count(*) AS n FROM product_image WHERE product_id = $1 AND archived_at IS NULL").bind(product_id).fetch_one(pool).await?;
+    Ok(row.get("n"))
+}
+
+pub async fn set_image_shot(pool: &PgPool, image_id: i32, shot: &str) -> anyhow::Result<()> {
+    sqlx::query("UPDATE product_image SET shot = $2 WHERE id = $1").bind(image_id).bind(shot).execute(pool).await?;
+    Ok(())
+}
+
 pub async fn image_owner(pool: &PgPool, image_id: i32) -> anyhow::Result<Option<(i32, String)>> {
     let row = sqlx::query("SELECT product_id, path FROM product_image WHERE id = $1 AND archived_at IS NULL").bind(image_id).fetch_optional(pool).await?;
     Ok(row.map(|r| (r.get("product_id"), r.get("path"))))

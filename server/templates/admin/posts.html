@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="admin-page">
+  <div class="adm-top"><div><h1>Blog posts</h1><p class="lead">{{ total }} posts. Open any of them to fix the words or put its photos back; GoDaddy's rebuild dropped the photos from {{ without_photos }} of them.</p></div><a class="btn" href="/admin/posts/new/">Write a new post</a></div>
+  <form class="adm-filter" method="get" action="/admin/posts/">
+    <input type="search" name="q" value="{{ q }}" placeholder="Search titles" aria-label="Search titles">
+    <select name="only" aria-label="Show">
+      <option value="">All posts</option>
+      <option value="drafts"{% if only == "drafts" %} selected{% endif %}>Drafts</option>
+      <option value="no-photos"{% if only == "no-photos" %} selected{% endif %}>Posts with no photos ({{ without_photos }})</option>
+      <option value="missing"{% if only == "missing" %} selected{% endif %}>Posts with a broken photo ({{ with_missing }})</option>
+    </select>
+    <button class="btn btn-outline" type="submit">Show</button>
+  </form>
+  <table class="adm">
+    <tr><th>Title</th><th>Category</th><th>Published</th><th>Photos</th><th></th></tr>
+    {% for r in rows %}
+    <tr>
+      <td><a href="/admin/posts/{{ r.id }}/"><b>{{ r.title }}</b></a>{% if r.status == "draft" %} <span class="adm-chip">Draft</span>{% endif %}</td>
+      <td>{{ r.category }}</td>
+      <td>{{ r.date }}</td>
+      <td>{% if r.images == 0 %}<span class="adm-chip adm-warn">None</span>{% else %}{{ r.images }}{% endif %}{% if r.missing > 0 %} <span class="adm-chip adm-warn">{{ r.missing }} broken</span>{% endif %}</td>
+      <td><a href="{{ r.url }}">View</a></td>
+    </tr>
+    {% endfor %}
+    {% if rows.is_empty() %}<tr><td colspan="5">No posts match.</td></tr>{% endif %}
+  </table>
+</div>
+{% endblock %}

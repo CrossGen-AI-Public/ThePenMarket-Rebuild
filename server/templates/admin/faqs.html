@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="admin-page">
+  <div class="adm-top"><div><h1>FAQs</h1><p class="lead">The questions you answer over and over. Published ones appear on the <a href="/faq/">FAQ page</a>; ticked ones are also given to Ask the Pen Market, which answers in your words instead of sending the person to your inbox.</p></div></div>
+  {% if saved %}<div class="adm-ok">Saved.</div>{% endif %}
+  <details class="adm-card" open>
+    <summary><b>Add a question</b></summary>
+    <form class="adm-form" method="post" action="/admin/faqs/">
+      <input type="hidden" name="csrf" value="{{ page.csrf }}">
+      <label for="new-topic">Topic</label>
+      <input id="new-topic" name="topic" list="faq-topics" required maxlength="80" placeholder="Selling your pens">
+      <datalist id="faq-topics">{% for t in topics %}<option value="{{ t }}">{% endfor %}</datalist>
+      <label for="new-q">Question</label>
+      <input id="new-q" name="question" required maxlength="300" placeholder="Are Cross Century pens worth anything?">
+      <label for="new-a">Your answer</label>
+      <textarea id="new-a" name="answer" rows="4" required maxlength="4000"></textarea>
+      <label class="adm-check"><input type="checkbox" name="in_guide" value="1" checked> Let Ask the Pen Market answer with this</label>
+      <div class="adm-actions"><button type="submit" class="btn">Add it</button></div>
+    </form>
+  </details>
+  {% for r in rows %}
+  <details class="adm-card">
+    <summary><span class="muted">{{ r.topic }}</span> · <b>{{ r.question }}</b>{% if r.status == "draft" %} <span class="adm-chip">Hidden</span>{% endif %}</summary>
+    <form class="adm-form" method="post" action="/admin/faqs/{{ r.id }}/">
+      <input type="hidden" name="csrf" value="{{ page.csrf }}">
+      <div class="adm-cols">
+        <div><label>Topic</label><input name="topic" list="faq-topics" value="{{ r.topic }}" required maxlength="80"></div>
+        <div><label>Order within the topic (lower comes first)</label><input name="sort_order" value="{{ r.sort_order }}" inputmode="numeric"></div>
+      </div>
+      <label>Question</label>
+      <input name="question" value="{{ r.question }}" required maxlength="300">
+      <label>Your answer</label>
+      <textarea name="answer" rows="4" required maxlength="4000">{{ r.answer }}</textarea>
+      <label class="adm-check"><input type="checkbox" name="in_guide" value="1"{% if r.in_guide %} checked{% endif %}> Let Ask the Pen Market answer with this</label>
+      <div class="adm-actions">
+        <label>Status</label>
+        <select name="status"><option value="published"{% if r.status == "published" %} selected{% endif %}>Published</option><option value="draft"{% if r.status == "draft" %} selected{% endif %}>Hidden</option></select>
+        <button type="submit" class="btn">Save</button>
+      </div>
+    </form>
+  </details>
+  {% endfor %}
+</div>
+{% endblock %}

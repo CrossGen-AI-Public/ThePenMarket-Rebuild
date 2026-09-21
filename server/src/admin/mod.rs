@@ -3,6 +3,10 @@
 //! without touching the handlers that render customer pages.
 
 pub mod api;
+pub mod content;
+pub mod insight_pages;
+pub mod manage;
+pub mod sourcing;
 pub use thepenmarket::admin_core::auth;
 pub mod handlers;
 pub use thepenmarket::admin_core::mail;
@@ -116,7 +120,31 @@ impl<S: Send + Sync> FromRequestParts<S> for AuthApi {
 
 pub fn router() -> Router<State> {
     Router::new()
-        .route("/admin/", get(handlers::home))
+        .route("/admin/", get(manage::home))
+        .route("/admin/settings/", get(manage::settings_page).post(manage::settings_save))
+        .route("/admin/brands/", get(manage::brands).post(manage::brands_save))
+        .route("/admin/inbox/", get(manage::inbox))
+        .route("/admin/inbox/{id}/", post(manage::inbox_handled))
+        .route("/admin/inbox/photo/{key}", get(manage::inbox_photo))
+        .route("/admin/api/featured/", post(manage::set_featured))
+        .route("/admin/posts/", get(content::posts))
+        .route("/admin/posts/new/", get(content::post_new).post(content::post_save).layer(axum::extract::DefaultBodyLimit::max(2 * 1024 * 1024)))
+        .route("/admin/posts/{id}/", get(content::post_edit).post(content::post_save).layer(axum::extract::DefaultBodyLimit::max(2 * 1024 * 1024)))
+        .route("/admin/pages/", get(content::pages))
+        .route("/admin/pages/new/", get(content::page_new).post(content::page_save).layer(axum::extract::DefaultBodyLimit::max(2 * 1024 * 1024)))
+        .route("/admin/pages/{id}/", get(content::page_edit).post(content::page_save).layer(axum::extract::DefaultBodyLimit::max(2 * 1024 * 1024)))
+        .route("/admin/faqs/", get(content::faqs).post(content::faq_save))
+        .route("/admin/faqs/{id}/", post(content::faq_save))
+        .route("/admin/api/posts/", get(content::post_lookup))
+        .route("/admin/api/media/", post(content::upload_media).layer(axum::extract::DefaultBodyLimit::max(12 * 1024 * 1024)))
+        .route("/admin/insights/", get(insight_pages::insights_page))
+        .route("/admin/api/heatmap/", get(insight_pages::heatmap))
+        .route("/admin/experiments/", get(insight_pages::experiments))
+        .route("/admin/experiments/{key}/", post(insight_pages::experiment_action))
+        .route("/admin/sourcing/", get(sourcing::page).post(sourcing::want_save))
+        .route("/admin/sourcing/check/", post(sourcing::check_now))
+        .route("/admin/sourcing/find/{id}/", post(sourcing::find_status))
+        .route("/admin/sourcing/{id}/", post(sourcing::want_save))
         .route("/admin/login/", get(handlers::login_form).post(handlers::login))
         .route("/admin/verify/", get(handlers::verify_form).post(handlers::verify))
         .route("/admin/logout/", post(handlers::logout))

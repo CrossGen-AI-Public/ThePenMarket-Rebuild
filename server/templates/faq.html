@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="wrap narrow faq-page">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Home</a><span aria-hidden="true">›</span><span aria-current="page">FAQ</span></nav>
+  <h1>Frequently Asked Questions</h1>
+  <p class="lede">{{ total }} answers from Nathaniel on buying, repairs, selling your pens and the Trading Post. Not here? <a href="/#ask">Ask the Pen Market</a> or <a href="/contact/">contact us</a>.</p>
+  {% if topics.len() > 1 %}
+  <nav class="faq-jump" aria-label="Topics">{% for t in topics %}<a href="#{{ t.anchor }}">{{ t.name }}</a>{% endfor %}</nav>
+  {% endif %}
+  {% for t in topics %}
+  <section class="faq-topic" id="{{ t.anchor }}">
+    <h2>{{ t.name }}</h2>
+    {% for f in t.items %}
+    <details class="faq-item" id="{{ f.anchor }}"{% if loop.first %} open{% endif %}>
+      <summary>{{ f.q }}</summary>
+      <div class="prose"><p>{{ f.a }}</p></div>
+    </details>
+    {% endfor %}
+  </section>
+  {% endfor %}
+  {% if page.admin.is_some() %}<p class="adm-inline"><a class="btn btn-outline" href="/admin/faqs/">Edit these questions</a></p>{% endif %}
+</div>
+{% endblock %}

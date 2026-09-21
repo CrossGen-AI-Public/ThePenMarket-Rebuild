@@ -1,6 +1,7 @@
 //! The router: every public path, explicitly. Nothing else is reachable.
 
 pub mod blog;
+pub mod content;
 pub mod forms;
 pub mod home;
 pub mod pages;
@@ -54,6 +55,9 @@ pub fn router(state: State) -> Router {
         .route("/guarantee/", get(pages::guarantee))
         .route("/about-us/", get(pages::about))
         .route("/privacy/", get(pages::privacy))
+        .route("/faq/", get(content::faq))
+        .route("/site-map/", get(content::site_map))
+        .route("/api/t", post(crate::insights::ingest))
         .route("/api/guide", post(crate::guide::chat))
         .route("/api/guide/health", get(crate::guide::health))
         .route("/api/guide/catalog.json", get(crate::guide::catalog_json))
@@ -73,6 +77,7 @@ pub fn router(state: State) -> Router {
         .merge(crate::admin::router())
         .merge(static_files)
         .layer(middleware::from_fn_with_state(state.clone(), crate::admin::context))
+        .layer(middleware::from_fn(crate::insights::visitor))
         .layer(middleware::from_fn_with_state(state.clone(), not_found_page))
         .layer(middleware::from_fn(security::security_headers))
         .layer(middleware::from_fn(security::csrf_cookie))

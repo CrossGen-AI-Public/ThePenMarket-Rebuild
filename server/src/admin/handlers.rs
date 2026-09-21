@@ -144,16 +144,9 @@ fn with_cookies(mut res: Response, cookies: &[String]) -> Response {
     res
 }
 
-pub async fn home(AxState(_state): AxState<State>, admin: Option<Extension<AdminCtx>>) -> AppResult {
-    Ok(match admin {
-        Some(_) => Redirect::to("/shop/").into_response(),
-        None => Redirect::to("/admin/login/").into_response(),
-    })
-}
-
 pub async fn login_form(AxState(state): AxState<State>, Extension(cookie): Extension<CsrfCookie>, admin: Option<Extension<AdminCtx>>, axum::extract::Query(q): axum::extract::Query<std::collections::HashMap<String, String>>) -> AppResult {
     if admin.is_some() {
-        return Ok(Redirect::to("/shop/").into_response());
+        return Ok(Redirect::to("/admin/").into_response());
     }
     let notice = match q.get("notice").map(String::as_str) {
         Some("reset") => "Your password was changed. Sign in with the new one.".to_string(),
@@ -224,7 +217,17 @@ pub async fn login(AxState(state): AxState<State>, Extension(cookie): Extension<
         store::create_session(&state.pool, acc.id, &auth::sha256_hex(&token), Some(d.id), &ip, &ua, true).await?;
         store::audit(&state.pool, "admin.login", serde_json::json!({"email": acc.email, "ip": ip, "device": d.name})).await?;
         let c = auth::set_cookie(&auth::cookie_name(https, SESSION_COOKIE), &token, https, auth::SESSION_ABSOLUTE_HOURS * 3600);
-        return Ok(with_cookies(Redirect::to("/shop/").into_response(), &[c]));
+        return Ok(with_cookies(Redirect::to("/admin/").into_response(), &[c]));
+    }
+    // The new-device code only protects anything if it can reach his inbox. Until outgoing mail is
+    // connected (SMTP_URL), a correct password signs in directly; the code step returns by itself the
+    // day mail is connected. Password policy, the breach check and the lockout still apply.
+    if state.mailer.name() != "smtp" {
+        let token = auth::random_token(32);
+        store::create_session(&state.pool, acc.id, &auth::sha256_hex(&token), None, &ip, &ua, true).await?;
+        store::audit(&state.pool, "admin.login", serde_json::json!({"email": acc.email, "ip": ip, "device": auth::device_name(&ua), "code_skipped": true})).await?;
+        let c = auth::set_cookie(&auth::cookie_name(https, SESSION_COOKIE), &token, https, auth::SESSION_ABSOLUTE_HOURS * 3600);
+        return Ok(with_cookies(Redirect::to("/admin/").into_response(), &[c]));
     }
     let code = auth::six_digit_code();
     let code_id = store::create_code(&state.pool, acc.id, "device", &auth::sha256_hex(&code), auth::CODE_MIN, &ip).await?;
@@ -291,7 +294,7 @@ pub async fn verify(AxState(state): AxState<State>, Extension(cookie): Extension
     store::create_session(&state.pool, acc.id, &auth::sha256_hex(&token), device_id, &ip, &ua, true).await?;
     cookies.push(auth::set_cookie(&auth::cookie_name(https, SESSION_COOKIE), &token, https, auth::SESSION_ABSOLUTE_HOURS * 3600));
     store::audit(&state.pool, "admin.login", serde_json::json!({"email": acc.email, "ip": ip, "device": auth::device_name(&ua), "new_device": true, "remembered": device_id.is_some()})).await?;
-    Ok(with_cookies(Redirect::to("/shop/").into_response(), &cookies))
+    Ok(with_cookies(Redirect::to("/admin/").into_response(), &cookies))
 }
 
 #[derive(Deserialize)]
@@ -451,7 +454,7 @@ pub async fn password(AxState(state): AxState<State>, Extension(cookie): Extensi
     html(&PasswordTpl { page, error: String::new(), done: true })
 }
 
-fn fmt_time(t: chrono::DateTime<Utc>) -> String {
+pub fn fmt_time(t: chrono::DateTime<Utc>) -> String {
     t.with_timezone(&chrono_tz_offset()).format("%b %-d, %Y, %-I:%M %p").to_string()
 }
 
@@ -496,6 +499,19 @@ fn describe(kind: &str, d: &serde_json::Value) -> (String, String) {
         "admin.photo_added" => (format!("Photo added: {}", s("pen")), s("file")),
         "admin.photo_archived" => (format!("Photo removed: {}", s("pen")), s("file")),
         "admin.photos_reordered" => (format!("Photos reordered: {}", s("pen")), String::new()),
+        "admin.post_created" => (format!("Blog post written: {}", s("post")), s("status")),
+        "admin.post_edited" => (format!("Blog post edited: {}", s("post")), s("status")),
+        "admin.page_created" => (format!("Page written: {}", s("page")), s("status")),
+        "admin.page_edited" => (format!("Page edited: {}", s("page")), s("status")),
+        "admin.faq_created" => (format!("FAQ added: {}", s("question")), String::new()),
+        "admin.faq_edited" => (format!("FAQ edited: {}", s("question")), s("status")),
+        "admin.media_added" => ("Photo uploaded for a post or page".into(), s("file")),
+        "admin.featured_set" => (format!("Homepage pen chosen: {}", s("pen")), String::new()),
+        "admin.featured_cleared" => ("Homepage pen: back to the newest".into(), String::new()),
+        "admin.settings_saved" => ("Homepage and photo settings saved".into(), String::new()),
+        "admin.brands_saved" => ("Brand order saved".into(), format!("{} pinned, the rest by {}", d.get("pinned").and_then(|v| v.as_i64()).unwrap_or(0), s("order"))),
+        "admin.experiment" => (format!("Experiment {}: {}", s("action"), s("experiment")), s("winner")),
+        "admin.sourcing_saved" => (format!("Sourcing list: {}", s("want")), String::new()),
         _ => (kind.to_string(), d.to_string()),
     }
 }

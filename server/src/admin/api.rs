@@ -237,7 +237,12 @@ pub async fn upload_photo(AxState(state): AxState<State>, Extension(cookie): Ext
     let Some(p) = store::product_for_edit(&state.pool, id).await? else {
         return Err(AppError::NotFound);
     };
+    if store::live_image_count(&state.pool, id).await? >= crate::settings::MAX_PHOTOS {
+        return Ok(api_err(StatusCode::BAD_REQUEST, &format!("A pen holds {} photos. Remove one first.", crate::settings::MAX_PHOTOS)));
+    }
     let mut bytes: Option<Vec<u8>> = None;
+    // Set by the guided photo shoot: which shot on his list this photo answers.
+    let mut shot = String::new();
     while let Some(field) = mp.next_field().await.map_err(|e| AppError::BadRequest(format!("upload: {e}")))? {
         if field.name() == Some("photo") {
             let b = field.bytes().await.map_err(|e| AppError::BadRequest(format!("photo: {e}")))?;
@@ -245,6 +250,8 @@ pub async fn upload_photo(AxState(state): AxState<State>, Extension(cookie): Ext
                 return Ok(api_err(StatusCode::PAYLOAD_TOO_LARGE, "Photos must be under 10 MB."));
             }
             bytes = Some(b.to_vec());
+        } else if field.name() == Some("shot") {
+            shot = field.text().await.unwrap_or_default().trim().chars().take(60).collect();
         }
     }
     let Some(bytes) = bytes else {
@@ -256,7 +263,11 @@ pub async fn upload_photo(AxState(state): AxState<State>, Extension(cookie): Ext
         Ok(i) => i,
         Err(_) => return Ok(api_err(StatusCode::BAD_REQUEST, "That file could not be read as a photo (JPEG, PNG or WebP).")),
     };
-    let image_id = store::insert_image(&state.pool, id, &key, &p.short_title, imported.width, imported.height, imported.has_480, imported.has_960).await?;
+    let alt = if shot.is_empty() { p.short_title.clone() } else { format!("{}: {}", p.short_title, shot.to_lowercase()) };
+    let image_id = store::insert_image(&state.pool, id, &key, &alt, imported.width, imported.height, imported.has_480, imported.has_960).await?;
+    if !shot.is_empty() {
+        store::set_image_shot(&state.pool, image_id, &shot).await?;
+    }
     store::audit(&state.pool, "admin.photo_added", serde_json::json!({"email": admin.email, "ip": admin.ip, "pen": p.short_title, "product_id": id, "file": key})).await?;
     refresh_catalog(&state).await;
     Ok(Json(serde_json::json!({"ok": true, "id": image_id, "full": format!("/media/{key}"), "large": format!("/media/{}", if imported.has_960 { crate::media::variant_rel(&key, 960) } else { key.clone() }), "thumb": format!("/media/{}", if imported.has_480 { crate::media::variant_rel(&key, 480) } else { key.clone() })})).into_response())
@@ -274,7 +285,7 @@ pub async fn reorder_photos(AxState(state): AxState<State>, Extension(cookie): E
     let Some(p) = store::product_for_edit(&state.pool, id).await? else {
         return Err(AppError::NotFound);
     };
-    if body.ids.len() > 50 {
+    if body.ids.len() as i64 > crate::settings::MAX_PHOTOS {
         return Ok(api_err(StatusCode::BAD_REQUEST, "Too many photos."));
     }
     store::reorder_images(&state.pool, id, &body.ids).await?;
@@ -306,6 +317,9 @@ pub async fn options(AxState(state): AxState<State>, AuthApi(_admin): AuthApi) -
     for t in ["brand", "era", "nib", "filling_mechanism", "category"] {
         out.insert(t.to_string(), serde_json::to_value(store::term_options(&state.pool, t).await?)?);
     }
+    out.insert("shots".into(), serde_json::to_value(crate::settings::shot_list(&state.pool).await?)?);
+    out.insert("max_photos".into(), serde_json::json!(crate::settings::MAX_PHOTOS));
+    out.insert("featured_product_id".into(), serde_json::json!(crate::settings::featured_product(&state.pool).await?));
     Ok(Json(serde_json::Value::Object(out)).into_response())
 }
 

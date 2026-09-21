@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="admin-page">
+  <div class="adm-top"><div><h1>Inbox</h1><p class="lead">Everything the site's forms received. {% if mail_connected %}Each one was also e-mailed to you.{% else %}Outgoing e-mail is not connected yet, so this is the only copy.{% endif %}</p></div></div>
+  <form class="adm-filter" method="get" action="/admin/inbox/">
+    <select name="kind" aria-label="Kind">
+      <option value="">Everything</option>
+      <option value="repair"{% if kind == "repair" %} selected{% endif %}>Repair estimates</option>
+      <option value="sell"{% if kind == "sell" %} selected{% endif %}>Pens to sell</option>
+      <option value="contact"{% if kind == "contact" %} selected{% endif %}>Contact</option>
+      <option value="trading_post"{% if kind == "trading_post" %} selected{% endif %}>Trading Post listings</option>
+      <option value="guide_handoff"{% if kind == "guide_handoff" %} selected{% endif %}>From Ask the Pen Market</option>
+      <option value="mailing_list"{% if kind == "mailing_list" %} selected{% endif %}>Mailing list signups</option>
+    </select>
+    <select name="show" aria-label="Show"><option value="">Not dealt with yet</option><option value="all"{% if show == "all" %} selected{% endif %}>All, including done</option></select>
+    <button class="btn btn-outline" type="submit">Show</button>
+  </form>
+  {% for r in rows %}
+  <article class="adm-card adm-msg{% if r.handled %} is-done{% endif %}">
+    <header><b>{{ r.kind_label }}</b> <span class="muted">#{{ r.id }} · {{ r.when }}</span>{% if r.mailed %} <span class="adm-chip">E-mailed to you</span>{% endif %}{% if r.handled %} <span class="adm-chip">Done</span>{% endif %}</header>
+    <dl>{% for f in r.fields %}<div><dt>{{ f.0 }}</dt><dd>{{ f.1 }}</dd></div>{% endfor %}</dl>
+    {% if !r.photo.is_empty() %}<a class="adm-msg-photo" href="/admin/inbox/photo/{{ r.photo }}" target="_blank" rel="noopener"><img src="/admin/inbox/photo/{{ r.photo }}" alt="Photo the visitor attached" loading="lazy"></a>{% endif %}
+    <footer>
+      {% if !r.reply_to.is_empty() %}<a class="btn btn-outline" href="mailto:{{ r.reply_to }}?subject=Re:%20your%20message%20to%20ThePenMarket.com%20(%23{{ r.id }})">Reply by e-mail</a>{% endif %}
+      <form method="post" action="/admin/inbox/{{ r.id }}/"><input type="hidden" name="csrf" value="{{ page.csrf }}"><input type="hidden" name="back" value="/admin/inbox/?kind={{ kind }}&show={{ show }}"><input type="hidden" name="handled" value="{% if r.handled %}0{% else %}1{% endif %}"><button type="submit" class="btn btn-ghost">{% if r.handled %}Mark as not done{% else %}Mark as done{% endif %}</button></form>
+    </footer>
+  </article>
+  {% endfor %}
+  {% if rows.is_empty() %}<p>Nothing here.</p>{% endif %}
+</div>
+{% endblock %}

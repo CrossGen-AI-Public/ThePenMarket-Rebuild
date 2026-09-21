@@ -98,7 +98,7 @@ code{font-family:Menlo,Consolas,monospace;font-size:.9em;background:var(--grey);
 .hero-specs dt{font-size:20px;font-weight:600;color:var(--ink)}
 .hero-specs dd{font-size:19px;color:var(--muted)}
 .btn-hero{font-size:20px;font-weight:600;padding:22px 40px;min-width:350px}
-.hero-thumbs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--s5);margin-top:44px;width:100%;max-width:700px}
+.hero-thumbs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--s5);margin-top:0;width:100%;max-width:700px}
 .hero-thumb{display:flex;flex-direction:column;background:var(--grey);border-radius:14px;overflow:hidden;color:var(--ink);min-width:0}
 .hero-thumb:hover{text-decoration:none;box-shadow:0 8px 24px rgba(0,0,0,.08)}
 .hero-thumb-img{aspect-ratio:4/3;display:block;overflow:hidden;background:var(--grey)}
@@ -444,3 +444,41 @@ code{font-family:Menlo,Consolas,monospace;font-size:.9em;background:var(--grey);
 @media (max-width:900px){.about-grid,.about-photos{grid-template-columns:minmax(0,1fr)}}
 
 .listing-page .specs{margin:var(--s4) 0}
+
+/* ---- 2026-09-14 meeting: clickable pen hotspots, classic view, popular searches, FAQ, site map ---- */
+button.hotspot{pointer-events:auto;cursor:pointer;border:0;font:inherit;font-size:20px;line-height:1;color:var(--ink);padding:0}
+button.hotspot:hover,button.hotspot.is-on{background:var(--red);color:#fff}
+.hotspot-label.is-focus{display:block!important;background:var(--ink);color:#fff}
+.hero-stage.is-photo .hero-fallback{display:flex}
+.hero-stage.is-photo canvas,.hero-stage.is-photo .hotspots{display:none}
+html.classic body{zoom:1.12}
+html.classic *{animation:none!important;transition:none!important;scroll-behavior:auto!important}
+html.classic .hero-stage canvas,html.classic .hotspots{display:none}
+html.classic .hero-stage .hero-fallback{display:flex}
+.footer-view{margin-top:var(--s6)}
+.view-toggle{font:inherit;font-size:14px;background:transparent;border:1px solid var(--line-2);color:var(--ink);padding:10px 16px;cursor:pointer}
+.view-toggle:hover,.view-toggle[aria-pressed=true]{border-color:var(--ink)}
+.search-popular{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:baseline;margin-top:10px;font-size:14px;color:var(--muted)}
+.search-popular span{font-size:12px;letter-spacing:.1em;text-transform:uppercase}
+.search-popular a{text-decoration:underline;text-underline-offset:3px}
+.faq-page{padding-bottom:var(--s8)}
+.faq-jump{display:flex;flex-wrap:wrap;gap:8px 18px;margin:var(--s5) 0;font-size:15px}
+.faq-jump a{text-decoration:underline;text-underline-offset:3px}
+.faq-topic{margin-top:var(--s7)}
+.faq-topic h2{margin-bottom:var(--s4)}
+.faq-item{border-top:1px solid var(--line)}
+.faq-item:last-of-type{border-bottom:1px solid var(--line)}
+.faq-item summary{cursor:pointer;padding:16px 0;font-weight:600;font-size:17px;list-style-position:outside}
+.faq-item .prose{padding:0 0 18px;max-width:70ch;color:var(--ink-2)}
+.site-map{padding-bottom:var(--s8)}
+.site-map-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:var(--s6) var(--s7);margin-top:var(--s6)}
+.site-map-grid h2{font-size:18px;margin-bottom:var(--s3)}
+.site-map-grid ul{list-style:none}
+.site-map-grid li{padding:4px 0;font-size:15px}
+.site-map-grid a{text-decoration:underline;text-underline-offset:3px}
+.adm-inline{margin-top:var(--s6)}
+.footer-review a{text-decoration:underline;text-underline-offset:3px}
+.review{border:1px solid var(--line);padding:22px;display:grid;gap:12px;align-content:start}
+.review-stars{color:var(--ink);letter-spacing:.15em;font-size:15px}
+.review blockquote{font-size:16px;line-height:1.6;color:var(--ink-2)}
+.review figcaption{font-size:13px;color:var(--muted)}

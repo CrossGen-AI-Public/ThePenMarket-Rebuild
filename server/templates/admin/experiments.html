@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="admin-page">
+  <div class="adm-top"><div><h1>Experiments</h1><p class="lead">Each experiment shows half your visitors one version and half the other, and keeps each visitor on the same version. Let one run until both versions have at least 100 visitors, then keep the one that does better.</p></div></div>
+  {% for e in rows %}
+  <section class="adm-card">
+    <h2>{{ e.name }} {% if e.status == "running" %}<span class="adm-chip adm-live">Running since {{ e.started }}</span>{% else if e.status == "stopped" %}<span class="adm-chip">Finished</span>{% else %}<span class="adm-chip">Not started</span>{% endif %}</h2>
+    <p>{{ e.description }}</p>
+    <table class="adm">
+      <tr><th>Version</th><th class="num">Visitors</th><th class="num">Pen pages opened, per visitor</th><th class="num">Went on to buy, call, e-mail or send a form</th><th class="num">Rate</th></tr>
+      {% for v in e.variants %}
+      <tr><td>{{ v.label }}{% if v.is_winner %} <span class="adm-chip adm-live">Kept: everyone sees this</span>{% endif %}</td><td class="num">{{ v.visitors }}</td><td class="num">{{ v.pen_views_each }}</td><td class="num">{{ v.converters }}</td><td class="num">{{ v.rate }}</td></tr>
+      {% endfor %}
+    </table>
+    {% if e.status == "running" && !e.enough %}<p class="adm-hint">Too early to call: with fewer than 100 visitors per version the gap is mostly luck.</p>{% endif %}
+    <form class="adm-inline-form" method="post" action="/admin/experiments/{{ e.key }}/">
+      <input type="hidden" name="csrf" value="{{ page.csrf }}">
+      {% if e.status == "running" %}
+      <label>Finish and keep <select name="winner">{% for v in e.variants %}<option value="{{ v.key }}">{{ v.label }}</option>{% endfor %}</select></label>
+      <button class="btn" type="submit" name="action" value="stop">Finish</button>
+      <button class="btn btn-ghost" type="submit" name="action" value="reset">Cancel it (the site goes back to your own settings)</button>
+      {% else if e.status == "stopped" %}
+      <button class="btn btn-outline" type="submit" name="action" value="start">Run it again</button>
+      <button class="btn btn-ghost" type="submit" name="action" value="reset">Forget the result (the site goes back to your own settings)</button>
+      {% else %}
+      <button class="btn" type="submit" name="action" value="start">Start</button>
+      {% endif %}
+    </form>
+  </section>
+  {% endfor %}
+</div>
+{% endblock %}

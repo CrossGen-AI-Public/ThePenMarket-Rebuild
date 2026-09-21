@@ -20,6 +20,17 @@ pub struct Config {
     pub guide_rate_per_min: u32,
     /// Where lockout alerts go besides the admin (CrossGen), e.g. brittany.iversen@crossgen-ai.com.
     pub admin_alert_email: String,
+    /// Where the repair, sell and contact forms (and guide handoffs) are e-mailed. `FORMS_TO`.
+    pub forms_to: String,
+    /// Where Trading Post submissions are e-mailed. `TRADING_POST_TO`.
+    pub trading_post_to: String,
+    /// eBay Browse API keys for the sourcing watchlist (`EBAY_APP_ID`, `EBAY_CERT_ID`); empty = the
+    /// watchlist still works, with prepared marketplace searches instead of fetched listings.
+    pub ebay_app_id: String,
+    pub ebay_cert_id: String,
+    /// Google Places API key for his rating and reviews (`GOOGLE_PLACES_KEY`); empty = only the
+    /// "Review us on Google" link works.
+    pub google_places_key: String,
 }
 
 /// Load `~/.config/thepenmarket.env` if present (local runs), then read the environment.
@@ -65,5 +76,10 @@ pub fn load() -> anyhow::Result<Config> {
         guide_ai_model: env("GUIDE_AI_MODEL"),
         guide_rate_per_min: env("GUIDE_RATE_PER_MIN").parse().unwrap_or(10),
         admin_alert_email: env("ADMIN_ALERT_EMAIL"),
+        forms_to: if env("FORMS_TO").is_empty() { "info@thepenmarket.com".to_string() } else { env("FORMS_TO") },
+        trading_post_to: if env("TRADING_POST_TO").is_empty() { "tradingpost@thepenmarket.com".to_string() } else { env("TRADING_POST_TO") },
+        ebay_app_id: env("EBAY_APP_ID"),
+        ebay_cert_id: env("EBAY_CERT_ID"),
+        google_places_key: env("GOOGLE_PLACES_KEY"),
     })
 }

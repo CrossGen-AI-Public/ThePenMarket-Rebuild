@@ -22,6 +22,9 @@
       <input id="q" type="search" name="q" placeholder="Search {{ page.nav_counts.live_total }} pens by name, brand, era or nib" autocomplete="off">
       <button type="submit" class="btn">Search</button>
     </form>
+    {% if !page.popular_searches.is_empty() %}
+    <p class="wrap search-popular"><span>Popular searches</span>{% for ps in page.popular_searches %}<a href="/shop/?q={{ ps|urlencode }}" rel="nofollow">{{ ps }}</a>{% endfor %}</p>
+    {% endif %}
   </div>
   <div id="sheet" class="sheet" hidden>
     <div class="wrap sheet-cols">
@@ -46,6 +49,7 @@
       <div>
         <h2>Read and reach us</h2>
         <a href="/blog/">Blog</a>
+        <a href="/faq/">FAQ</a>
         <a href="/about-us/">About Us</a>
         <a href="/contact/">Contact Us</a>
         <a href="tel:+18477085062">(847) 708-5062</a>

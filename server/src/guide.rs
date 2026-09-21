@@ -40,7 +40,10 @@ pub fn system_prompt(state: &State) -> String {
     let cat = state.catalog();
     let s = engine::stats(&cat);
     let cats: Vec<String> = s.by_category.iter().map(|c| format!("{} {}", c.count, c.name)).collect();
-    format!(
+    // The FAQs Nathaniel keeps in the admin (and marked for the guide), in his words.
+    let faqs: String = state.site().guide_faqs.iter().map(|(q, a)| format!("\nQ: {q}\nA: {a}")).collect();
+    let faq_block = if faqs.is_empty() { String::new() } else { format!("\nNATHANIEL'S OWN ANSWERS to questions he gets all the time. When a visitor asks one of these, answer with his answer, kept short, and do not add facts to it:{faqs}") };
+    let base = format!(
         "You are Ask the Pen Market, the AI guide on ThePenMarket.com, Nathaniel Cerf's vintage pen shop (online since 2007, Norwich, Connecticut). You are an AI, not Nathaniel; say so if asked. Nathaniel restores and sells vintage fountain pens and pre-owned luxury pens, one of each, repairs vintage pens, buys and consigns collections, and runs the Trading Post classifieds ($5 a listing, $125 a year for Unlimited Posts). The blog is Drippy Musings.
 Voice: plain, warm, a little wry, collector to collector, like his blog. Short messages: at most three short sentences or a short list. One question at a time. Plain text only: no markdown, no asterisks, no headings, no emojis, no em dashes.
 The catalog right now: {live} items in stock ({cats}), {min} to {max}, {brands} brands with stock. Never repeat these counts from memory later; call the tools.
@@ -57,7 +60,8 @@ RULES:
 - When the visitor wants a repair estimate, wants to sell, wants a pen over $1,000, or asks for a person, call handoff with a two-sentence summary; then give the phone (847) 708-5062 and info@thepenmarket.com.
 - HARD RULE: if the visitor's first message already contains a budget or a pen description, your first action is find_pens, not a question.",
         live = s.live_total, cats = cats.join(", "), min = fmt_dollars(s.price_min_cents), max = fmt_dollars(s.price_max_cents), brands = s.brands_with_stock
-    )
+    );
+    format!("{base}{faq_block}")
 }
 
 pub fn tools() -> Vec<Value> {
@@ -121,7 +125,9 @@ pub async fn run_tool(state: &State, name: &str, args: &Value) -> (Value, Option
         },
         "handoff" => {
             let summary = s("summary").unwrap_or_default();
-            let _ = db::save_form(&state.pool, "guide_handoff", json!({"summary": summary}), None).await;
+            if let Ok(id) = db::save_form(&state.pool, "guide_handoff", json!({"summary": summary}), None).await {
+                crate::routes::forms::notify(state, "guide_handoff", id, &json!({"summary": summary}), false);
+            }
             (json!({"ok": true, "phone": "(847) 708-5062", "email": "info@thepenmarket.com"}), Some(json!({"summary": summary})))
         }
         _ => (json!({"error": "unknown tool"}), None),

@@ -62,7 +62,8 @@ with sync_playwright() as p:
         pg.fill("input[name=code]", code)
         with pg.expect_navigation(wait_until="load"):
             pg.click(".admin-box button[type=submit]")
-    assert "/admin/" not in pg.url or pg.url.endswith("/shop/"), f"unexpected page after sign-in: {pg.url}"
+    assert pg.url.rstrip("/").endswith("/admin"), f"unexpected page after sign-in: {pg.url}"
+    shot(pg, "admin-home-1440")
 
     # a product page with editing on
     pg.goto(f"{base}/shop/", wait_until="load")
@@ -90,11 +91,29 @@ with sync_playwright() as p:
     pg.goto(f"{base}/admin/history/", wait_until="load")
     assert pg.locator("td:has-text('(gate)')").count() >= 1, "history missing the edit"
     shot(pg, "admin-history-1440")
+    # every admin page added after the 2026-09-14 meeting renders, at desktop and phone width
+    pages = ["/admin/", "/admin/inbox/", "/admin/posts/", "/admin/posts/new/", "/admin/pages/", "/admin/pages/new/", "/admin/faqs/", "/admin/settings/", "/admin/brands/", "/admin/insights/", "/admin/experiments/", "/admin/sourcing/"]
+    for path in pages:
+        r = pg.goto(f"{base}{path}", wait_until="load")
+        if not r or r.status != 200: bad.append(f"{path} answered {r.status if r else 'nothing'}")
+    pg.goto(f"{base}/admin/posts/new/", wait_until="load")
+    assert pg.locator(".adm-rte-bar button").count() >= 10, "the writing toolbar did not load"
+    shot(pg, "admin-post-new-1440")
+    pg.goto(f"{base}/admin/insights/", wait_until="load"); shot(pg, "admin-insights-1440")
+    # the heat map toggles on a customer page
+    pg.goto(f"{base}/shop/", wait_until="load")
+    pg.click("#admHeat"); pg.wait_for_selector(".heat-panel")
+    assert pg.locator(".heat-layer").count() == 1, "the heat map layer did not draw"
+    pg.click("#admHeat")
     # phone width
     ctx2 = b.new_context(viewport={"width": 390, "height": 844}, storage_state=ctx.storage_state())
     m = ctx2.new_page(); m.goto(f"{base}{href}", wait_until="load"); shot(m, "admin-product-390")
     over = m.evaluate("document.documentElement.scrollWidth - document.documentElement.clientWidth")
     if over > 0: bad.append(f"overflow {over}px at 390 on the product page with editing on")
+    for path in pages:
+        m.goto(f"{base}{path}", wait_until="load")
+        over = m.evaluate("document.documentElement.scrollWidth - document.documentElement.clientWidth")
+        if over > 0: bad.append(f"overflow {over}px at 390 on {path}")
     b.close()
 
 for line in bad: print(line)

@@ -21,9 +21,10 @@
 <link rel="stylesheet" href="/static/css/site.css?v={{ page.asset_v }}">
 {% if page.admin.is_some() || page.section == "admin" %}<link rel="stylesheet" href="/static/css/admin.css?v={{ page.asset_v }}">{% endif %}
 {% if !page.jsonld.is_empty() %}<script type="application/ld+json">{{ page.jsonld|safe }}</script>{% endif %}
+<script src="/static/js/classic.js?v={{ page.asset_v }}"></script>
 {% block head %}{% endblock %}
 </head>
-<body class="section-{{ page.section }}">
+<body class="section-{{ page.section }}"{% if !page.experiments.is_empty() %} data-exp="{{ page.experiments }}"{% endif %}>
 <a class="skip" href="#main">Skip to content</a>
 {% include "partials/admin_bar.html" %}
 {% include "partials/header.html" %}
@@ -32,7 +33,7 @@
 </main>
 {% include "partials/footer.html" %}
 <script src="/static/js/site.js?v={{ page.asset_v }}" defer></script>
-{% if page.admin.is_some() %}<script src="/static/js/admin.js?v={{ page.asset_v }}" defer></script>{% endif %}
+{% if page.admin.is_some() %}<script src="/static/js/admin.js?v={{ page.asset_v }}" defer></script><script src="/static/js/heatmap.js?v={{ page.asset_v }}" defer></script>{% else %}<script src="/static/js/track.js?v={{ page.asset_v }}" defer></script>{% endif %}
 {% block scripts %}{% endblock %}
 </body>
 </html>

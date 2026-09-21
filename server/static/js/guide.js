@@ -108,6 +108,7 @@
   function send(text) {
     text = (text || "").trim(); if (!text || state.busy) return;
     inputEl.value = ""; bubble("me", text); quickEl.innerHTML = "";
+    if (window.pmTrack) window.pmTrack("search", { q: text.slice(0, 120), source: "guide" });
     if (state.mode === "offline") { offline(); return; }
     state.turns.push({ role: "user", content: text });
     state.busy = true; sendEl.disabled = true;

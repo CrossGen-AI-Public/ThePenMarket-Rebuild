@@ -15,23 +15,15 @@
         {% if !featured.nib.is_empty() %}<div><dt>Nib</dt><dd>{{ featured.nib }}</dd></div>{% else %}<div><dt>Price</dt><dd>{% if featured.on_sale %}{{ featured.sale_price }}{% else %}{{ featured.price }}{% endif %}</dd></div>{% endif %}
       </dl>
       <a class="btn btn-hero" href="{{ featured_cat_url }}">Browse {{ featured.category }}</a>
-      <div class="hero-thumbs">
-        {% for p in hero_thumbs %}
-        <a class="hero-thumb" href="{{ p.url }}">
-          <span class="hero-thumb-img">{% if !p.image.is_empty() %}<img src="{{ p.image }}" alt="" loading="lazy" decoding="async">{% endif %}</span>
-          <span class="hero-thumb-row"><span class="hero-thumb-name">{{ p.short_title }}</span><span class="hero-thumb-price">{% if p.on_sale %}{{ p.sale_price }}{% else %}{{ p.price }}{% endif %}</span></span>
-        </a>
-        {% endfor %}
-      </div>
     </div>
-    <div class="hero-stage" id="heroStage">
+    <div class="hero-stage{% if hero_photo %} is-photo{% endif %}" id="heroStage"{% if hero_photo %} data-static="1"{% endif %}>
       <canvas id="scene" data-name="{{ featured.short_title }}" data-photo="{{ featured_image }}" data-trim="{{ featured_trim }}" data-pattern="{{ featured_pattern }}" data-kind="{{ featured_kind }}" data-mechanism="{{ featured.mechanism }}" data-nib="{{ featured.nib }}" data-era="{{ featured.era }}" data-url="{{ featured.url }}" aria-label="3D model of the {{ featured.short_title }}" role="img"></canvas>
       <a class="hero-fallback" href="{{ featured.url }}">{% if !featured_image.is_empty() %}<img src="{{ featured_image }}" alt="{{ featured.image_alt }}" decoding="async">{% endif %}</a>
       <div class="hotspots" id="hotspots" aria-hidden="true"></div>
     </div>
     <nav class="hero-cats" aria-label="Shop by category">
-      <a href="/product-category/vintage-pens/"{% if featured.category_slug == "vintage-pens" %} aria-current="true"{% endif %}>Vintage</a>
-      <a href="/product-category/pre-owned-pens/"{% if featured.category_slug == "pre-owned-pens" %} aria-current="true"{% endif %}>Pre-Owned</a>
+      <a href="/product-category/vintage-pens/" title="Vintage pens: restored fountain pens from before 1980"{% if featured.category_slug == "vintage-pens" %} aria-current="true"{% endif %}>Vintage Pens</a>
+      <a href="/product-category/pre-owned-pens/" title="Pre-owned pens: modern luxury pens, tested and guaranteed"{% if featured.category_slug == "pre-owned-pens" %} aria-current="true"{% endif %}>Pre-Owned Pens</a>
       <a href="/product-category/pencils/"{% if featured.category_slug == "pencils" %} aria-current="true"{% endif %}>Pencils</a>
       <a href="/product-category/inkwells-blotters/">Inkwells</a>
       <a href="/product-category/camera/">Cameras</a>
@@ -53,6 +45,18 @@
     {% endfor %}
   </div>
 </section>
+
+{% if !popular.is_empty() %}
+<section class="wrap section" id="popular">
+  <div class="section-head">
+    <h2>Most Popular</h2>
+    <a class="more" href="/shop/?sort=popular">See what others are viewing</a>
+  </div>
+  <div class="grid grid-4">
+    {% for p in popular %}{% call m::card(p) %}{% endfor %}
+  </div>
+</section>
+{% endif %}
 
 <section class="wrap section" id="new">
   <div class="section-head">
@@ -106,6 +110,24 @@
     </div>
   </div>
 </section>
+
+{% if let Some(g) = google_reviews %}
+<section class="wrap section" id="reviews">
+  <div class="section-head">
+    <h2>Reviews on Google</h2>
+    {% if !g.maps_url.is_empty() %}<a class="more" href="{{ g.maps_url }}" rel="noopener" target="_blank">{{ g.rating_label() }} out of 5 from {{ g.count }} reviews on Google</a>{% endif %}
+  </div>
+  <div class="grid grid-3 reviews-grid">
+    {% for r in g.reviews %}
+    <figure class="review">
+      <p class="review-stars" aria-label="{{ r.stars }} out of 5 stars">{% for i in 0..5 %}{% if i < r.stars %}★{% else %}☆{% endif %}{% endfor %}</p>
+      <blockquote>{{ r.text }}</blockquote>
+      <figcaption>{{ r.author }}{% if !r.when.is_empty() %} · {{ r.when }}{% endif %} · Google review</figcaption>
+    </figure>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
 
 <section class="wrap section" id="blog">
   <div class="section-head">

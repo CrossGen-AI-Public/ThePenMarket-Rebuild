@@ -126,6 +126,7 @@ pub async fn post_form(AxState(state): AxState<State>, Extension(cookie): Extens
 pub async fn post_submit(AxState(state): AxState<State>, Extension(cookie): Extension<CsrfCookie>, ConnectInfo(peer): ConnectInfo<std::net::SocketAddr>, headers: HeaderMap, mp: Multipart) -> AppResult {
     let f = forms::read_multipart(&state, &cookie, peer, &headers, mp, &["item", "era", "price", "contact"]).await?;
     let id = db::save_form(&state.pool, "trading_post", f.fields.clone(), f.photo_key.clone()).await?;
+    forms::notify(&state, "trading_post", id, &f.fields, f.photo_key.is_some());
     let page = PageMeta::new(&state, "Listing received (demo) | ThePenMarket.com", "Demo submission stored; no payment was taken and nothing was published.", "/post-your-product/");
     html(&FormDoneTpl {
         page,

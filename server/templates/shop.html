@@ -48,13 +48,15 @@
 
   <section class="results">
     <div class="results-bar">
-      <span class="results-count"><strong class="mono">{{ total }}</strong> {% if total == 1 %}result{% else %}results{% endif %}</span>
+      <span class="results-count" data-results-total="{{ total }}" data-results-q="{{ q }}"><strong class="mono">{{ total }}</strong> {% if total == 1 %}result{% else %}results{% endif %}</span>
       <form class="sort" method="get" action="{{ base_path }}">
         {% if !q.is_empty() %}<input type="hidden" name="q" value="{{ q }}">{% endif %}
         {% for h in hidden_fields %}<input type="hidden" name="{{ h.0 }}" value="{{ h.1 }}">{% endfor %}
         <label for="sort">Sort</label>
         <select id="sort" name="sort" data-autosubmit>
+          {% if !q.is_empty() %}<option value="relevance"{% if sort == "relevance" %} selected{% endif %}>Best match</option>{% endif %}
           <option value="newest"{% if sort == "newest" %} selected{% endif %}>Newest first</option>
+          <option value="popular"{% if sort == "popular" %} selected{% endif %}>Most viewed</option>
           <option value="price-asc"{% if sort == "price-asc" %} selected{% endif %}>Price: low to high</option>
           <option value="price-desc"{% if sort == "price-desc" %} selected{% endif %}>Price: high to low</option>
           <option value="name"{% if sort == "name" %} selected{% endif %}>Name</option>

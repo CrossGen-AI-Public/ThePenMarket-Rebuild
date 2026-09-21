@@ -8,6 +8,8 @@
   var canvas = document.getElementById("scene");
   if (!canvas || !window.THREE) return;
   var T = window.THREE, stage = canvas.parentElement, hotspotsEl = document.getElementById("hotspots");
+  // The photograph stays when this visitor is in the photo arm of the hero experiment or chose Classic view.
+  if (stage.getAttribute("data-static") === "1" || document.documentElement.classList.contains("classic")) return;
   var d = canvas.dataset;
   var reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -195,13 +197,34 @@
     ];
     list.forEach(function (it) {
       if (!anchors[it.key] || !it.label) return;
-      var dot = document.createElement("span"); dot.className = "hotspot"; dot.textContent = "+";
+      var dot = document.createElement("button"); dot.type = "button"; dot.className = "hotspot"; dot.textContent = "+";
+      dot.setAttribute("aria-label", "Look closer: " + it.label); dot.setAttribute("aria-pressed", "false");
       var lab = document.createElement("span"); lab.className = "hotspot-label"; lab.textContent = it.label;
       if (!it.show) lab.style.display = "none";
       hotspotsEl.appendChild(dot); hotspotsEl.appendChild(lab);
-      spots.push({ anchor: anchors[it.key], dot: dot, label: lab });
+      var sp = { anchor: anchors[it.key], dot: dot, label: lab, show: !!it.show };
+      dot.addEventListener("click", function (e) { e.stopPropagation(); setFocus(focus === sp ? null : sp); });
+      spots.push(sp);
     });
+    hotspotsEl.removeAttribute("aria-hidden");
   }
+
+  // Click a "+" and the camera moves in on that part of the pen; click it again (or Escape, or
+  // anywhere else) and it pulls back. The spin holds still while a part is in focus.
+  var focus = null, camPos = new T.Vector3(), camLook = new T.Vector3(), wantPos = new T.Vector3(), wantLook = new T.Vector3();
+  function setFocus(sp) {
+    focus = sp;
+    spots.forEach(function (x) {
+      var on = x === sp;
+      x.dot.classList.toggle("is-on", on); x.dot.textContent = on ? "–" : "+"; x.dot.setAttribute("aria-pressed", on ? "true" : "false");
+      x.label.classList.toggle("is-focus", on);
+      x.label.style.display = on || (!sp && x.show) ? "" : "none";
+    });
+    stage.classList.toggle("is-zoomed", !!sp);
+    if (reduced) frame(performance.now()); else if (!raf) loop();
+  }
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape" && focus) setFocus(null); });
+  document.addEventListener("click", function (e) { if (focus && !stage.contains(e.target)) setFocus(null); });
   var v = new T.Vector3();
   function placeHotspots(w, h) {
     spots.forEach(function (sp) {
@@ -217,7 +240,7 @@
   function resize() {
     var r = stage.getBoundingClientRect(); w = Math.max(1, r.width); h = Math.max(1, r.height);
     renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
-    camera.position.z = w < 520 ? 19 : (w < 700 ? 16 : 13.2);
+    camInit = false;
   }
   var tilt = { x: 0, y: 0 }, target = { x: 0, y: 0 };
   if (!reduced) {
@@ -225,15 +248,24 @@
       var r = stage.getBoundingClientRect(); target.y = ((e.clientX - r.left) / r.width - 0.5) * 0.5; target.x = ((e.clientY - r.top) / r.height - 0.5) * 0.18;
     }, { passive: true });
   }
-  var visible = true, raf = null, t0 = performance.now();
+  var visible = true, raf = null, t0 = performance.now(), camInit = false;
   if ("IntersectionObserver" in window) new IntersectionObserver(function (es) { visible = es[0].isIntersecting; if (visible && !raf) loop(); }, { threshold: 0.05 }).observe(stage);
+  var lastNow = performance.now();
   function frame(now) {
     var t = (now - t0) / 1000;
-    if (!reduced) { tilt.x += (target.x - tilt.x) * 0.06; tilt.y += (target.y - tilt.y) * 0.06; pen.rotation.y = t * 0.35 + tilt.y; pen.rotation.x = tilt.x; }
+    if (focus) { t0 += now - lastNow; }
+    else if (!reduced) { tilt.x += (target.x - tilt.x) * 0.06; tilt.y += (target.y - tilt.y) * 0.06; pen.rotation.y = t * 0.35 + tilt.y; pen.rotation.x = tilt.x; }
     else { pen.rotation.y = 0.6; }
     pen.updateMatrixWorld();
+    var baseZ = w < 520 ? 19 : (w < 700 ? 16 : 13.2);
+    if (focus) { wantLook.copy(focus.anchor).applyMatrix4(pen.matrixWorld); wantPos.set(wantLook.x * 0.7, wantLook.y + 0.2, baseZ * 0.5); }
+    else { wantLook.set(0, 0, 0); wantPos.set(0, 0.6, baseZ); }
+    if (!camInit || reduced) { camPos.copy(wantPos); camLook.copy(wantLook); camInit = true; }
+    else { camPos.lerp(wantPos, 0.08); camLook.lerp(wantLook, 0.08); }
+    camera.position.copy(camPos); camera.lookAt(camLook);
     renderer.render(scene, camera);
     placeHotspots(w, h);
+    lastNow = now;
   }
   function loop() { raf = null; if (!visible) return; frame(performance.now()); if (!reduced) raf = requestAnimationFrame(loop); }
   window.addEventListener("resize", function () { resize(); if (reduced) frame(performance.now()); });

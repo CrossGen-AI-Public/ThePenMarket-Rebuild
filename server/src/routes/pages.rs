@@ -167,10 +167,14 @@ pub struct GenericPageTpl {
     pub modified: String,
 }
 
+const VISIT_COUNTING_NOTE: &str = "<h2 id=\"visit-counting\">How this site counts visits</h2><p>This site counts visits itself, on its own server, to learn which pages and pens are useful. It sets one cookie holding a random number, and records pages viewed, searches, clicks and how far a page was scrolled against that number. It does not record your name, e-mail address or IP address with them, nothing is sent to an advertising or analytics company, and records are deleted after 400 days. If your browser sends Do Not Track or Global Privacy Control, no cookie is set and nothing is counted.</p>";
+
 pub async fn privacy(AxState(state): AxState<State>) -> AppResult {
     let p = db::page(&state.pool, "privacy").await?.ok_or(AppError::NotFound)?;
     let mut page = PageMeta::new(&state, "Privacy Policy | ThePenMarket.com", "How ThePenMarket.com collects, uses and protects your personal information.", "/privacy/");
     page.section = "privacy".into();
     page = page.with_jsonld(vec![org_node(&state), breadcrumb_node(&state, &[("Home", "/"), ("Privacy Policy", "/privacy/")])]);
-    html(&GenericPageTpl { page, heading: p.title, body_html: p.body_html, modified: p.modified_at.format("%B %-d, %Y").to_string() })
+    // His policy, verbatim, followed by what this build itself does (kept in step with insights.rs).
+    let body_html = format!("{}{}", p.body_html, VISIT_COUNTING_NOTE);
+    html(&GenericPageTpl { page, heading: p.title, body_html, modified: p.modified_at.format("%B %-d, %Y").to_string() })
 }

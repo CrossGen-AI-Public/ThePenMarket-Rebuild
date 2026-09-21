@@ -104,7 +104,8 @@ pub async fn sitemap_posts(AxState(state): AxState<State>) -> AppResult {
 
 pub async fn sitemap_pages(AxState(state): AxState<State>) -> AppResult {
     let t = today();
-    let entries: Vec<(String, String)> = ["/", "/about-us/", "/contact/", "/guarantee/", "/pen-repairs/", "/sell-my-pens/", "/privacy/", "/post-your-product/"].iter().map(|p| (p.to_string(), t.clone())).collect();
+    let mut entries: Vec<(String, String)> = ["/", "/about-us/", "/contact/", "/guarantee/", "/pen-repairs/", "/sell-my-pens/", "/privacy/", "/post-your-product/", "/faq/", "/site-map/"].iter().map(|p| (p.to_string(), t.clone())).collect();
+    entries.extend(db::custom_pages(&state.pool).await?.into_iter().map(|(_, slug)| (format!("/{slug}/"), t.clone())));
     xml(urlset(&state, &entries))
 }
 

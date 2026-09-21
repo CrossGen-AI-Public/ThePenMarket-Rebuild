@@ -142,6 +142,45 @@
     $$(".thumb", thumbs).forEach(decorate);
     var add = document.createElement("label"); add.className = "adm-add-photo"; add.innerHTML = '+ Photo<input type="file" accept="image/*" capture="environment">';
     thumbs.appendChild(add);
+    var maxPhotos = 14;
+    function photoCount() { return $$(".thumb", thumbs).length; }
+    function addThumb(j) {
+      var b = document.createElement("button"); b.type = "button"; b.className = "thumb"; b.setAttribute("data-image-id", j.id); b.setAttribute("data-large", j.large); b.setAttribute("data-full", j.full);
+      b.innerHTML = '<img src="' + j.thumb + '" alt="">'; thumbs.insertBefore(b, add); decorate(b);
+      var big = $("#galleryImg"); if (big && !big.getAttribute("src")) big.src = j.large;
+    }
+
+    // ---- guided photo shoot: the site asks for each shot on his list, names it and files it in order ----
+    var guided = document.createElement("button"); guided.type = "button"; guided.className = "adm-guided"; guided.textContent = "Guided photo shoot";
+    thumbs.appendChild(guided);
+    guided.addEventListener("click", function () {
+      loadOptions().then(function (o) {
+        maxPhotos = o.max_photos || maxPhotos;
+        var shots = (o.shots || []).slice(), i = 0, taken = 0;
+        var m = document.createElement("div"); m.className = "adm-modal";
+        m.innerHTML = '<form class="adm-shoot"><p class="adm-shoot-step"></p><h2></h2><p class="adm-shoot-hint">Take the photo with this phone or tablet, or choose one you already have. It is named and put in the right place for you.</p><label class="adm-btn adm-red adm-shoot-pick">Take or choose the photo<input type="file" accept="image/*" capture="environment" hidden></label><div class="row"><button type="button" class="adm-editor cancel" data-skip>Skip this shot</button><button type="button" class="adm-editor cancel" data-done>Finish</button></div></form>';
+        document.body.appendChild(m);
+        var step = m.querySelector(".adm-shoot-step"), head = m.querySelector("h2"), pick = m.querySelector("input[type=file]");
+        function close() { m.remove(); if (taken) toast(taken + (taken === 1 ? " photo" : " photos") + " added, in shot order."); }
+        function show() {
+          if (i >= shots.length || photoCount() >= maxPhotos) { close(); if (photoCount() >= maxPhotos) toast("That's " + maxPhotos + " photos, the most a pen holds."); return; }
+          step.textContent = "Shot " + (i + 1) + " of " + shots.length; head.textContent = shots[i];
+        }
+        m.querySelector("[data-skip]").addEventListener("click", function () { i++; show(); });
+        m.querySelector("[data-done]").addEventListener("click", close);
+        pick.addEventListener("change", function () {
+          var f = pick.files && pick.files[0]; pick.value = ""; if (!f) return;
+          if (f.size > 10 * 1024 * 1024) { toast("Photos must be under 10 MB.", true); return; }
+          var fd = new FormData(); fd.append("shot", shots[i]); fd.append("photo", f);
+          head.textContent = "Uploading…";
+          api("POST", "/admin/api/product/" + pid + "/photo/", fd, true).then(function (j) {
+            if (!j.ok) { toast(j.error || "Upload failed.", true); show(); return; }
+            addThumb(j); taken++; i++; show();
+          }).catch(function () { toast("The connection dropped. Try that shot again.", true); show(); });
+        });
+        show();
+      });
+    });
     add.querySelector("input").addEventListener("change", function () {
       var f = this.files && this.files[0]; if (!f) return;
       if (f.size > 10 * 1024 * 1024) { toast("Photos must be under 10 MB.", true); return; }
@@ -149,11 +188,26 @@
       toast("Uploading…");
       api("POST", "/admin/api/product/" + pid + "/photo/", fd, true).then(function (j) {
         if (!j.ok) { toast(j.error || "Upload failed.", true); return; }
-        var b = document.createElement("button"); b.type = "button"; b.className = "thumb"; b.setAttribute("data-image-id", j.id); b.setAttribute("data-large", j.large); b.setAttribute("data-full", j.full);
-        b.innerHTML = '<img src="' + j.thumb + '" alt="">'; thumbs.insertBefore(b, add); decorate(b); toast("Photo added.");
-        var big = $("#galleryImg"); if (big && !big.getAttribute("src")) big.src = j.large;
+        addThumb(j); toast("Photo added.");
       });
       this.value = "";
+    });
+  }
+
+  // ---- feature this pen on the homepage -----------------------------------------------------------
+  if (art && (art.getAttribute("data-product-status") || "live") === "live") {
+    var featPid = parseInt(art.getAttribute("data-product-id"), 10);
+    var feat = document.createElement("button"); feat.type = "button"; feat.className = "adm-feature";
+    var statusBox = $(".adm-status"); if (statusBox) statusBox.insertAdjacentElement("afterend", feat);
+    var isFeatured = false;
+    var paintFeat = function () { feat.textContent = isFeatured ? "★ On the homepage now. Click to go back to the newest pen" : "☆ Feature on the homepage"; feat.setAttribute("aria-pressed", isFeatured ? "true" : "false"); };
+    loadOptions().then(function (o) { isFeatured = o.featured_product_id === featPid; paintFeat(); });
+    feat.addEventListener("click", function () {
+      api("POST", "/admin/api/featured/", { product_id: isFeatured ? null : featPid }).then(function (j) {
+        if (!j.ok) { toast(j.error || "That didn't save.", true); return; }
+        isFeatured = !isFeatured; options = null; paintFeat();
+        toast(isFeatured ? "This pen now leads the homepage." : "The homepage is back to the newest pen.");
+      });
     });
   }
 

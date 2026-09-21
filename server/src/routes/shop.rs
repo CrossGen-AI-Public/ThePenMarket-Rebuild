@@ -166,7 +166,8 @@ async fn render_archive(state: &State, base: &str, q: ShopQuery, fixed: Fixed, h
         min_c = Some(pr.min_cents);
         max_c = pr.max_cents;
     }
-    let sort = q.sort.clone().unwrap_or_else(|| "newest".into());
+    let has_q = q.q.as_deref().map(|s| !s.trim().is_empty()).unwrap_or(false);
+    let sort = q.sort.clone().unwrap_or_else(|| if has_q { "relevance".into() } else { "newest".into() });
     let page_n = q.page.unwrap_or(1).max(1);
     let filter = ShopFilter {
         category: fixed.category.clone().or_else(|| q.cat.clone()),
@@ -184,7 +185,22 @@ async fn render_archive(state: &State, base: &str, q: ShopQuery, fixed: Fixed, h
         page: page_n,
         per_page: PER_PAGE,
     };
-    let result = db::shop(&state.pool, &filter, &ranges).await?;
+    let mut result = db::shop(&state.pool, &filter, &ranges).await?;
+
+    // Brand order: his pins first, then stock count (the query's order) or visitor interest.
+    let brand_exp = crate::insights::variant(state, "brand-order");
+    let brand_mode = match &brand_exp {
+        Some(a) => a.variant.clone(),
+        None => crate::settings::brand_order(&state.pool).await?,
+    };
+    if brand_mode == "popular" {
+        let interest = crate::insights::brand_interest(&state.pool, 90).await?;
+        let pinned = db::pinned_brand_slugs(&state.pool).await?;
+        let (mut head, mut tail): (Vec<FacetOption>, Vec<FacetOption>) = result.facets.brands.drain(..).partition(|o| pinned.contains(&o.slug));
+        tail.sort_by(|a, b| interest.get(&b.slug).unwrap_or(&0).cmp(interest.get(&a.slug).unwrap_or(&0)).then(b.count.cmp(&a.count)).then(a.name.cmp(&b.name)));
+        head.append(&mut tail);
+        result.facets.brands = head;
+    }
 
     let mut facets = vec![];
     if fixed.category.is_none() {
@@ -273,6 +289,9 @@ async fn render_archive(state: &State, base: &str, q: ShopQuery, fixed: Fixed, h
         nodes.push(serde_json::json!({"@type": "DefinedTerm", "@id": state.abs(&format!("{base}#term")), "name": heading, "description": term_definition, "inDefinedTermSet": {"@type": "DefinedTermSet", "@id": state.abs("/sitemap-terms.xml#terms"), "name": format!("ThePenMarket.com {term_kind} glossary")}}));
     }
     page = page.with_jsonld(nodes);
+    if fixed.brand.is_none() {
+        page.experiments = crate::insights::exposure_attr(&[("brand-order", &brand_exp)]);
+    }
 
     let mut hidden_fields = vec![];
     for (k, v) in [("cat", &q.cat), ("brand", &q.brand), ("era", &q.era), ("nib", &q.nib), ("fill", &q.fill), ("price", &q.price)] {

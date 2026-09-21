@@ -69,13 +69,53 @@ pub struct AppState {
     pub asset_v: String,
     pub mailer: Arc<dyn crate::admin::mail::Mailer>,
     pub admin_limiter: RateLimiter,
+    pub track_limiter: RateLimiter,
+    /// Small things every page reads that live in the database: experiment states, the searches
+    /// worth suggesting, the custom pages linked from the footer. Refreshed with the catalog and
+    /// whenever the admin changes one of them.
+    pub site: RwLock<Arc<SiteCache>>,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct SiteCache {
+    pub experiments: HashMap<String, crate::insights::ExpState>,
+    pub popular_searches: Vec<String>,
+    /// (title, path) of published custom pages flagged "show in footer".
+    pub footer_pages: Vec<(String, String)>,
+    /// (question, answer) of published FAQs marked for Ask the Pen Market.
+    pub guide_faqs: Vec<(String, String)>,
+    /// "Review us on Google" address, once his Place ID is saved; and what Google last returned.
+    pub review_url: String,
+    pub google_reviews: Option<crate::reviews::Reviews>,
+}
+
+pub async fn load_site_cache(pool: &PgPool) -> anyhow::Result<SiteCache> {
+    Ok(SiteCache {
+        experiments: crate::insights::load_states(pool).await?,
+        popular_searches: crate::insights::popular_searches(pool, 30, 6).await?,
+        footer_pages: crate::db::footer_pages(pool).await?,
+        guide_faqs: crate::db::guide_faqs(pool).await?,
+        review_url: { let id = crate::reviews::place_id(pool).await?; if id.is_empty() { String::new() } else { crate::reviews::write_review_url(&id) } },
+        google_reviews: crate::reviews::cached(pool).await?.filter(|r| !r.reviews.is_empty()),
+    })
+}
+
+pub async fn refresh_site_cache(state: &AppState) {
+    match load_site_cache(&state.pool).await {
+        Ok(c) => {
+            if let Ok(mut w) = state.site.write() {
+                *w = Arc::new(c);
+            }
+        }
+        Err(e) => tracing::warn!("site cache refresh failed: {e:#}"),
+    }
 }
 pub type State = Arc<AppState>;
 
 /// FNV-1a over the bytes of the site's own CSS and JS, as 8 hex characters.
 pub fn asset_version(static_dir: &std::path::Path) -> String {
     let mut h: u64 = 0xcbf29ce484222325;
-    for rel in ["css/site.css", "fonts/fonts.css", "js/site.js", "js/engine.js", "js/guide.js"] {
+    for rel in ["css/site.css", "css/admin.css", "fonts/fonts.css", "js/site.js", "js/engine.js", "js/guide.js", "js/hero.js", "js/track.js", "js/classic.js", "js/admin.js", "js/heatmap.js", "js/editor.js"] {
         if let Ok(bytes) = std::fs::read(static_dir.join(rel)) {
             for b in bytes {
                 h ^= b as u64;
@@ -89,6 +129,9 @@ pub fn asset_version(static_dir: &std::path::Path) -> String {
 impl AppState {
     pub fn catalog(&self) -> Arc<Catalog> {
         self.catalog.read().map(|c| c.clone()).unwrap_or_default()
+    }
+    pub fn site(&self) -> Arc<SiteCache> {
+        self.site.read().map(|c| c.clone()).unwrap_or_default()
     }
     pub fn origin(&self) -> &str {
         &self.cfg.site_origin
@@ -159,6 +202,13 @@ pub struct PageMeta {
     pub admin: Option<crate::admin::AdminCtx>,
     pub admin_csrf: String,
     pub current_path: String,
+    /// `body[data-exp]`: the running experiments this page exposes, "key:variant,...".
+    pub experiments: String,
+    pub popular_searches: Vec<String>,
+    pub footer_pages: Vec<(String, String)>,
+    /// Set on pages the admin can edit somewhere else (a post, a custom page): (label, url).
+    pub edit_link: Option<(String, String)>,
+    pub review_url: String,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -173,6 +223,7 @@ pub struct NavCounts {
 impl PageMeta {
     pub fn new(state: &AppState, title: &str, description: &str, path: &str) -> Self {
         let cat = state.catalog();
+        let site = state.site();
         let s = crate::engine::stats(&cat);
         let pick = |slug: &str| s.by_category.iter().find(|c| c.slug == slug).map(|c| c.count).unwrap_or(0);
         Self {
@@ -189,6 +240,11 @@ impl PageMeta {
             admin_csrf: crate::admin::current().map(|a| a.csrf).unwrap_or_default(),
             admin: crate::admin::current(),
             current_path: path.to_string(),
+            experiments: String::new(),
+            popular_searches: site.popular_searches.clone(),
+            footer_pages: site.footer_pages.clone(),
+            edit_link: None,
+            review_url: site.review_url.clone(),
         }
     }
     pub fn with_jsonld(mut self, blocks: Vec<serde_json::Value>) -> Self {

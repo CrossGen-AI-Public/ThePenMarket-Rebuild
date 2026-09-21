@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="admin-page">
+  <div class="adm-top"><div><h1>Sourcing</h1><p class="lead">The pens you are hunting for. Each one has ready-made searches on the marketplaces and what pens like it are priced at in your own shop, so you can see the margin before you bid.</p></div></div>
+  {% if ebay_connected %}
+  <form class="adm-inline-form" method="post" action="/admin/sourcing/check/"><input type="hidden" name="csrf" value="{{ page.csrf }}"><span>eBay is connected: the site checks it once a day for each pen below and lists what is new.</span> <button class="btn btn-outline" type="submit">Check eBay now</button></form>
+  {% if checked_now %}<div class="adm-ok">Checked.</div>{% endif %}
+  {% else %}
+  <p class="adm-hint">The site can also check eBay for you every day and list new finds here. That needs a free eBay developer key, which CrossGen adds (EBAY_APP_ID and EBAY_CERT_ID in the runbook). Until then, the search links below do the same job one click at a time.</p>
+  {% endif %}
+  <details class="adm-card" open>
+    <summary><b>Add a pen to hunt for</b></summary>
+    <form class="adm-form" method="post" action="/admin/sourcing/">
+      <input type="hidden" name="csrf" value="{{ page.csrf }}">
+      <div class="adm-cols">
+        <div><label for="kw">Search words</label><input id="kw" name="keywords" required maxlength="120" placeholder="Parker 51 aerometric"></div>
+        <div><label for="mx">The most you would pay, in dollars (optional)</label><input id="mx" name="max_price" inputmode="decimal" placeholder="120"></div>
+      </div>
+      <label for="nt">Notes to yourself (optional)</label>
+      <input id="nt" name="notes" maxlength="1000">
+      <div class="adm-actions"><button type="submit" class="btn">Add it</button></div>
+    </form>
+  </details>
+  {% if !suggestions.is_empty() %}
+  <section class="adm-card">
+    <h2>Visitors searched for these and found nothing</h2>
+    <p class="adm-hint">Last 90 days, with how many different visitors asked.</p>
+    <div class="adm-suggest">
+      {% for s in suggestions %}
+      <form method="post" action="/admin/sourcing/"><input type="hidden" name="csrf" value="{{ page.csrf }}"><input type="hidden" name="keywords" value="{{ s.0 }}"><input type="hidden" name="source" value="search-demand"><button type="submit" class="btn btn-outline">+ {{ s.0 }} <span class="muted">({{ s.1 }})</span></button></form>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+  {% for w in wants %}
+  <section class="adm-card{% if w.status == "paused" %} is-done{% endif %}">
+    <h2>{{ w.label }}{% if w.status == "paused" %} <span class="adm-chip">Paused</span>{% endif %}{% if w.source == "search-demand" %} <span class="adm-chip">Visitors asked for it</span>{% endif %}</h2>
+    {% if !w.shop_prices.is_empty() %}<p>{{ w.shop_prices }}{% if !w.max_price.is_empty() %} Your ceiling: ${{ w.max_price }}.{% endif %}</p>{% endif %}
+    {% if !w.notes.is_empty() %}<p class="muted">{{ w.notes }}</p>{% endif %}
+    <p class="adm-links">{% for l in w.links %}<a class="btn btn-outline" href="{{ l.1 }}" target="_blank" rel="noopener noreferrer">{{ l.0 }}</a>{% endfor %}</p>
+    {% if !w.finds.is_empty() %}
+    <table class="adm">
+      <tr><th>Found on eBay</th><th class="num">Asking</th><th>Seen</th><th></th></tr>
+      {% for f in w.finds %}
+      <tr><td><a href="{{ f.url }}" target="_blank" rel="noopener noreferrer">{{ f.title }}</a>{% if f.status == "saved" %} <span class="adm-chip adm-live">Saved</span>{% endif %}</td><td class="num">{{ f.price }}</td><td>{{ f.found }}</td>
+        <td><form class="adm-inline-form" method="post" action="/admin/sourcing/find/{{ f.id }}/"><input type="hidden" name="csrf" value="{{ page.csrf }}">{% if f.status != "saved" %}<button class="btn btn-ghost" type="submit" name="status" value="saved">Save</button>{% endif %}<button class="btn btn-ghost" type="submit" name="status" value="dismissed">Dismiss</button></form></td></tr>
+      {% endfor %}
+    </table>
+    {% else if !w.checked.is_empty() %}<p class="adm-hint">Nothing new on eBay under your ceiling. Last checked {{ w.checked }}.</p>{% endif %}
+    <details class="adm-more">
+      <summary>Change or stop this one</summary>
+      <form class="adm-form" method="post" action="/admin/sourcing/{{ w.id }}/">
+        <input type="hidden" name="csrf" value="{{ page.csrf }}">
+        <label>Name</label><input name="label" value="{{ w.label }}" maxlength="120">
+        <div class="adm-cols">
+          <div><label>Search words</label><input name="keywords" value="{{ w.keywords }}" required maxlength="120"></div>
+          <div><label>The most you would pay, in dollars</label><input name="max_price" value="{{ w.max_price }}" inputmode="decimal"></div>
+        </div>
+        <label>Notes</label><input name="notes" value="{{ w.notes }}" maxlength="1000">
+        <div class="adm-actions">
+          <label>Status</label>
+          <select name="status"><option value="active"{% if w.status == "active" %} selected{% endif %}>Hunting</option><option value="paused"{% if w.status == "paused" %} selected{% endif %}>Paused</option><option value="archived">Found it / stop (removes it from this list)</option></select>
+          <button type="submit" class="btn">Save</button>
+        </div>
+      </form>
+    </details>
+  </section>
+  {% endfor %}
+</div>
+{% endblock %}

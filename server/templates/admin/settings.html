@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="admin-page">
+  <div class="adm-top"><div><h1>Homepage and photos</h1><p class="lead"><a href="/admin/">Admin home</a></p></div></div>
+  {% if saved %}<div class="adm-ok">Saved.</div>{% endif %}
+  <form class="adm-form" method="post" action="/admin/settings/">
+    <input type="hidden" name="csrf" value="{{ page.csrf }}">
+    <h2>The pen at the top of the homepage</h2>
+    {% if featured_title.is_empty() %}
+    <p>Right now it is <b>the newest pen you listed</b>, automatically. To choose one yourself, open that pen's page and press “Feature on the homepage”.</p>
+    {% else %}
+    <p>You chose <a href="{{ featured_url }}"><b>{{ featured_title }}</b></a>. When it sells, the homepage goes back to the newest pen by itself.</p>
+    <label class="adm-check"><input type="checkbox" name="clear_featured" value="1"> Go back to showing the newest pen</label>
+    {% endif %}
+    <h2>Most Popular row</h2>
+    <label class="adm-check"><input type="checkbox" name="popular" value="1"{% if popular_on %} checked{% endif %}> Show a “Most Popular” row on the homepage: the pens the most visitors opened in the last 30 days</label>
+    <p class="adm-hint">It only appears once at least four pens have each been opened by three different visitors, so it never shows a guess.</p>
+    <h2>Guided photo shoot</h2>
+    <p>When you add photos to a pen with “Guided photo shoot”, the site asks for these shots in this order, names each photo for you, and puts them in place. One per line, {{ max_photos }} at most (a pen holds {{ max_photos }} photos).</p>
+    <textarea name="shots" rows="11" aria-label="Shot list">{{ shots }}</textarea>
+    <h2>Google reviews</h2>
+    <p>Reviews live on your Google Business Profile, which is free to set up at business.google.com. Once you have one, paste its Place ID here (find it with Google's “Place ID Finder”). From then on every page carries a “Review us on Google” link that opens the review box for your shop, which is the fastest way to get your first reviews.</p>
+    <label for="place_id">Your Google Place ID</label>
+    <input id="place_id" name="place_id" value="{{ place_id }}" maxlength="200" placeholder="ChIJ…">
+    <p class="adm-hint">{% if places_key_set %}The site checks Google once a day and shows your rating and the reviews Google returns (five at most, its choice) on the homepage, word for word. Until a review exists, nothing is shown. {{ reviews_line }}{% else %}Showing the reviews themselves on the homepage needs a Google key that CrossGen adds (GOOGLE_PLACES_KEY in the runbook). The review link works without it.{% endif %}</p>
+    <div class="adm-actions"><button type="submit" class="btn">Save</button></div>
+  </form>
+  <h2>Where the forms are e-mailed</h2>
+  <table class="adm">
+    <tr><th>Form</th><th>Goes to</th></tr>
+    <tr><td>Repair estimate, Sell my pens, Contact, handoffs from Ask the Pen Market</td><td>{{ forms_to }}</td></tr>
+    <tr><td>Trading Post listings</td><td>{{ trading_post_to }}</td></tr>
+  </table>
+  <p class="adm-hint">{% if mail_connected %}Outgoing e-mail is connected. Every message is also kept in your <a href="/admin/inbox/">inbox</a>.{% else %}Outgoing e-mail is not connected on this server yet, so nothing is sent; every message is kept in your <a href="/admin/inbox/">inbox</a>. CrossGen connects it by setting SMTP_URL (see the runbook).{% endif %} To change an address, tell CrossGen.</p>
+</div>
+{% endblock %}

@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="admin-page">
+  <div class="adm-top"><div><h1>Brands</h1><p class="lead">The order of the Brand filter in the shop. Give a brand a number to pin it to the top (1 is first); leave it blank to let it fall where it falls.</p></div></div>
+  {% if saved %}<div class="adm-ok">Saved. The shop uses the new order now.</div>{% endif %}
+  {% if experiment_running %}<div class="adm-warnbox">The “Brand filter” experiment is deciding the order below the pinned brands right now, so the choice here waits until it is reset. Pins always apply. <a href="/admin/experiments/">See the experiment</a>.</div>{% endif %}
+  <form class="adm-form" method="post" action="/admin/brands/">
+    <input type="hidden" name="csrf" value="{{ page.csrf }}">
+    <fieldset class="adm-radio">
+      <legend>Brands you have not pinned are listed by…</legend>
+      <label><input type="radio" name="mode" value="stock"{% if mode == "stock" %} checked{% endif %}> how many pens are in stock (most first)</label>
+      <label><input type="radio" name="mode" value="popular"{% if mode == "popular" %} checked{% endif %}> how much visitors look at them (most first)</label>
+    </fieldset>
+    <table class="adm">
+      <tr><th>Pin</th><th>Brand</th><th>In stock</th><th>Visitors interested, last 90 days</th></tr>
+      {% for r in rows %}
+      <tr><td><input class="adm-num" name="pin_{{ r.id }}" value="{{ r.pin }}" inputmode="numeric" aria-label="Pin position for {{ r.name }}"></td><td><a href="{{ r.url }}">{{ r.name }}</a></td><td>{{ r.live }}</td><td>{{ r.interest }}</td></tr>
+      {% endfor %}
+    </table>
+    <div class="adm-actions"><button type="submit" class="btn">Save the order</button></div>
+  </form>
+</div>
+{% endblock %}

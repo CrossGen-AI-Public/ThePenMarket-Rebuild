@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% import "partials/macros.html" as m %}
+{% block content %}
+<article class="wrap narrow gloss-term">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Home</a><span aria-hidden="true">›</span><a href="/glossary/">Glossary</a><span aria-hidden="true">›</span><span aria-current="page">{{ t.name }}</span></nav>
+  {% if t.status != "published" %}<p class="adm-ok">Hidden draft: only you can see this page. Publish it from <a href="/admin/glossary/{{ t.id }}/">the editor</a>.</p>{% endif %}
+  <p class="eyebrow">{{ kind_label }}{% if !t.topic.is_empty() && t.kind != "model" %} · {{ t.topic }}{% endif %}</p>
+  <h1>{{ t.name }}</h1>
+  {% if !aliases.is_empty() %}<p class="gloss-aka">Also written: {{ aliases|join(", ") }}</p>{% endif %}
+  {% if !image.is_empty() %}<figure class="gloss-figure"><img src="{{ image }}" alt="{{ t.image_alt }}" loading="lazy" decoding="async"></figure>{% endif %}
+  <div class="prose gloss-definition">
+    {% for p in paragraphs %}<p>{{ p }}</p>{% endfor %}
+    {% if paragraphs.is_empty() %}<p class="muted">No definition yet.</p>{% endif %}
+  </div>
+  <p class="gloss-byline">Explained by Nathaniel Cerf, who restores the pens sold here.{% if !t.source_url.is_empty() %} From <a href="{{ t.source_url }}">{{ t.source_title }}</a>.{% endif %} Spot something wrong? <a href="/contact/">Tell him</a>.</p>
+  {% if make.is_some() || !see_also.is_empty() %}
+  <p class="gloss-see">
+    {% if let Some(mk) = make %}<span>Make: <a href="{{ mk.url }}">{{ mk.name }}</a></span>{% endif %}
+    {% if !see_also.is_empty() %}<span>See also: {% for s in see_also %}<a href="{{ s.url }}">{{ s.name }}</a>{% if !loop.last %}, {% endif %}{% endfor %}</span>{% endif %}
+  </p>
+  {% endif %}
+  <p><a class="btn btn-outline" href="/glossary/">Back to the glossary</a></p>
+</article>
+
+{% if !pens.is_empty() %}
+<section class="wrap band">
+  <div class="band-head"><h2>{% if t.kind == "model" %}In the case now{% else %}Pens in the case that mention it{% endif %}</h2>{% if pens_total > 4 %}<a class="band-link" href="{{ shop_url }}">All {{ pens_total }}</a>{% endif %}</div>
+  <div class="grid grid-4">{% for r in pens %}{% call m::card(r) %}{% endfor %}</div>
+</section>
+{% endif %}
+{% if !posts.is_empty() %}
+<section class="wrap band">
+  <div class="band-head"><h2>From Drippy Musings</h2></div>
+  <div class="grid grid-3">{% for post in posts %}{% call m::postcard(post) %}{% endfor %}</div>
+</section>
+{% endif %}
+{% endblock %}

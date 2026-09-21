@@ -87,6 +87,8 @@ pub struct SiteCache {
     /// "Review us on Google" address, once his Place ID is saved; and what Google last returned.
     pub review_url: String,
     pub google_reviews: Option<crate::reviews::Reviews>,
+    /// Published glossary entries and the approved make / nib / filling / era definitions.
+    pub glossary: Arc<crate::glossary::Glossary>,
 }
 
 pub async fn load_site_cache(pool: &PgPool) -> anyhow::Result<SiteCache> {
@@ -97,6 +99,7 @@ pub async fn load_site_cache(pool: &PgPool) -> anyhow::Result<SiteCache> {
         guide_faqs: crate::db::guide_faqs(pool).await?,
         review_url: { let id = crate::reviews::place_id(pool).await?; if id.is_empty() { String::new() } else { crate::reviews::write_review_url(&id) } },
         google_reviews: crate::reviews::cached(pool).await?.filter(|r| !r.reviews.is_empty()),
+        glossary: Arc::new(crate::glossary::load(pool).await?),
     })
 }
 
@@ -115,7 +118,7 @@ pub type State = Arc<AppState>;
 /// FNV-1a over the bytes of the site's own CSS and JS, as 8 hex characters.
 pub fn asset_version(static_dir: &std::path::Path) -> String {
     let mut h: u64 = 0xcbf29ce484222325;
-    for rel in ["css/site.css", "css/admin.css", "fonts/fonts.css", "js/site.js", "js/engine.js", "js/guide.js", "js/hero.js", "js/track.js", "js/classic.js", "js/admin.js", "js/heatmap.js", "js/editor.js"] {
+    for rel in ["css/site.css", "css/admin.css", "fonts/fonts.css", "js/site.js", "js/engine.js", "js/guide.js", "js/hero.js", "js/track.js", "js/classic.js", "js/admin.js", "js/heatmap.js", "js/editor.js", "js/glossary-admin.js"] {
         if let Ok(bytes) = std::fs::read(static_dir.join(rel)) {
             for b in bytes {
                 h ^= b as u64;
@@ -209,6 +212,8 @@ pub struct PageMeta {
     /// Set on pages the admin can edit somewhere else (a post, a custom page): (label, url).
     pub edit_link: Option<(String, String)>,
     pub review_url: String,
+    /// The glossary is linked from the footer once it has an entry in his words.
+    pub glossary_live: bool,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -245,6 +250,7 @@ impl PageMeta {
             footer_pages: site.footer_pages.clone(),
             edit_link: None,
             review_url: site.review_url.clone(),
+            glossary_live: site.glossary.defined > 0,
         }
     }
     pub fn with_jsonld(mut self, blocks: Vec<serde_json::Value>) -> Self {

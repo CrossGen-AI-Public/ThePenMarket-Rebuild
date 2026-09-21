@@ -6,6 +6,7 @@ mod admin;
 mod app;
 mod catalog;
 mod db;
+mod glossary;
 mod guide;
 mod insights;
 mod reviews;
@@ -13,7 +14,7 @@ mod routes;
 mod security;
 mod settings;
 
-pub use thepenmarket::{config, engine, media, money, text};
+pub use thepenmarket::{config, engine, gloss, media, money, text};
 
 use app::{AppState, RateLimiter};
 use sqlx::postgres::PgPoolOptions;
@@ -31,6 +32,7 @@ async fn main() -> anyhow::Result<()> {
     insights::sync_registry(&pool).await?;
     routes::content::seed_faqs(&pool).await?;
     routes::content::seed_requested_pages(&pool).await?;
+    glossary::seed(&pool).await?;
     let initial = catalog::load(&pool).await?;
     let site = app::load_site_cache(&pool).await?;
     tracing::info!(pens = initial.pens.len(), "catalog loaded");

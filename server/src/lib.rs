@@ -3,6 +3,7 @@
 
 pub mod config;
 pub mod engine;
+pub mod gloss;
 pub mod media;
 pub mod money;
 pub mod text;

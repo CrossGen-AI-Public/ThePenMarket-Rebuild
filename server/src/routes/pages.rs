@@ -167,7 +167,7 @@ pub struct GenericPageTpl {
     pub modified: String,
 }
 
-const VISIT_COUNTING_NOTE: &str = "<h2 id=\"visit-counting\">How this site counts visits</h2><p>This site counts visits itself, on its own server, to learn which pages and pens are useful. It sets one cookie holding a random number, and records pages viewed, searches, clicks and how far a page was scrolled against that number. It does not record your name, e-mail address or IP address with them, nothing is sent to an advertising or analytics company, and records are deleted after 400 days. If your browser sends Do Not Track or Global Privacy Control, no cookie is set and nothing is counted.</p>";
+const VISIT_COUNTING_NOTE: &str = "<h2 id=\"visit-counting\">How this site counts visits</h2><p>This site counts visits itself, on its own server, to learn which pages and pens are useful. It sets one cookie holding a random number, and records pages viewed, searches, clicks and how far a page was scrolled against that number. It does not record your name, e-mail address or IP address with them, nothing is sent to an advertising or analytics company, and records are deleted after 400 days. When someone looks up a word the glossary does not have yet, the word itself is added to a tally so it can be written next; nothing about who looked it up is kept with it. If your browser sends Do Not Track or Global Privacy Control, no cookie is set and nothing is counted.</p>";
 
 pub async fn privacy(AxState(state): AxState<State>) -> AppResult {
     let p = db::page(&state.pool, "privacy").await?.ok_or(AppError::NotFound)?;

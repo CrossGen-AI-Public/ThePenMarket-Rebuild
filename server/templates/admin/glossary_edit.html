@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="admin-page">
+  <div class="adm-top"><div><h1>{{ t.name }}</h1><p class="lead"><a href="/admin/glossary/">All glossary entries</a> · <a href="/glossary/{{ t.slug }}/">{% if t.status == "published" %}View it on the site{% else %}Preview it (only you can see a draft){% endif %}</a></p></div></div>
+  {% if saved %}<div class="adm-ok">Saved. {% if t.status == "published" %}It is live at <a href="/glossary/{{ t.slug }}/">/glossary/{{ t.slug }}/</a>.{% else %}It is a hidden draft.{% endif %}</div>{% endif %}
+  {% if !problem.is_empty() %}<div class="adm-ok adm-warn">{{ problem }}</div>{% endif %}
+
+  <form class="adm-form" method="post" action="/admin/glossary/{{ t.id }}/" data-gloss-form>
+    <input type="hidden" name="csrf" value="{{ page.csrf }}">
+    <div class="adm-cols">
+      <div><label for="g-name">Name</label><input id="g-name" name="name" value="{{ t.name }}" required maxlength="80"></div>
+      <div><label for="g-kind">It is a</label><select id="g-kind" name="kind"><option value="term"{% if t.kind == "term" %} selected{% endif %}>Term</option><option value="model"{% if t.kind == "model" %} selected{% endif %}>Model</option></select></div>
+    </div>
+    <div class="adm-cols">
+      <div><label for="g-topic">Group (shown beside the word)</label><input id="g-topic" name="topic" value="{{ t.topic }}" list="g-topics" maxlength="60" placeholder="Condition and wear"><datalist id="g-topics">{% for tp in topics %}<option value="{{ tp }}">{% endfor %}</datalist></div>
+      <div><label for="g-brand">Make (for a model)</label><select id="g-brand" name="brand_slug"><option value="">None</option>{% for b in brands %}<option value="{{ b.0 }}"{% if b.0 == t.brand_slug %} selected{% endif %}>{{ b.1 }}</option>{% endfor %}</select></div>
+    </div>
+    <label for="g-aliases">Other spellings, separated by commas (a listing that uses any of them links here)</label>
+    <input id="g-aliases" name="aliases" value="{{ t.aliases }}" maxlength="400" placeholder="brassed">
+
+    <label for="g-def">Your definition (plain text; leave a blank line between paragraphs)</label>
+    <textarea id="g-def" name="definition" rows="9" maxlength="6000">{{ t.definition }}</textarea>
+
+    {% if !quotes.is_empty() %}
+    <div class="adm-quotes">
+      <p><b>Where you have used “{{ t.name }}”</b> <span class="muted">Your sentences, word for word. “Use these words” puts one in the box for you to edit.</span></p>
+      {% for q in quotes %}
+      <blockquote class="adm-quote"><p data-quote>{{ q.quote }}</p><footer><a href="{{ q.source_url }}">{{ q.source_title }}</a> <button type="button" class="btn btn-outline btn-sm" data-use-quote data-source-url="{{ q.source_url }}" data-source-title="{{ q.source_title }}">Use these words</button></footer></blockquote>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="muted">No sentence of yours using this word was found in your posts or listings.</p>
+    {% endif %}
+
+    <div class="adm-cols">
+      <div><label for="g-src-url">Taken from (address of your post or listing; shown as “From …”)</label><input id="g-src-url" name="source_url" value="{{ t.source_url }}" maxlength="300" placeholder="/some-post/"></div>
+      <div><label for="g-src-title">Its title</label><input id="g-src-title" name="source_title" value="{{ t.source_title }}" maxlength="200"></div>
+    </div>
+
+    <label>Photo (a picture explains brassing better than any sentence)</label>
+    <div class="adm-photo" data-gloss-photo>
+      <input type="hidden" name="image_path" value="{{ t.image_path }}">
+      <img src="{{ t.image_path }}" alt=""{% if t.image_path.is_empty() %} hidden{% endif %}>
+      <input type="file" accept="image/*" aria-label="Choose a photo">
+      <button type="button" class="btn btn-outline btn-sm" data-photo-clear{% if t.image_path.is_empty() %} hidden{% endif %}>Remove the photo</button>
+    </div>
+    <label for="g-alt">What the photo shows (read aloud to blind visitors)</label>
+    <input id="g-alt" name="image_alt" value="{{ t.image_alt }}" maxlength="200">
+
+    <label for="g-see">See also: names of other entries, separated by commas</label>
+    <input id="g-see" name="see_also" value="{{ t.see_also }}" maxlength="400" placeholder="Gold-filled, Plating loss">
+
+    <label class="adm-check"><input type="checkbox" name="link_in_listings" value="1"{% if t.link_in_listings %} checked{% endif %}> Make the first use of this word in each listing a tap-to-define link</label>
+    <label class="adm-check"><input type="checkbox" name="in_guide" value="1"{% if t.in_guide %} checked{% endif %}> Let Ask the Pen Market answer “what does this mean?” with this</label>
+    <div class="adm-actions">
+      <label for="g-status">Status</label>
+      <select id="g-status" name="status"><option value="draft"{% if t.status == "draft" %} selected{% endif %}>Hidden draft</option><option value="published"{% if t.status == "published" %} selected{% endif %}>Published</option></select>
+      <button type="submit" class="btn">Save</button>
+    </div>
+  </form>
+
+  <form method="post" action="/admin/glossary/{{ t.id }}/delete/" class="adm-inline-form" data-confirm="Delete “{{ t.name }}” from the glossary? This cannot be undone.">
+    <input type="hidden" name="csrf" value="{{ page.csrf }}">
+    <button type="submit" class="btn btn-outline btn-danger">Delete this entry</button>
+  </form>
+</div>
+{% endblock %}
+{% block scripts %}<script src="/static/js/glossary-admin.js?v={{ page.asset_v }}" defer></script>{% endblock %}

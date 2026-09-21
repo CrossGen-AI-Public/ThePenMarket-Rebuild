@@ -4,6 +4,7 @@
 
 pub mod api;
 pub mod content;
+pub mod glossary;
 pub mod insight_pages;
 pub mod manage;
 pub mod sourcing;
@@ -135,6 +136,11 @@ pub fn router() -> Router<State> {
         .route("/admin/pages/{id}/", get(content::page_edit).post(content::page_save).layer(axum::extract::DefaultBodyLimit::max(2 * 1024 * 1024)))
         .route("/admin/faqs/", get(content::faqs).post(content::faq_save))
         .route("/admin/faqs/{id}/", post(content::faq_save))
+        .route("/admin/glossary/", get(glossary::list).post(glossary::create))
+        .route("/admin/glossary/mine/", post(glossary::mine))
+        .route("/admin/glossary/defs/", post(glossary::def_save))
+        .route("/admin/glossary/{id}/", get(glossary::edit).post(glossary::save))
+        .route("/admin/glossary/{id}/delete/", post(glossary::delete))
         .route("/admin/api/posts/", get(content::post_lookup))
         .route("/admin/api/media/", post(content::upload_media).layer(axum::extract::DefaultBodyLimit::max(12 * 1024 * 1024)))
         .route("/admin/insights/", get(insight_pages::insights_page))

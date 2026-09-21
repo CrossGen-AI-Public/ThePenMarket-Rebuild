@@ -37,6 +37,7 @@
       <a href="/category/notes-from-the-work-bench/">Notes from the Work Bench</a>
       <a href="/category/ink-reviews/">Ink Reviews</a>
       <a href="/faq/">FAQ</a>
+      {% if page.glossary_live %}<a href="/glossary/">Pen Glossary</a>{% endif %}
       {% for fp in page.footer_pages %}<a href="{{ fp.1 }}">{{ fp.0 }}</a>{% endfor %}
       <a href="/about-us/">About Us</a>
       <a href="/contact/">Contact Us</a>

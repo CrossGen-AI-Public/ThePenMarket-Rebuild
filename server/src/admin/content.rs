@@ -14,7 +14,7 @@ use axum::{Extension, Json};
 use serde::Deserialize;
 use sqlx::{PgPool, Row};
 
-fn meta(state: &State, title: &str, path: &str, cookie: &CsrfCookie) -> PageMeta {
+pub(super) fn meta(state: &State, title: &str, path: &str, cookie: &CsrfCookie) -> PageMeta {
     let mut page = PageMeta::new(state, &format!("{title} | ThePenMarket.com admin"), "Admin area for ThePenMarket.com.", path);
     page.noindex = true;
     page.section = "admin".into();
@@ -22,7 +22,7 @@ fn meta(state: &State, title: &str, path: &str, cookie: &CsrfCookie) -> PageMeta
     page
 }
 
-fn check(state: &State, cookie: &CsrfCookie, admin: &super::AdminCtx, csrf: &str) -> Result<(), AppError> {
+pub(super) fn check(state: &State, cookie: &CsrfCookie, admin: &super::AdminCtx, csrf: &str) -> Result<(), AppError> {
     if admin.preview {
         return Err(AppError::Forbidden("Turn off Preview to make changes.".into()));
     }
@@ -49,8 +49,8 @@ pub fn clean_html(input: &str) -> String {
 }
 
 /// Paths the router or the import already own; a new post or page may not take one.
-const RESERVED: [&str; 28] = [
-    "admin", "api", "static", "media", "uploads", "shop", "blog", "category", "product", "product-category", "brand", "era", "nib", "pw-filling-mechanism", "pw-price-range", "on-sale-pens", "trading-post", "post-your-product", "pen-repairs", "sell-my-pens", "contact", "mailing-list", "guarantee", "about-us", "privacy", "faq", "site-map",
+const RESERVED: [&str; 29] = [
+    "admin", "api", "static", "media", "uploads", "shop", "blog", "category", "product", "product-category", "brand", "era", "nib", "pw-filling-mechanism", "pw-price-range", "on-sale-pens", "trading-post", "post-your-product", "pen-repairs", "sell-my-pens", "contact", "mailing-list", "guarantee", "about-us", "privacy", "faq", "site-map", "glossary",
     "wp-content",
 ];
 
@@ -498,7 +498,7 @@ mod tests {
     }
     #[test]
     fn reserved_slugs_cover_the_router() {
-        for s in ["shop", "admin", "faq", "site-map", "blog"] {
+        for s in ["shop", "admin", "faq", "site-map", "blog", "glossary"] {
             assert!(RESERVED.contains(&s));
         }
     }

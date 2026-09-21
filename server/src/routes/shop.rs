@@ -69,6 +69,8 @@ pub struct ShopTpl {
     pub related_posts: Vec<PostCard>,
     pub term_kind: String,
     pub term_definition: String,
+    /// A search for a word the glossary defines: (name, his short definition, entry URL).
+    pub gloss: Option<(String, String, String)>,
     pub clear_url: String,
     pub hidden_fields: Vec<(String, String)>,
 }
@@ -327,6 +329,7 @@ async fn render_archive(state: &State, base: &str, q: ShopQuery, fixed: Fixed, h
         related_posts,
         term_kind: term_kind.to_string(),
         term_definition,
+        gloss: if page_n == 1 { q.q.as_deref().and_then(|w| state.site().glossary.find(w).map(|e| (e.name.clone(), e.short.clone(), e.url.clone()))) } else { None },
         clear_url: base.to_string(),
         hidden_fields,
     })
@@ -542,7 +545,8 @@ pub async fn product(AxState(state): AxState<State>, Path(slug): Path<String>) -
         page,
         p,
         images,
-        description_html: body.description_html,
+        // A visitor gets tap-to-define links on the glossary's words; the editor gets his text untouched.
+        description_html: if editing { body.description_html } else { crate::gloss::link_terms(&body.description_html, &state.site().glossary.link_terms, crate::glossary::MAX_LINKS_PER_LISTING) },
         description_text: body.description_text,
         specs,
         related,

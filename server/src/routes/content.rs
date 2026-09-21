@@ -141,6 +141,9 @@ pub async fn site_map(AxState(state): AxState<State>) -> AppResult {
         links: std::iter::once(link("All posts", "/blog/", String::new())).chain(cats.iter().filter(|c| c.count > 0).map(|c| link(&c.name, &format!("/category/{}/", c.slug), format!("{} posts", c.count)))).collect(),
     });
     let mut about = vec![link("About Us", "/about-us/", String::new()), link("Contact Us", "/contact/", String::new()), link("Frequently Asked Questions", "/faq/", String::new())];
+    if state.site().glossary.defined > 0 {
+        about.push(link("Pen Glossary", "/glossary/", format!("{} entries", state.site().glossary.defined)));
+    }
     about.extend(db::custom_pages(&state.pool).await?.into_iter().map(|(title, slug)| link(&title, &format!("/{slug}/"), String::new())));
     about.push(link("Privacy Policy", "/privacy/", String::new()));
     groups.push(MapGroup { name: "About ThePenMarket.com".into(), links: about });

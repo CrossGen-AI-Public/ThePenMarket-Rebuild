@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="wrap narrow gloss-page">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Home</a><span aria-hidden="true">›</span><span aria-current="page">Glossary</span></nav>
+  <h1>Pen Glossary</h1>
+  <p class="lede">The words in a pen listing, looked up in one place: parts, materials, condition and repair terms, filling systems, nibs, makes and models. Not here? <a href="/#ask">Ask the Pen Market</a> or <a href="/contact/">contact us</a>.</p>
+
+  <form class="gloss-search" method="get" action="/glossary/" role="search">
+    <label class="sr" for="glossq">Search the glossary</label>
+    <input id="glossq" type="search" name="q" value="{{ q }}" placeholder="Type a word: brassing, sac, Vacumatic…" autocomplete="off" maxlength="60" data-gloss-filter>
+    {% if !kind.is_empty() %}<input type="hidden" name="kind" value="{{ kind }}">{% endif %}
+    <button type="submit" class="btn btn-navy">Look up</button>
+  </form>
+
+  {% if kinds.len() > 1 %}
+  <nav class="gloss-kinds" aria-label="Kind of entry">
+    <a href="/glossary/{% if !q.is_empty() %}?q={{ q|urlencode }}{% endif %}"{% if kind.is_empty() %} aria-current="true"{% endif %} data-gloss-kind="">Everything <span>{{ total }}</span></a>
+    {% for k in kinds %}<a href="/glossary/?kind={{ k.key }}{% if !q.is_empty() %}&amp;q={{ q|urlencode }}{% endif %}"{% if k.selected %} aria-current="true"{% endif %} data-gloss-kind="{{ k.key }}" rel="nofollow">{{ k.label }} <span>{{ k.count }}</span></a>{% endfor %}
+  </nav>
+  {% endif %}
+
+  {% if groups.len() > 1 && q.is_empty() %}
+  <nav class="gloss-letters" aria-label="Jump to a letter">{% for g in groups %}<a href="#letter-{{ g.letter }}" data-gloss-letter="{{ g.letter }}">{{ g.letter }}</a>{% endfor %}</nav>
+  {% endif %}
+
+  <p class="gloss-status" role="status" aria-live="polite" data-gloss-status>{% if !q.is_empty() %}{{ shown }} {% if shown == 1 %}entry matches{% else %}entries match{% endif %} “{{ q }}”.{% else if defined > 0 %}{{ total }} entries, {{ defined }} explained in Nathaniel’s words so far.{% endif %}</p>
+
+  {% if shown == 0 %}
+  <div class="gloss-empty">
+    {% if q.is_empty() %}<p>Nathaniel is writing the entries. Until they are here, <a href="/#ask">Ask the Pen Market</a> or <a href="/contact/">ask him directly</a>.</p>
+    {% else %}<p>There is no entry for “{{ q }}” yet. We have noted the word so Nathaniel can add it. In the meantime, <a href="/shop/?q={{ q|urlencode }}">search the pens for “{{ q }}”</a>, <a href="/#ask">Ask the Pen Market</a>, or <a href="/contact/">ask him directly</a>.</p>{% endif %}
+  </div>
+  {% endif %}
+  <div class="gloss-empty" hidden data-gloss-none><p>Nothing in the glossary matches that. Press Enter to look it up and we will note the word for Nathaniel, or <a href="/#ask">Ask the Pen Market</a>.</p></div>
+
+  {% for g in groups %}
+  <section class="gloss-letter" id="letter-{{ g.letter }}" data-gloss-group>
+    <h2>{{ g.letter }}</h2>
+    <dl>
+      {% for i in g.items %}
+      <div class="gloss-row" data-gloss-row data-kind="{{ i.e.kind }}" data-search="{{ i.e.search }}">
+        <dt><a href="{{ i.e.url }}">{{ i.e.name }}</a> <span class="gloss-kind gloss-kind-{{ i.e.kind }}">{{ i.e.kind_label }}</span>{% if !i.e.topic.is_empty() && i.e.kind == "term" %} <span class="gloss-topic">{{ i.e.topic }}</span>{% endif %}</dt>
+        <dd>{% if !i.e.short.is_empty() %}{{ i.e.short }}{% endif %}{% if i.stock > 0 %} <a class="gloss-stock" href="{{ i.e.url }}">{{ i.stock }} in stock</a>{% endif %}{% if !i.e.aliases.is_empty() %} <span class="gloss-aka">Also: {{ i.e.aliases|join(", ") }}</span>{% endif %}</dd>
+      </div>
+      {% endfor %}
+    </dl>
+  </section>
+  {% endfor %}
+
+  {% if page.admin.is_some() %}<p class="adm-inline"><a class="btn btn-outline" href="/admin/glossary/">Edit the glossary</a></p>{% endif %}
+</div>
+{% endblock %}

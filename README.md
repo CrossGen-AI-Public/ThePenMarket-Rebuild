@@ -20,7 +20,9 @@ server/            the Cargo crate `thepenmarket`
   migrations/      sqlx migrations
   templates/       Askama (server-rendered, complete HTML on every route)
   static/          css, js (site, engine, guide, hero), self-hosted fonts, three r160 UMD
-  data/terms.json  definitions for brand / era / nib / filling-mechanism pages, in his voice
+  data/terms.json  definitions for brand / era / nib / filling-mechanism pages, drafted from his posts
+  data/glossary-lexicon.json  words the glossary looks for in his writing (names only, no definitions)
+  src/gloss.rs     glossary text work: whole-word matching, his sentences, tap-to-define links
   media/           product photos copied from the backup at import (gitignored)
 scripts/           gate.sh (the whole test gate), seo_check.py, sweep_url.py, chat-drive.js,
                    build-artifact.py, deploy.sh, deploy-droplet.sh, test-engine-js.mjs

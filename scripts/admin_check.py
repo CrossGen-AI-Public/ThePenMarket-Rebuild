@@ -92,7 +92,7 @@ with sync_playwright() as p:
     assert pg.locator("td:has-text('(gate)')").count() >= 1, "history missing the edit"
     shot(pg, "admin-history-1440")
     # every admin page added after the 2026-09-14 meeting renders, at desktop and phone width
-    pages = ["/admin/", "/admin/inbox/", "/admin/posts/", "/admin/posts/new/", "/admin/pages/", "/admin/pages/new/", "/admin/faqs/", "/admin/settings/", "/admin/brands/", "/admin/insights/", "/admin/experiments/", "/admin/sourcing/"]
+    pages = ["/admin/", "/admin/inbox/", "/admin/posts/", "/admin/posts/new/", "/admin/pages/", "/admin/pages/new/", "/admin/faqs/", "/admin/glossary/", "/admin/settings/", "/admin/brands/", "/admin/insights/", "/admin/experiments/", "/admin/sourcing/"]
     for path in pages:
         r = pg.goto(f"{base}{path}", wait_until="load")
         if not r or r.status != 200: bad.append(f"{path} answered {r.status if r else 'nothing'}")

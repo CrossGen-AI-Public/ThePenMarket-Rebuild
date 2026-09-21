@@ -53,6 +53,7 @@ RULES:
 - After find_pens, name the top one or two pens with their price and one reason, mention how many matched, and offer to narrow or to show the page. The page shows cards for the results; do not list every field.
 - For a specific pen (a SKU, a model name), call pen_details.
 - For \"can you fix my X\" call repair_scope with the visitor's words. For \"do you buy X\" or \"I want to sell\" call sell_triage. For nib width questions call nib_fact. For return or guarantee dates call guarantee_dates with the delivery date.
+- For \"what is X\", \"what does X mean\" or any pen word the visitor does not know (a part, a material, a condition word, a filling system, a nib, a make or a model), call define_term with the word. If it returns an entry, answer with Nathaniel's definition, kept short, and add no facts to it. If it returns found false, say the glossary has no entry for that word yet and offer to pass the question to Nathaniel; NEVER define a pen term from memory.
 - Estimates for repairs and offers for collections come from Nathaniel, never from you. Do not invent turnaround times, repair prices or offers.
 - Authenticity: you cannot authenticate a pen. Point to his fake-Montblanc posts and the description on the listing.
 - Checkout is not connected in this preview build; say a visitor can contact the shop to buy, and never pretend to take payment.
@@ -80,6 +81,7 @@ pub fn tools() -> Vec<Value> {
         f("sell_triage", "Whether he is looking for the pens a visitor wants to sell, and the options (cash, consignment).", json!({"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]})),
         f("guarantee_dates", "Return-by and repair-promise dates from the day a pen was received (YYYY-MM-DD).", json!({"type": "object", "properties": {"received_on": {"type": "string"}}, "required": ["received_on"]})),
         f("nib_fact", "Line width and notes for a nib grade.", json!({"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]})),
+        f("define_term", "Look a pen word up in Nathaniel's glossary: parts, materials, condition and repair terms, filling systems, nibs, makes and models. Returns his definition, or found false when he has not written one.", json!({"type": "object", "properties": {"term": {"type": "string", "description": "the word or model name, as the visitor wrote it"}}, "required": ["term"]})),
         f("handoff", "Record a summary for Nathaniel and show the visitor the human contact card.", json!({"type": "object", "properties": {"summary": {"type": "string"}}, "required": ["summary"]})),
     ]
 }
@@ -123,6 +125,20 @@ pub async fn run_tool(state: &State, name: &str, args: &Value) -> (Value, Option
             Some(f) => (serde_json::to_value(f).unwrap_or(Value::Null), None),
             None => (json!({"error": "unknown nib grade; the grades are extra-fine, fine, medium, broad, BB, stub, oblique, accountant, semi-flexible, flexible"}), None),
         },
+        "define_term" => {
+            let word = s("term").unwrap_or_default();
+            let site = state.site();
+            match site.glossary.find(&word).filter(|e| e.in_guide) {
+                Some(e) => {
+                    let v = json!({"found": true, "name": e.name, "kind": e.kind_label, "definition": e.definition, "url": e.url});
+                    (v, Some(json!({"name": e.name, "kind": e.kind_label, "definition": e.short, "url": e.url})))
+                }
+                None => {
+                    crate::glossary::record_miss(&state.pool, &word).await;
+                    (json!({"found": false, "message": "Nathaniel has not written a glossary entry for this word. Say so, do not define it yourself, and offer to pass the question to him."}), None)
+                }
+            }
+        }
         "handoff" => {
             let summary = s("summary").unwrap_or_default();
             if let Ok(id) = db::save_form(&state.pool, "guide_handoff", json!({"summary": summary}), None).await {

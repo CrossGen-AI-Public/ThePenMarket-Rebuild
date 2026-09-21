@@ -164,3 +164,20 @@ table.adm-rank td{padding:8px 0 10px;border-top:1px solid var(--line);vertical-a
 .adm-postpick ul{list-style:none;max-height:320px;overflow:auto;display:grid;gap:4px;margin:0;padding:0}
 .adm-postpick li button{width:100%;text-align:left;font:15px var(--sans);padding:9px 10px;border:1px solid var(--line);border-radius:6px;background:#fff;cursor:pointer}
 .adm-postpick li button:hover{border-color:var(--ink)}
+
+/* glossary admin */
+.adm-h2{font-size:20px;margin:28px 0 8px}
+.adm-gloss-list{list-style:none;padding:0;margin:0}
+.adm-gloss-list li{padding:7px 0;border-bottom:1px solid var(--line)}
+.adm-gloss-cols{columns:3 220px;column-gap:28px;margin-top:12px}
+.adm-gloss-cols li{break-inside:avoid}
+.adm-chip-ok{background:#eef6ef;color:#2E6B47}
+.adm-ok.adm-warn{background:var(--red-soft);color:var(--red-dark)}
+.adm-quotes{margin:14px 0;padding:14px 16px;background:var(--grey);border-radius:8px}
+.adm-quote{margin:12px 0 0;padding:0 0 0 14px;border-left:3px solid var(--line-2)}
+.adm-quote p{font-size:15px}
+.adm-quote footer{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:6px;font-size:13px;color:var(--muted)}
+.adm-photo{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+.adm-photo img{max-width:220px;height:auto;border-radius:8px}
+.btn-danger{border-color:var(--red-dark);color:var(--red-dark);margin-top:24px}
+.btn-danger:hover{background:var(--red-dark);border-color:var(--red-dark);color:#fff}

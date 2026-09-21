@@ -8,6 +8,7 @@
   <header class="archive-head">
     <h1>{{ heading }}</h1>
     <p class="lede">{{ intro }}</p>
+    {% if let Some(g) = gloss %}<div class="definition gloss-card"><p class="eyebrow">From the glossary</p><p><b>{{ g.0 }}.</b> {{ g.1 }} <a href="{{ g.2 }}">Read the entry</a></p></div>{% endif %}
     {% if !term_definition.is_empty() %}<div class="definition"><p class="eyebrow">What “{{ heading }}” means here</p><p>{{ term_definition }}</p></div>{% endif %}
   </header>
 </div>

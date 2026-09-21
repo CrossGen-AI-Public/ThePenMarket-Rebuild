@@ -3,6 +3,7 @@
 pub mod blog;
 pub mod content;
 pub mod forms;
+pub mod glossary;
 pub mod home;
 pub mod pages;
 pub mod seo;
@@ -57,6 +58,8 @@ pub fn router(state: State) -> Router {
         .route("/privacy/", get(pages::privacy))
         .route("/faq/", get(content::faq))
         .route("/site-map/", get(content::site_map))
+        .route("/glossary/", get(glossary::hub))
+        .route("/glossary/{slug}/", get(glossary::term))
         .route("/api/t", post(crate::insights::ingest))
         .route("/api/guide", post(crate::guide::chat))
         .route("/api/guide/health", get(crate::guide::health))

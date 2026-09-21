@@ -36,6 +36,18 @@ sitemaps() {
 }
 run sitemaps sitemaps
 
+# The glossary index is noindex until Nathaniel publishes an entry, so it is checked here rather than in
+# ROUTES: the page answers, a filtered view is never indexable, and an entry that does not exist is a 404.
+glossary() {
+  local fail=0
+  [ "$(curl -s -o /dev/null -w '%{http_code}' "$BASE/glossary/")" = 200 ] || { echo "/glossary/ is not 200"; fail=1; }
+  curl -s "$BASE/glossary/?q=nib" | grep -q 'content="noindex' || { echo "/glossary/?q= is indexable"; fail=1; }
+  [ "$(curl -s -o /dev/null -w '%{http_code}' "$BASE/glossary/no-such-entry/")" = 404 ] || { echo "a missing entry is not 404"; fail=1; }
+  if curl -s "$BASE/glossary/" | grep -q '<meta name="robots" content="noindex'; then echo "no published entries yet: index is noindex (expected until he writes one)"; else python3 "$P/scripts/seo_check.py" "$BASE" "" glossary/ || fail=1; fi
+  [ "$fail" = 0 ]
+}
+run glossary glossary
+
 redirects() {
   local bad=0
   while IFS='|' read -r old new; do

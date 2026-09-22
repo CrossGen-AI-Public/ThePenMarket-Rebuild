@@ -7,6 +7,7 @@ COPY src ./src
 COPY migrations ./migrations
 COPY templates ./templates
 COPY tests ./tests
+COPY data ./data
 RUN cargo build --release --bin thepenmarket --bin import --bin admin
 
 FROM debian:bookworm-slim

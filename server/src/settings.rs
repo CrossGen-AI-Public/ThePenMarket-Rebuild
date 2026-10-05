@@ -12,6 +12,10 @@ pub const POPULAR_SECTION: &str = "popular_section";
 /// The guided photo shoot, in order. He can reword or reorder it.
 pub const SHOT_LIST: &str = "photo_shot_list";
 
+/// Flat shipping charge on every pen bought online, in cents. No default: until he names one,
+/// checkout charges the pen's price only, and the admin says so.
+pub const SHIPPING_FLAT: &str = "shipping_flat_cents";
+
 /// He said 14 photos a pen is more than enough; the uploader and the API both stop there.
 pub const MAX_PHOTOS: i64 = 14;
 
@@ -54,6 +58,10 @@ pub async fn brand_order(pool: &PgPool) -> anyhow::Result<String> {
 
 pub async fn popular_section(pool: &PgPool) -> anyhow::Result<bool> {
     Ok(get(pool, POPULAR_SECTION).await?.and_then(|v| v.as_bool()).unwrap_or(true))
+}
+
+pub async fn shipping_flat(pool: &PgPool) -> anyhow::Result<Option<i64>> {
+    Ok(get(pool, SHIPPING_FLAT).await?.and_then(|v| v.as_i64()).filter(|c| *c >= 0))
 }
 
 pub async fn shot_list(pool: &PgPool) -> anyhow::Result<Vec<String>> {

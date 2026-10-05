@@ -31,6 +31,18 @@ pub struct Config {
     /// Google Places API key for his rating and reviews (`GOOGLE_PLACES_KEY`); empty = only the
     /// "Review us on Google" link works.
     pub google_places_key: String,
+    /// Stripe secret key (`STRIPE_SECRET_KEY`, `sk_test_…` or `sk_live_…`); empty = the buy button
+    /// stays the labelled demo. Webhook signing secret (`STRIPE_WEBHOOK_SECRET`, `whsec_…`); without
+    /// it the webhook refuses every call, so checkout stays off until both are set.
+    pub stripe_secret_key: String,
+    pub stripe_webhook_secret: String,
+}
+
+impl Config {
+    /// Checkout takes money only when both Stripe values are present.
+    pub fn checkout_enabled(&self) -> bool {
+        !self.stripe_secret_key.is_empty() && !self.stripe_webhook_secret.is_empty()
+    }
 }
 
 /// Load `~/.config/thepenmarket.env` if present (local runs), then read the environment.
@@ -81,5 +93,7 @@ pub fn load() -> anyhow::Result<Config> {
         ebay_app_id: env("EBAY_APP_ID"),
         ebay_cert_id: env("EBAY_CERT_ID"),
         google_places_key: env("GOOGLE_PLACES_KEY"),
+        stripe_secret_key: env("STRIPE_SECRET_KEY").trim().to_string(),
+        stripe_webhook_secret: env("STRIPE_WEBHOOK_SECRET").trim().to_string(),
     })
 }

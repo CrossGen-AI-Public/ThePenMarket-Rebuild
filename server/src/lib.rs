@@ -6,6 +6,8 @@ pub mod engine;
 pub mod gloss;
 pub mod media;
 pub mod money;
+pub mod orders;
+pub mod stripe;
 pub mod text;
 pub mod wp;
 

@@ -161,6 +161,11 @@ async fn main() -> Result<()> {
     if edits > 0 && std::env::var("FORCE_IMPORT").ok().as_deref() != Some("1") {
         anyhow::bail!("refusing to re-import: the admin has made {edits} change(s) that a re-import would erase. Set FORCE_IMPORT=1 to do it anyway.");
     }
+    // A pen sold online is marked sold in `product`; a re-import would put it back on sale.
+    let sales: i64 = sqlx::query_scalar("SELECT count(*) FROM shop_order WHERE status IN ('paid', 'processing')").fetch_one(&pool).await.unwrap_or(0);
+    if sales > 0 && std::env::var("FORCE_IMPORT").ok().as_deref() != Some("1") {
+        anyhow::bail!("refusing to re-import: {sales} pen(s) were sold or are being paid for online, and a re-import would put them back on sale. Set FORCE_IMPORT=1 to do it anyway.");
+    }
     sqlx::query("TRUNCATE product_image, product, tp_listing, post, page, redirect, category, brand, era, nib, filling_mechanism, price_range, blog_category RESTART IDENTITY CASCADE").execute(&pool).await?;
 
     let term_data: TermData = match std::fs::read_to_string(data_dir.join("terms.json")) {

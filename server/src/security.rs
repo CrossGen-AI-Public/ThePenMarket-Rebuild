@@ -73,7 +73,7 @@ pub async fn csrf_cookie(mut req: Request, next: Next) -> Response {
 pub async fn security_headers(req: Request, next: Next) -> Response {
     let mut res = next.run(req).await;
     let h = res.headers_mut();
-    let csp = "default-src 'self'; img-src 'self' data: https://thepenmarket.com; style-src 'self' 'unsafe-inline'; script-src 'self'; font-src 'self'; connect-src 'self'; frame-src https://www.youtube.com https://www.youtube-nocookie.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'";
+    let csp = "default-src 'self'; img-src 'self' data: https://thepenmarket.com; style-src 'self' 'unsafe-inline'; script-src 'self'; font-src 'self'; connect-src 'self'; frame-src https://www.youtube.com https://www.youtube-nocookie.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self' https://checkout.stripe.com; object-src 'none'";
     let set = |h: &mut axum::http::HeaderMap, k: &'static str, v: &'static str| {
         if let Ok(val) = HeaderValue::from_str(v) {
             h.entry(k).or_insert(val);

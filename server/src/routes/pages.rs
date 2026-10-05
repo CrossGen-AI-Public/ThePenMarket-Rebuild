@@ -169,12 +169,15 @@ pub struct GenericPageTpl {
 
 const VISIT_COUNTING_NOTE: &str = "<h2 id=\"visit-counting\">How this site counts visits</h2><p>This site counts visits itself, on its own server, to learn which pages and pens are useful. It sets one cookie holding a random number, and records pages viewed, searches, clicks and how far a page was scrolled against that number. It does not record your name, e-mail address or IP address with them, nothing is sent to an advertising or analytics company, and records are deleted after 400 days. When someone looks up a word the glossary does not have yet, the word itself is added to a tally so it can be written next; nothing about who looked it up is kept with it. If your browser sends Do Not Track or Global Privacy Control, no cookie is set and nothing is counted.</p>";
 
+/// Shown once checkout is on (kept in step with routes/checkout.rs and orders.rs).
+const ONLINE_ORDERS_NOTE: &str = "<h2 id=\"online-orders\">How online orders are handled</h2><p>When you buy a pen on this site, you pay on Stripe's own checkout page. Your card or bank details go to Stripe and never reach this site. Stripe sends back your name, e-mail address, shipping address and the amount paid, and this site keeps them with the order so the pen can be shipped and any question about it answered. They are not used for anything else and are not shared with anyone besides Stripe. Stripe's handling of your payment details is described in Stripe's privacy policy.</p>";
+
 pub async fn privacy(AxState(state): AxState<State>) -> AppResult {
     let p = db::page(&state.pool, "privacy").await?.ok_or(AppError::NotFound)?;
     let mut page = PageMeta::new(&state, "Privacy Policy | ThePenMarket.com", "How ThePenMarket.com collects, uses and protects your personal information.", "/privacy/");
     page.section = "privacy".into();
     page = page.with_jsonld(vec![org_node(&state), breadcrumb_node(&state, &[("Home", "/"), ("Privacy Policy", "/privacy/")])]);
     // His policy, verbatim, followed by what this build itself does (kept in step with insights.rs).
-    let body_html = format!("{}{}", p.body_html, VISIT_COUNTING_NOTE);
+    let body_html = format!("{}{}{}", p.body_html, VISIT_COUNTING_NOTE, if state.cfg.checkout_enabled() { ONLINE_ORDERS_NOTE } else { "" });
     html(&GenericPageTpl { page, heading: p.title, body_html, modified: p.modified_at.format("%B %-d, %Y").to_string() })
 }

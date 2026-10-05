@@ -124,6 +124,7 @@ pub fn router() -> Router<State> {
         .route("/admin/", get(manage::home))
         .route("/admin/settings/", get(manage::settings_page).post(manage::settings_save))
         .route("/admin/brands/", get(manage::brands).post(manage::brands_save))
+        .route("/admin/orders/", get(manage::orders))
         .route("/admin/inbox/", get(manage::inbox))
         .route("/admin/inbox/{id}/", post(manage::inbox_handled))
         .route("/admin/inbox/photo/{key}", get(manage::inbox_photo))

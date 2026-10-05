@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="admin-page">
+  <div class="adm-top"><div><h1>Orders</h1><p class="lead"><a href="/admin/">Admin home</a> · Pens bought online through Stripe.</p></div></div>
+  {% if checkout_mode == "off" %}
+  <div class="adm-warnbox">Online checkout is off: every pen page still shows “Demo — checkout not connected”. It turns on when CrossGen adds your Stripe keys to the server.</div>
+  {% else if checkout_mode == "test" %}
+  <div class="adm-warnbox">Checkout is in Stripe's test mode. Only Stripe's test cards work and no real money moves. Pens “bought” in test mode are marked sold; set them back to for sale on their page.</div>
+  {% endif %}
+  {% if !shipping_set %}
+  <p class="adm-hint">No shipping charge is set, so buyers pay the pen's price only. Set a flat shipping charge (or 0 for free shipping) on <a href="/admin/settings/">Homepage and photos</a>.</p>
+  {% endif %}
+  <p class="adm-hint">{% if mail_connected %}Each sale is also e-mailed to you.{% else %}Outgoing e-mail is not connected yet, so this page is where sales show up.{% endif %} Refunds and disputes are handled in your Stripe dashboard.</p>
+  <form class="adm-filter" method="get" action="/admin/orders/">
+    <select name="show" aria-label="Show"><option value="">Paid, clearing and refunded</option><option value="all"{% if show_all %} selected{% endif %}>Everything, including unfinished checkouts</option></select>
+    <button class="btn btn-outline" type="submit">Show</button>
+  </form>
+  {% for o in rows %}
+  <article class="adm-card adm-msg">
+    <header><b>{{ o.pen }}</b> <span class="muted">#{{ o.id }} · {{ o.when }}</span> <span class="adm-chip{% if o.attention %} adm-warn{% endif %}">{{ o.status }}</span></header>
+    <dl>
+      <div><dt>Total</dt><dd>{{ o.total }}{% if !o.shipping.is_empty() %} (includes {{ o.shipping }} shipping){% endif %}</dd></div>
+      {% if !o.sku.is_empty() %}<div><dt>SKU</dt><dd>{{ o.sku }}</dd></div>{% endif %}
+      {% if !o.buyer.is_empty() %}<div><dt>Buyer</dt><dd>{{ o.buyer }}</dd></div>{% endif %}
+      {% if !o.email.is_empty() %}<div><dt>E-mail</dt><dd>{{ o.email }}</dd></div>{% endif %}
+      {% if !o.ship_to.is_empty() %}<div><dt>Ship to</dt><dd>{% for l in o.ship_to %}{{ l }}{% if !loop.last %}<br>{% endif %}{% endfor %}</dd></div>{% endif %}
+      {% if !o.note.is_empty() %}<div><dt>Note</dt><dd>{{ o.note }}</dd></div>{% endif %}
+    </dl>
+    <footer>
+      <a class="btn btn-outline" href="{{ o.pen_url }}">The pen's page</a>
+      {% if !o.email.is_empty() %}<a class="btn btn-outline" href="mailto:{{ o.email }}?subject=Your%20order%20from%20ThePenMarket.com%20(%23{{ o.id }})">E-mail the buyer</a>{% endif %}
+      {% if !o.stripe_url.is_empty() %}<a class="btn btn-ghost" href="{{ o.stripe_url }}" target="_blank" rel="noopener">Open in Stripe</a>{% endif %}
+    </footer>
+  </article>
+  {% endfor %}
+  {% if rows.is_empty() %}<p>No orders yet.</p>{% endif %}
+</div>
+{% endblock %}

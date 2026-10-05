@@ -64,7 +64,9 @@ pub async fn home(AxState(state): AxState<State>, Extension(cookie): Extension<C
                 (SELECT count(*) FROM glossary_term WHERE status = 'draft') AS gloss_drafts,
                 (SELECT count(*) FROM experiment WHERE status = 'running') AS running,
                 (SELECT count(*) FROM sourcing_find WHERE status = 'new') AS finds,
-                (SELECT count(DISTINCT visitor) FROM visit_event WHERE at > now() - interval '7 days') AS visitors",
+                (SELECT count(DISTINCT visitor) FROM visit_event WHERE at > now() - interval '7 days') AS visitors,
+                (SELECT count(*) FROM shop_order WHERE status = 'paid' AND paid_at > now() - interval '30 days') AS sold30,
+                (SELECT count(*) FROM shop_order WHERE status = 'processing') AS processing",
     )
     .fetch_one(&state.pool)
     .await?;
@@ -72,6 +74,12 @@ pub async fn home(AxState(state): AxState<State>, Extension(cookie): Extension<C
     let badge = |v: i64, word: &str| if v > 0 { format!("{v} {word}") } else { String::new() };
     let tiles = vec![
         Tile { title: "Pens", url: "/shop/", line: format!("{} for sale. Open any pen and click what you want to change; “+ Add a pen” is in the black bar.", n("live")), badge: badge(n("hidden"), "hidden") },
+        Tile {
+            title: "Orders",
+            url: "/admin/orders/",
+            line: if state.cfg.checkout_enabled() { "Pens bought online: who bought, what they paid, where to ship.".into() } else { "Online checkout is off until CrossGen adds your Stripe keys. Orders will appear here.".into() },
+            badge: if n("processing") > 0 { badge(n("processing"), "bank payments clearing") } else { badge(n("sold30"), "sold in 30 days") },
+        },
         Tile { title: "Inbox", url: "/admin/inbox/", line: "Every repair request, offer to sell, contact message and Trading Post listing the site received.".into(), badge: badge(n("inbox"), "new") },
         Tile { title: "Blog posts", url: "/admin/posts/", line: format!("{} posts. Edit the old ones, put their photos back, write new ones.", n("posts")), badge: badge(n("drafts"), "drafts") },
         Tile { title: "Pages", url: "/admin/pages/", line: "Permanent pages you write: grading system, buyer’s guide, anything Google should find.".into(), badge: badge(n("pages"), "written") },
@@ -134,6 +142,20 @@ pub struct SettingsTpl {
     pub place_id: String,
     pub places_key_set: bool,
     pub reviews_line: String,
+    /// "off", "test" (Stripe test keys: no real money) or "live".
+    pub checkout_mode: &'static str,
+    /// His flat shipping charge as typed back into the box ("12.00"), empty when none is set.
+    pub shipping: String,
+}
+
+fn checkout_mode(state: &State) -> &'static str {
+    if !state.cfg.checkout_enabled() {
+        "off"
+    } else if state.cfg.stripe_secret_key.starts_with("sk_live_") || state.cfg.stripe_secret_key.starts_with("rk_live_") {
+        "live"
+    } else {
+        "test"
+    }
 }
 
 #[derive(Deserialize, Default)]
@@ -165,6 +187,8 @@ pub async fn settings_page(AxState(state): AxState<State>, Extension(cookie): Ex
         place_id: crate::reviews::place_id(&state.pool).await?,
         places_key_set: !state.cfg.google_places_key.is_empty(),
         reviews_line: crate::reviews::cached(&state.pool).await?.map(|r| format!("Google last returned {} out of 5 from {} reviews ({} with text shown on the homepage).", r.rating_label(), r.count, r.reviews.len())).unwrap_or_default(),
+        checkout_mode: checkout_mode(&state),
+        shipping: settings::shipping_flat(&state.pool).await?.map(|c| format!("{}.{:02}", c / 100, c % 100)).unwrap_or_default(),
     })
 }
 
@@ -179,10 +203,21 @@ pub struct SettingsForm {
     pub clear_featured: String,
     #[serde(default)]
     pub place_id: String,
+    #[serde(default)]
+    pub shipping: String,
 }
 
 pub async fn settings_save(AxState(state): AxState<State>, Extension(cookie): Extension<CsrfCookie>, Auth(admin): Auth, Form(form): Form<SettingsForm>) -> AppResult {
     check(&state, &cookie, &admin, &form.csrf)?;
+    // Shipping first: a typo here must not leave half the form saved.
+    let shipping = match form.shipping.trim() {
+        "" => None,
+        typed => Some(super::auth::parse_dollars(typed).map_err(|e| AppError::BadRequest(format!("Shipping: {e} Go back; nothing was saved.")))?),
+    };
+    match shipping {
+        Some(c) => settings::set(&state.pool, settings::SHIPPING_FLAT, serde_json::json!(c)).await?,
+        None => settings::clear(&state.pool, settings::SHIPPING_FLAT).await?,
+    }
     settings::set(&state.pool, settings::POPULAR_SECTION, serde_json::json!(form.popular == "1")).await?;
     let shots = settings::parse_shot_list(&form.shots);
     if shots.is_empty() {
@@ -206,7 +241,7 @@ pub async fn settings_save(AxState(state): AxState<State>, Extension(cookie): Ex
         return Err(AppError::BadRequest("That does not look like a Google Place ID (letters, digits, dashes and underscores, usually starting ChIJ). Go back; nothing else was lost.".into()));
     }
     crate::app::refresh_site_cache(&state).await;
-    store::audit(&state.pool, "admin.settings_saved", serde_json::json!({"email": admin.email, "ip": admin.ip, "popular_section": form.popular == "1", "shots": shots.len()})).await?;
+    store::audit(&state.pool, "admin.settings_saved", serde_json::json!({"email": admin.email, "ip": admin.ip, "popular_section": form.popular == "1", "shots": shots.len(), "shipping_flat_cents": shipping})).await?;
     Ok(Redirect::to("/admin/settings/?saved=1").into_response())
 }
 
@@ -351,4 +386,87 @@ pub async fn inbox_photo(AxState(state): AxState<State>, Auth(_admin): Auth, Pat
     }
     let bytes = tokio::fs::read(state.cfg.uploads_dir.join(&key)).await.map_err(|_| AppError::NotFound)?;
     Ok(([(header::CONTENT_TYPE, "image/jpeg"), (header::CACHE_CONTROL, "private, no-store")], bytes).into_response())
+}
+
+// ---- orders ------------------------------------------------------------------------------------------
+
+pub struct OrderView {
+    pub id: i32,
+    pub when: String,
+    pub pen: String,
+    pub pen_url: String,
+    pub sku: String,
+    pub total: String,
+    pub shipping: String,
+    pub status: &'static str,
+    pub attention: bool,
+    pub buyer: String,
+    pub email: String,
+    pub ship_to: Vec<String>,
+    pub stripe_url: String,
+    pub note: String,
+}
+
+#[derive(Template)]
+#[template(path = "admin/orders.html")]
+pub struct OrdersTpl {
+    pub page: PageMeta,
+    pub rows: Vec<OrderView>,
+    pub show_all: bool,
+    pub checkout_mode: &'static str,
+    pub shipping_set: bool,
+    pub mail_connected: bool,
+}
+
+fn order_status(s: &str) -> (&'static str, bool) {
+    match s {
+        "paid" => ("Paid: ship it", true),
+        "processing" => ("Bank payment clearing: pen held, don't ship yet", false),
+        "refunded" => ("Refunded: paid after the pen was gone", true),
+        "open" => ("Checking out", false),
+        "expired" => ("Not finished", false),
+        "cancelled" => ("Let go by the buyer", false),
+        "failed" => ("Failed", true),
+        _ => ("Unknown", true),
+    }
+}
+
+pub async fn orders(AxState(state): AxState<State>, Extension(cookie): Extension<CsrfCookie>, Auth(_admin): Auth, Query(q): Query<SavedQuery>) -> AppResult {
+    let show_all = q.show == "all";
+    let live_mode = state.cfg.stripe_secret_key.starts_with("sk_live_") || state.cfg.stripe_secret_key.starts_with("rk_live_");
+    let rows = thepenmarket::orders::list(&state.pool, show_all, 300).await?;
+    let rows = rows
+        .into_iter()
+        .map(|o| {
+            let (status, attention) = order_status(&o.status);
+            let a = o.shipping_address.clone().unwrap_or_default();
+            let g = |k: &str| a.get(k).and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+            let ship_to = [g("name"), g("line1"), g("line2"), format!("{} {} {}", g("city"), g("state"), g("postal_code")).trim().to_string(), g("country")].into_iter().filter(|s| !s.is_empty()).collect();
+            let total = o.amount_total_cents.unwrap_or(o.amount_cents + o.shipping_cents);
+            OrderView {
+                id: o.id,
+                when: super::handlers::fmt_time(o.paid_at.unwrap_or(o.created_at)),
+                pen_url: format!("/product/{}/", o.product_slug),
+                pen: o.product_title,
+                sku: o.product_sku,
+                total: thepenmarket::money::fmt_cents(total),
+                shipping: if o.shipping_cents > 0 { thepenmarket::money::fmt_cents(o.shipping_cents) } else { String::new() },
+                status,
+                attention,
+                buyer: o.buyer_name,
+                email: o.buyer_email,
+                ship_to,
+                stripe_url: if o.stripe_payment_intent.is_empty() { String::new() } else { format!("https://dashboard.stripe.com/{}payments/{}", if live_mode { "" } else { "test/" }, o.stripe_payment_intent) },
+                note: o.note,
+            }
+        })
+        .collect();
+    html(&OrdersTpl {
+        page: meta(&state, "Orders", "/admin/orders/", &cookie),
+        rows,
+        show_all,
+        checkout_mode: checkout_mode(&state),
+        shipping_set: settings::shipping_flat(&state.pool).await?.is_some(),
+        mail_connected: state.mailer.name() == "smtp",
+    })
 }

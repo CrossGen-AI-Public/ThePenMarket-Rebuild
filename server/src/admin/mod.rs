@@ -7,6 +7,8 @@ pub mod content;
 pub mod glossary;
 pub mod insight_pages;
 pub mod manage;
+pub mod redirects;
+pub mod search;
 pub mod sourcing;
 pub use thepenmarket::admin_core::auth;
 pub mod handlers;
@@ -135,6 +137,10 @@ pub fn router() -> Router<State> {
         .route("/admin/pages/new/", get(content::page_new).post(content::page_save).layer(axum::extract::DefaultBodyLimit::max(2 * 1024 * 1024)))
         .route("/admin/pages/{id}/", get(content::page_edit).post(content::page_save).layer(axum::extract::DefaultBodyLimit::max(2 * 1024 * 1024)))
         .route("/admin/faqs/", get(content::faqs).post(content::faq_save))
+        .route("/admin/redirects/", get(redirects::page).post(redirects::add).layer(axum::extract::DefaultBodyLimit::max(1024 * 1024)))
+        .route("/admin/redirects/{id}/delete/", post(redirects::delete))
+        .route("/admin/redirects.csv", get(redirects::csv))
+        .route("/admin/search/", get(search::page).post(search::save))
         .route("/admin/faqs/{id}/", post(content::faq_save))
         .route("/admin/glossary/", get(glossary::list).post(glossary::create))
         .route("/admin/glossary/mine/", post(glossary::mine))

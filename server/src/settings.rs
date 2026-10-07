@@ -12,6 +12,13 @@ pub const POPULAR_SECTION: &str = "popular_section";
 /// The guided photo shoot, in order. He can reword or reorder it.
 pub const SHOT_LIST: &str = "photo_shot_list";
 
+/// His list of the ways people misspell a search ("Schaffer" for Sheaffer). Absent = the examples
+/// from his e-mail of 2026-10-07 (`spelling::default_list`).
+pub const SEARCH_SPELLINGS: &str = "search_spellings";
+/// What the homepage hero shows when no experiment decides: "3d" (the model) or "photo" (his real
+/// photograph of the featured pen).
+pub const HERO_MODE: &str = "hero_mode";
+
 /// He said 14 photos a pen is more than enough; the uploader and the API both stop there.
 pub const MAX_PHOTOS: i64 = 14;
 
@@ -54,6 +61,17 @@ pub async fn brand_order(pool: &PgPool) -> anyhow::Result<String> {
 
 pub async fn popular_section(pool: &PgPool) -> anyhow::Result<bool> {
     Ok(get(pool, POPULAR_SECTION).await?.and_then(|v| v.as_bool()).unwrap_or(true))
+}
+
+pub async fn search_spellings(pool: &PgPool) -> anyhow::Result<Vec<crate::spelling::Spelling>> {
+    Ok(match get(pool, SEARCH_SPELLINGS).await? {
+        Some(v) => serde_json::from_value(v).unwrap_or_default(),
+        None => crate::spelling::default_list(),
+    })
+}
+
+pub async fn hero_photo(pool: &PgPool) -> anyhow::Result<bool> {
+    Ok(get(pool, HERO_MODE).await?.and_then(|v| v.as_str().map(|s| s == "photo")).unwrap_or(false))
 }
 
 pub async fn shot_list(pool: &PgPool) -> anyhow::Result<Vec<String>> {

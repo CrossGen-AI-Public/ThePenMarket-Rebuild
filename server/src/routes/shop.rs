@@ -71,6 +71,8 @@ pub struct ShopTpl {
     pub term_definition: String,
     /// A search for a word the glossary defines: (name, his short definition, entry URL).
     pub gloss: Option<(String, String, String)>,
+    /// "Showing results for “Sheaffer” too." when his spelling list or a near miss changed the search.
+    pub search_note: String,
     pub clear_url: String,
     pub hidden_fields: Vec<(String, String)>,
 }
@@ -84,7 +86,10 @@ struct Fixed {
     nib: Option<String>,
     mechanism: Option<String>,
     price_range: Option<String>,
+    tag: Option<String>,
     on_sale: bool,
+    /// A page that works for visitors but is too thin to index (a tag with one or two items).
+    noindex: bool,
 }
 
 fn build_url(base: &str, q: &ShopQuery, fixed: &Fixed, overrides: &[(&str, Option<String>)], page: Option<i64>) -> String {
@@ -171,7 +176,9 @@ async fn render_archive(state: &State, base: &str, q: ShopQuery, fixed: Fixed, h
     let has_q = q.q.as_deref().map(|s| !s.trim().is_empty()).unwrap_or(false);
     let sort = q.sort.clone().unwrap_or_else(|| if has_q { "relevance".into() } else { "newest".into() });
     let page_n = q.page.unwrap_or(1).max(1);
-    let filter = ShopFilter {
+    // Every spelling on his list: "Schaffer" also searches Sheaffer, "Mont Blanc" also Montblanc.
+    let spelled = crate::spelling::expand(q.q.as_deref().unwrap_or(""), &state.site().spellings);
+    let mut filter = ShopFilter {
         category: fixed.category.clone().or_else(|| q.cat.clone()),
         brand: fixed.brand.clone().or_else(|| q.brand.clone()),
         era: fixed.era.clone().or_else(|| q.era.clone()),
@@ -181,6 +188,8 @@ async fn render_archive(state: &State, base: &str, q: ShopQuery, fixed: Fixed, h
         min_cents: min_c,
         max_cents: max_c,
         q: q.q.clone(),
+        q_alts: spelled.variants.iter().skip(1).cloned().collect(),
+        tag: fixed.tag.clone(),
         on_sale: fixed.on_sale,
         include_sold: q.sold.as_deref() == Some("1"),
         sort: sort.clone(),
@@ -188,6 +197,28 @@ async fn render_archive(state: &State, base: &str, q: ShopQuery, fixed: Fixed, h
         per_page: PER_PAGE,
     };
     let mut result = db::shop(&state.pool, &filter, &ranges).await?;
+    let mut search_note = spelled.corrected.as_ref().map(|c| format!("Showing results for “{c}” too.")).unwrap_or_default();
+    let mut gloss_word = spelled.corrected.clone().or_else(|| q.q.clone());
+    // Nothing found and not on his list: a make's name one or two letters off ("Sheafer") is tried.
+    if result.total == 0 && has_q && spelled.corrected.is_none() {
+        let makes: Vec<String> = {
+            let cat = state.catalog();
+            let mut m: Vec<String> = cat.pens.iter().map(|p| p.brand.clone()).filter(|b| !b.is_empty()).collect();
+            m.sort();
+            m.dedup();
+            m
+        };
+        if let Some(fix) = q.q.as_deref().and_then(|w| crate::spelling::near_miss(w, &makes)) {
+            let retry = ShopFilter { q: Some(fix.clone()), q_alts: crate::spelling::expand(&fix, &state.site().spellings).variants.into_iter().skip(1).collect(), ..filter.clone() };
+            let found = db::shop(&state.pool, &retry, &ranges).await?;
+            if found.total > 0 {
+                search_note = format!("Nothing matched “{}”. Showing results for “{fix}”.", q.q.as_deref().unwrap_or("").trim());
+                gloss_word = Some(fix);
+                result = found;
+                filter = retry;
+            }
+        }
+    }
 
     // Brand order: his pins first, then stock count (the query's order) or visitor interest.
     let brand_exp = crate::insights::variant(state, "brand-order");
@@ -275,7 +306,7 @@ async fn render_archive(state: &State, base: &str, q: ShopQuery, fixed: Fixed, h
     let mut page = PageMeta::new(state, &title, &description, &canonical);
     page.section = "shop".into();
     // Filtered views of an archive are not separate documents; only the clean archive is indexed.
-    page.noindex = !applied.is_empty() || page_n > 1;
+    page.noindex = !applied.is_empty() || page_n > 1 || fixed.noindex;
     if let Some(p) = result.items.first() {
         if !p.image.is_empty() {
             page.og_image = state.abs(&p.image);
@@ -329,7 +360,8 @@ async fn render_archive(state: &State, base: &str, q: ShopQuery, fixed: Fixed, h
         related_posts,
         term_kind: term_kind.to_string(),
         term_definition,
-        gloss: if page_n == 1 { q.q.as_deref().and_then(|w| state.site().glossary.find(w).map(|e| (e.name.clone(), e.short.clone(), e.url.clone()))) } else { None },
+        gloss: if page_n == 1 { gloss_word.as_deref().and_then(|w| state.site().glossary.find(w).map(|e| (e.name.clone(), e.short.clone(), e.url.clone()))) } else { None },
+        search_note,
         clear_url: base.to_string(),
         hidden_fields,
     })
@@ -428,6 +460,21 @@ pub async fn price_range(AxState(state): AxState<State>, Path(slug): Path<String
     render_archive(&state, &format!("/pw-price-range/{slug}/"), q, Fixed { price_range: Some(slug.clone()), ..Default::default() }, format!("Pens {name}"), intro.clone(), format!("Pens {name}: {n} in Stock | ThePenMarket.com"), intro, vec![("Home".into(), "/".into()), ("Shop".into(), "/shop/".into()), (name, format!("/pw-price-range/{slug}/"))], "", String::new(), vec![]).await
 }
 
+/// His own tags on the items he adds, at the old site's /product-tag/{slug}/ address. An old tag
+/// address with no tag of that name today falls through to the redirect table (see routes::mod).
+pub async fn tag(AxState(state): AxState<State>, Path(slug): Path<String>, Query(q): Query<ShopQuery>) -> AppResult {
+    let t = db::tag_by_slug(&state.pool, &slug).await?.ok_or(AppError::NotFound)?;
+    let intro = match t.live {
+        0 => "Nothing with this tag is for sale right now.".to_string(),
+        1 => "1 item for sale with this tag.".to_string(),
+        n => format!("{n} items for sale with this tag."),
+    };
+    let base = t.url();
+    let crumbs = vec![("Home".into(), "/".into()), ("Shop".into(), "/shop/".into()), (t.name.clone(), base.clone())];
+    let fixed = Fixed { tag: Some(slug.clone()), noindex: t.live < db::TAG_INDEX_MIN, ..Default::default() };
+    render_archive(&state, &base, q, fixed, t.name.clone(), intro.clone(), format!("{}: {} for Sale | ThePenMarket.com", t.name, t.live), format!("{} at ThePenMarket.com. {intro}", t.name), crumbs, "", String::new(), vec![]).await
+}
+
 // ---------- product ----------
 pub struct Spec {
     pub label: String,
@@ -454,6 +501,10 @@ pub struct ProductTpl {
     pub fix_days: u64,
     pub ask_url: String,
     pub is_membership: bool,
+    pub tags: Vec<db::Tag>,
+    /// The tags as he types them in the editor: "gift, Parker 51".
+    pub tags_text: String,
+    pub show_tags: bool,
 }
 
 pub async fn product(AxState(state): AxState<State>, Path(slug): Path<String>) -> AppResult {
@@ -534,6 +585,10 @@ pub async fn product(AxState(state): AxState<State>, Path(slug): Path<String>) -
         }
     }
     product_node["additionalProperty"] = serde_json::json!(props);
+    let tags = db::product_tags(&state.pool, p.id).await?;
+    if !tags.is_empty() {
+        product_node["keywords"] = serde_json::json!(tags.iter().map(|t| t.name.clone()).collect::<Vec<_>>().join(", "));
+    }
     page = page.with_jsonld(vec![
         org_node(&state),
         product_node,
@@ -557,6 +612,9 @@ pub async fn product(AxState(state): AxState<State>, Path(slug): Path<String>) -
         fix_days: engine::REPAIR_PROMISE_DAYS,
         ask_url,
         is_membership,
+        tags_text: tags.iter().map(|t| t.name.clone()).collect::<Vec<_>>().join(", "),
+        show_tags: !tags.is_empty() || editing,
+        tags,
     })
 }
 

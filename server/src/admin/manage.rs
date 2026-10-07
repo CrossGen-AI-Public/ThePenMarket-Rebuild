@@ -78,6 +78,8 @@ pub async fn home(AxState(state): AxState<State>, Extension(cookie): Extension<C
         Tile { title: "FAQs", url: "/admin/faqs/", line: format!("{} published answers, shared with Ask the Pen Market.", n("faqs")), badge: String::new() },
         Tile { title: "Glossary", url: "/admin/glossary/", line: format!("{} entries published. The words your customers trip over, explained in your words and linked from your listings.", n("gloss_live")), badge: badge(n("gloss_drafts"), "drafts to write") },
         Tile { title: "Homepage and photos", url: "/admin/settings/", line: "The featured pen, the Most Popular row, the guided photo shoot list, where forms are e-mailed.".into(), badge: String::new() },
+        Tile { title: "Old addresses", url: "/admin/redirects/", line: "Every old-site address that moved, and where it sends people. Paste a list of old addresses to add them.".into(), badge: String::new() },
+        Tile { title: "Search spellings", url: "/admin/search/", line: "Schaffer finds Sheaffer, Mont Blanc finds Montblanc. Your list of how people misspell a search.".into(), badge: String::new() },
         Tile { title: "Brands", url: "/admin/brands/", line: "Pin Mont Blanc (or any brand) to the top of the brand filter, whatever is in stock.".into(), badge: String::new() },
         Tile { title: "Insights", url: "/admin/insights/", line: "What visitors look at, search for and click. Heat maps are on every page: press “Heat map” in the black bar.".into(), badge: badge(n("visitors"), "visitors this week") },
         Tile { title: "Experiments", url: "/admin/experiments/", line: "Show half your visitors one version and half another, and see which sells better.".into(), badge: badge(n("running"), "running") },
@@ -126,6 +128,8 @@ pub struct SettingsTpl {
     pub featured_title: String,
     pub featured_url: String,
     pub popular_on: bool,
+    pub hero_photo: bool,
+    pub hero_experiment: bool,
     pub shots: String,
     pub max_photos: i64,
     pub mail_connected: bool,
@@ -157,6 +161,8 @@ pub async fn settings_page(AxState(state): AxState<State>, Extension(cookie): Ex
         featured_title: featured.as_ref().map(|p| p.short_title.clone()).unwrap_or_default(),
         featured_url: featured.map(|p| p.url).unwrap_or_default(),
         popular_on: settings::popular_section(&state.pool).await?,
+        hero_photo: settings::hero_photo(&state.pool).await?,
+        hero_experiment: crate::insights::variant(&state, "hero-stage").is_some(),
         shots: settings::shot_list(&state.pool).await?.join("\n"),
         max_photos: settings::MAX_PHOTOS,
         mail_connected: state.mailer.name() == "smtp",
@@ -179,11 +185,14 @@ pub struct SettingsForm {
     pub clear_featured: String,
     #[serde(default)]
     pub place_id: String,
+    #[serde(default)]
+    pub hero: String,
 }
 
 pub async fn settings_save(AxState(state): AxState<State>, Extension(cookie): Extension<CsrfCookie>, Auth(admin): Auth, Form(form): Form<SettingsForm>) -> AppResult {
     check(&state, &cookie, &admin, &form.csrf)?;
     settings::set(&state.pool, settings::POPULAR_SECTION, serde_json::json!(form.popular == "1")).await?;
+    settings::set(&state.pool, settings::HERO_MODE, serde_json::json!(if form.hero == "photo" { "photo" } else { "3d" })).await?;
     let shots = settings::parse_shot_list(&form.shots);
     if shots.is_empty() {
         settings::clear(&state.pool, settings::SHOT_LIST).await?;
@@ -206,7 +215,7 @@ pub async fn settings_save(AxState(state): AxState<State>, Extension(cookie): Ex
         return Err(AppError::BadRequest("That does not look like a Google Place ID (letters, digits, dashes and underscores, usually starting ChIJ). Go back; nothing else was lost.".into()));
     }
     crate::app::refresh_site_cache(&state).await;
-    store::audit(&state.pool, "admin.settings_saved", serde_json::json!({"email": admin.email, "ip": admin.ip, "popular_section": form.popular == "1", "shots": shots.len()})).await?;
+    store::audit(&state.pool, "admin.settings_saved", serde_json::json!({"email": admin.email, "ip": admin.ip, "popular_section": form.popular == "1", "hero": if form.hero == "photo" { "photo" } else { "3d" }, "shots": shots.len()})).await?;
     Ok(Redirect::to("/admin/settings/?saved=1").into_response())
 }
 

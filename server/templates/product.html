@@ -56,6 +56,7 @@
       <table class="specs" id="specs">
         <tbody>
         {% for s in specs %}<tr data-spec="{{ s.key }}"><th scope="row">{{ s.label }}</th><td data-edit="{{ s.key }}" data-slug="{{ s.slug }}">{% if !s.url.is_empty() %}<a href="{{ s.url }}">{{ s.value }}</a>{% else %}{{ s.value }}{% endif %}</td></tr>{% endfor %}
+        {% if show_tags %}<tr data-spec="tags"><th scope="row">Tags</th><td data-edit="tags" data-text="{{ tags_text }}">{% for t in tags %}<a class="tag" href="{{ t.url() }}">{{ t.name }}</a>{% endfor %}</td></tr>{% endif %}
         </tbody>
       </table>
     </section>

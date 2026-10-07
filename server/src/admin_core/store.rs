@@ -338,3 +338,31 @@ pub async fn term_options(pool: &PgPool, table: &str) -> anyhow::Result<Vec<Term
     let rows = sqlx::query(sql).fetch_all(pool).await?;
     Ok(rows.into_iter().map(|r| TermOption { slug: r.get("slug"), name: r.get("name") }).collect())
 }
+
+/// His tags for one item, from what he typed ("fountain pen, gift, Parker 51"): each new name becomes
+/// a tag, a name he used before (any case) reuses it, and the item's tags become exactly these, in
+/// his order. Returns the names as stored.
+pub async fn set_product_tags(pool: &PgPool, product_id: i32, names: &[String]) -> anyhow::Result<Vec<String>> {
+    let mut tx = pool.begin().await?;
+    sqlx::query("DELETE FROM product_tag_link WHERE product_id = $1").bind(product_id).execute(&mut *tx).await?;
+    let mut stored: Vec<String> = vec![];
+    for (pos, name) in names.iter().enumerate() {
+        let slug = crate::text::slugify(name);
+        if slug.is_empty() {
+            continue;
+        }
+        let row = sqlx::query("INSERT INTO product_tag (slug, name) VALUES ($1, $2) ON CONFLICT (slug) DO UPDATE SET slug = EXCLUDED.slug RETURNING id, name").bind(&slug).bind(name).fetch_one(&mut *tx).await?;
+        let tag_id: i32 = row.get("id");
+        sqlx::query("INSERT INTO product_tag_link (product_id, tag_id, position) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING").bind(product_id).bind(tag_id).bind(pos as i32).execute(&mut *tx).await?;
+        stored.push(row.get("name"));
+    }
+    // A tag no item uses any more goes, so the tag list stays his current vocabulary.
+    sqlx::query("DELETE FROM product_tag t WHERE NOT EXISTS (SELECT 1 FROM product_tag_link l WHERE l.tag_id = t.id)").execute(&mut *tx).await?;
+    tx.commit().await?;
+    Ok(stored)
+}
+
+/// Every tag he has used, for the editor's suggestions.
+pub async fn tag_names(pool: &PgPool) -> anyhow::Result<Vec<String>> {
+    Ok(sqlx::query_scalar("SELECT name FROM product_tag ORDER BY lower(name)").fetch_all(pool).await?)
+}

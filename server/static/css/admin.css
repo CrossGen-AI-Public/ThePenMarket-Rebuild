@@ -181,3 +181,9 @@ table.adm-rank td{padding:8px 0 10px;border-top:1px solid var(--line);vertical-a
 .adm-photo img{max-width:220px;height:auto;border-radius:8px}
 .btn-danger{border-color:var(--red-dark);color:var(--red-dark);margin-top:24px}
 .btn-danger:hover{background:var(--red-dark);border-color:var(--red-dark);color:#fff}
+/* Old addresses and search spellings (2026-10-07) */
+.adm-link-btn{font:inherit;font-size:14px;color:var(--red-dark);background:none;border:0;padding:0;cursor:pointer;text-decoration:underline}
+.section-admin table.adm code{font-size:13px;overflow-wrap:anywhere}
+table.adm-report tr.is-ok td:last-child{color:#2E6B47}
+table.adm-report tr.is-todo td:last-child{color:var(--red-dark)}
+table.adm-report tr.is-same td:last-child{color:var(--muted)}

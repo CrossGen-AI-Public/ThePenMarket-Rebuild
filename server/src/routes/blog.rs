@@ -53,7 +53,9 @@ async fn render(state: &State, base: &str, category: Option<BlogCategory>, q: Bl
     let page_n = q.page.unwrap_or(1).max(1);
     let term = q.q.clone().unwrap_or_default().trim().to_string();
     let cat_slug = category.as_ref().map(|c| c.slug.clone());
-    let (posts, total) = db::posts(&state.pool, cat_slug.as_deref(), if term.is_empty() { None } else { Some(&term) }, page_n, PER_PAGE).await?;
+    // Every spelling on his list ("Schaffer" finds his Sheaffer posts too).
+    let spelled = crate::spelling::expand(&term, &state.site().spellings);
+    let (posts, total) = db::posts(&state.pool, cat_slug.as_deref(), &spelled.variants, page_n, PER_PAGE).await?;
     let categories = db::blog_categories(&state.pool).await?;
     let total_pages = ((total + PER_PAGE - 1) / PER_PAGE).max(1);
     let pages: Vec<PageLink> = (1..=total_pages).filter(|n| total_pages <= 9 || (*n - page_n).abs() <= 2 || *n == 1 || *n == total_pages).map(|n| PageLink { n, url: page_url(base, &term, n), current: n == page_n }).collect();
@@ -71,7 +73,7 @@ async fn render(state: &State, base: &str, category: Option<BlogCategory>, q: Bl
             format!("{}: {} Posts from Drippy Musings | ThePenMarket.com", c.name, c.count),
             if c.description.is_empty() { format!("{} posts in {} on the ThePenMarket.com blog.", c.count, c.name) } else { crate::text::summary(&c.description, 155) },
         ),
-        (None, false) => (format!("Search: {term}"), format!("{total} posts mention “{term}”."), format!("“{term}” in Drippy Musings | ThePenMarket.com"), format!("Blog posts on ThePenMarket.com that mention {term}.")),
+        (None, false) => (format!("Search: {term}"), match &spelled.corrected { Some(c) => format!("{total} posts mention “{term}” or “{c}”."), None => format!("{total} posts mention “{term}”.") }, format!("“{term}” in Drippy Musings | ThePenMarket.com"), format!("Blog posts on ThePenMarket.com that mention {term}.")),
         (None, true) => (
             Entity::BLOG_NAME.to_string(),
             format!("{} posts since September 2013 by Nathaniel Cerf: how to start collecting, what happens at the repair bench, inks under the sun, fake Montblancs, and the pens of presidents and writers. \"It is a space dedicated to pen lovers old and new.\"", total),
@@ -128,13 +130,13 @@ pub async fn post(AxState(state): AxState<State>, Path(slug): Path<String>, Orig
         if let Some(res) = crate::routes::content::custom_page(&state, &slug).await? {
             return Ok(res);
         }
-        if let Some(target) = db::redirect_for(&state.pool, uri.path()).await? {
+        if let Some(target) = db::redirect_for(&state.pool, uri.path(), uri.query()).await? {
             return Ok(crate::app::moved(&target));
         }
         return crate::routes::render_404(&state, uri.path());
     };
     let card = PostCard::from(row.clone());
-    let more = if let Some(c) = &row.category_slug { db::posts(&state.pool, Some(c), None, 1, 4).await?.0.into_iter().filter(|p| p.slug != slug).take(3).collect() } else { vec![] };
+    let more = if let Some(c) = &row.category_slug { db::posts(&state.pool, Some(c), &[], 1, 4).await?.0.into_iter().filter(|p| p.slug != slug).take(3).collect() } else { vec![] };
     // Pens the post mentions by brand: the first brand name in the title, if any.
     let brands = ["Parker", "Sheaffer", "Waterman", "Montblanc", "Mont Blanc", "Esterbrook", "Conklin", "Pelikan", "Wahl", "Eversharp", "Namiki", "Pilot", "Omas", "Aurora", "Visconti", "Lamy", "TWSBI", "Cross"];
     let mentioned = brands.iter().find(|b| row.title.to_lowercase().contains(&b.to_lowercase())).map(|b| b.to_string());

@@ -76,7 +76,13 @@ pub struct HomeTpl {
 
 const MONTHS: [&str; 12] = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
-pub async fn home(AxState(state): AxState<State>) -> AppResult {
+pub async fn home(AxState(state): AxState<State>, axum::extract::RawQuery(query): axum::extract::RawQuery) -> AppResult {
+    // A really old address that lived on the home page's query (`/?page_id=12`), if he listed it.
+    if let Some(q) = query.as_deref().filter(|q| !q.is_empty()) {
+        if let Some(target) = db::redirect_for(&state.pool, "/", Some(q)).await?.filter(|t| t != "/") {
+            return Ok(crate::app::moved(&target));
+        }
+    }
     let cat = state.catalog();
     let s = engine::stats(&cat);
     let just_in = db::products_by_slugs_or_recent(&state.pool, 5, &[], true, true).await?;
@@ -138,7 +144,11 @@ pub async fn home(AxState(state): AxState<State>) -> AppResult {
         vec![]
     };
     let hero_exp = crate::insights::variant(&state, "hero-stage");
-    let hero_photo = hero_exp.as_ref().map(|a| a.variant == "photo").unwrap_or(false);
+    // A running experiment decides; otherwise his choice in Homepage and photos (the 3D model by default).
+    let hero_photo = match hero_exp.as_ref() {
+        Some(a) => a.variant == "photo",
+        None => crate::settings::hero_photo(&state.pool).await?,
+    };
     let tile_image = |slug: &str| cat.pens.iter().find(|p| p.is_live() && p.category_slug == slug && !p.image.is_empty() && p.slug != featured.slug).map(|p| p.image.clone()).unwrap_or_default();
     let sale_image = cat.pens.iter().find(|p| p.is_live() && p.sale_price_cents.is_some() && !p.image.is_empty()).map(|p| p.image.clone()).unwrap_or_default();
     let count_cat = |slug: &str| cat.pens.iter().filter(|p| p.is_live() && p.category_slug == slug).count();
@@ -149,7 +159,7 @@ pub async fn home(AxState(state): AxState<State>) -> AppResult {
         CatTile { name: "Inkwells & Blotters".into(), url: "/product-category/inkwells-blotters/".into(), image: tile_image("inkwells-blotters"), count: count_cat("inkwells-blotters") },
         CatTile { name: "Best Bargains".into(), url: "/on-sale-pens/".into(), image: sale_image, count: s.on_sale },
     ];
-    let (latest_posts, _) = db::posts(&state.pool, None, None, 1, 3).await?;
+    let (latest_posts, _) = db::posts(&state.pool, None, &[], 1, 3).await?;
 
     // Edit photographs: one distinct pen per edit, chosen from the catalog snapshot (newest first).
     let pick = |pred: &dyn Fn(&engine::Pen) -> bool, used: &[String]| cat.pens.iter().find(|p| p.is_live() && !p.image.is_empty() && pred(p) && !used.contains(&p.slug)).map(|p| (p.image.clone(), p.short_title.clone(), p.slug.clone()));

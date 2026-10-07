@@ -14,7 +14,7 @@ mod routes;
 mod security;
 mod settings;
 
-pub use thepenmarket::{config, engine, gloss, media, money, text};
+pub use thepenmarket::{config, engine, gloss, media, money, spelling, text};
 
 use app::{AppState, RateLimiter};
 use sqlx::postgres::PgPoolOptions;

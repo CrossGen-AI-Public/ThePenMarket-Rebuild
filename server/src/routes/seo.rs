@@ -43,7 +43,7 @@ pub async fn robots(AxState(state): AxState<State>) -> AppResult {
 pub async fn llms(AxState(state): AxState<State>) -> AppResult {
     let cat = state.catalog();
     let s = engine::stats(&cat);
-    let (_, posts) = db::posts(&state.pool, None, None, 1, 1).await?;
+    let (_, posts) = db::posts(&state.pool, None, &[], 1, 1).await?;
     let (_, listings) = db::listings(&state.pool, 1, 1).await?;
     let o = state.origin();
     let cats: Vec<String> = s.by_category.iter().map(|c| format!("- {} ({}): {o}/product-category/{}/", c.name, c.count, c.slug)).collect();
@@ -79,6 +79,9 @@ pub async fn sitemap_categories(AxState(state): AxState<State>) -> AppResult {
     }
     for c in db::blog_categories(&state.pool).await? {
         entries.push((format!("/category/{}/", c.slug), t.clone()));
+    }
+    for tag in db::indexable_tags(&state.pool).await? {
+        entries.push((tag.url(), t.clone()));
     }
     xml(urlset(&state, &entries))
 }

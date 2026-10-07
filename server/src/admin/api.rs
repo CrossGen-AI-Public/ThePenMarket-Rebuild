@@ -41,6 +41,21 @@ async fn refresh_catalog(state: &State) {
     }
 }
 
+const MAX_TAGS: usize = 20;
+
+/// "Fountain pen, gift ,, Parker 51, gift" -> ["Fountain pen", "gift", "Parker 51"]: comma separated,
+/// trimmed, 40 characters each, the first spelling of a repeated tag kept.
+fn parse_tags(value: &str) -> Vec<String> {
+    let mut out: Vec<String> = vec![];
+    for t in value.split(',').map(|t| t.split_whitespace().collect::<Vec<_>>().join(" ")) {
+        let t: String = t.chars().take(40).collect();
+        if !t.is_empty() && !crate::text::slugify(&t).is_empty() && !out.iter().any(|x| crate::text::slugify(x) == crate::text::slugify(&t)) {
+            out.push(t);
+        }
+    }
+    out
+}
+
 fn needs_step_up(field: &str, before: &store::ProductEdit, value: &str) -> bool {
     match field {
         "status" => value == "sold" || value == "archived",
@@ -143,6 +158,15 @@ pub async fn edit_product(AxState(state): AxState<State>, Extension(cookie): Ext
             store::update_description(&state.pool, id, &html, value).await?;
             ("Description", crate::text::summary(&before.description_text, 60), crate::text::summary(value, 60))
         }
+        "tags" => {
+            let names = parse_tags(value);
+            if names.len() > MAX_TAGS {
+                return Ok(api_err(StatusCode::BAD_REQUEST, &format!("{MAX_TAGS} tags at most.")));
+            }
+            let was = crate::db::product_tags(&state.pool, id).await?.iter().map(|t| t.name.clone()).collect::<Vec<_>>().join(", ");
+            let stored = store::set_product_tags(&state.pool, id, &names).await?;
+            ("Tags", was, stored.join(", "))
+        }
         "brand" | "era" | "nib" | "filling_mechanism" | "category" => {
             let (table, column, label) = match field {
                 "brand" => ("brand", "brand_id", "Brand"),
@@ -174,11 +198,16 @@ pub async fn edit_product(AxState(state): AxState<State>, Extension(cookie): Ext
     store::audit(&state.pool, "admin.edit", serde_json::json!({"email": admin.email, "ip": admin.ip, "pen": before.short_title, "product_id": id, "field": label, "before": was, "after": now})).await?;
     refresh_catalog(&state).await;
     let after = store::product_for_edit(&state.pool, id).await?.ok_or(AppError::NotFound)?;
+    let html = match field {
+        "description" => after.description_html.clone(),
+        "tags" => crate::db::product_tags(&state.pool, id).await?.iter().map(|t| format!("<a class=\"tag\" href=\"{}\">{}</a>", t.url(), escape(&t.name))).collect(),
+        _ => String::new(),
+    };
     Ok(Json(serde_json::json!({
         "ok": true,
         "field": field,
-        "display": display_value(field, &after),
-        "html": if field == "description" { after.description_html.clone() } else { String::new() },
+        "display": if field == "tags" { now } else { display_value(field, &after) },
+        "html": html,
         "status": after.status,
     })).into_response())
 }
@@ -318,6 +347,7 @@ pub async fn options(AxState(state): AxState<State>, AuthApi(_admin): AuthApi) -
         out.insert(t.to_string(), serde_json::to_value(store::term_options(&state.pool, t).await?)?);
     }
     out.insert("shots".into(), serde_json::to_value(crate::settings::shot_list(&state.pool).await?)?);
+    out.insert("tags".into(), serde_json::to_value(store::tag_names(&state.pool).await?)?);
     out.insert("max_photos".into(), serde_json::json!(crate::settings::MAX_PHOTOS));
     out.insert("featured_product_id".into(), serde_json::json!(crate::settings::featured_product(&state.pool).await?));
     Ok(Json(serde_json::Value::Object(out)).into_response())
@@ -330,6 +360,12 @@ mod tests {
     fn paragraphs_escape_html() {
         assert_eq!(paragraphs_html("Hello <b>there</b>\n\nSecond line\nwith break"), "<p>Hello &lt;b&gt;there&lt;/b&gt;</p>\n<p>Second line<br>with break</p>");
         assert_eq!(paragraphs_html("  \n\n "), "");
+    }
+    #[test]
+    fn tags_are_his_words_tidied() {
+        assert_eq!(parse_tags("Fountain pen, gift ,,  Parker   51, GIFT"), vec!["Fountain pen", "gift", "Parker 51"]);
+        assert!(parse_tags(" , ,").is_empty());
+        assert!(parse_tags("!!!").is_empty());
     }
     #[test]
     fn step_up_rules() {

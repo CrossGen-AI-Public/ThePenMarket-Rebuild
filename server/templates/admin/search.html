@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="admin-page">
+  <div class="adm-top"><div><h1>Search spellings</h1><p class="lead"><a href="/admin/">Admin home</a></p></div></div>
+  {% if saved %}<div class="adm-ok">Saved. The shop and blog searches use it now.</div>{% endif %}
+  <p>Put your spelling first, then the ways people type it, separated by commas. A search for any of them finds all of them, so “Schaffer” finds your Sheaffer pens and “Mont Blanc” finds listings written either way. The search box also tells the visitor it searched your spelling too.</p>
+  <form class="adm-form" method="post" action="/admin/search/">
+    <input type="hidden" name="csrf" value="{{ page.csrf }}">
+    <label for="list">One word per line ({{ words }} now)</label>
+    <textarea id="list" name="list" rows="14" placeholder="Sheaffer = Schaffer, Shaeffer, Schaeffer, Shaffer&#10;Montblanc = Mont Blanc">{{ list }}</textarea>
+    <p class="adm-hint">Whole words only: “Shaffer” is caught, “Shafferton” is not. When a search still finds nothing, the site also tries the make whose name is one or two letters off (“Sheafer”, “Pelican”) and says so.</p>
+    <div class="adm-actions"><button type="submit" class="btn">Save</button></div>
+  </form>
+  <h2>Searches that found nothing, last 90 days</h2>
+  {% if misses.is_empty() %}
+  <p class="adm-hint">None yet. Misspellings visitors type will show up here.</p>
+  {% else %}
+  <table class="adm">
+    <tr><th>What they typed</th><th>Times</th></tr>
+    {% for m in misses %}<tr><td><a href="{{ m.url }}" target="_blank" rel="noopener">{{ m.label }}</a></td><td>{{ m.n }}</td></tr>{% endfor %}
+  </table>
+  {% endif %}
+</div>
+{% endblock %}

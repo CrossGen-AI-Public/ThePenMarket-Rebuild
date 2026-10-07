@@ -89,6 +89,8 @@ pub struct SiteCache {
     pub google_reviews: Option<crate::reviews::Reviews>,
     /// Published glossary entries and the approved make / nib / filling / era definitions.
     pub glossary: Arc<crate::glossary::Glossary>,
+    /// His list of search misspellings and the way he spells each word.
+    pub spellings: Vec<crate::spelling::Spelling>,
 }
 
 pub async fn load_site_cache(pool: &PgPool) -> anyhow::Result<SiteCache> {
@@ -100,6 +102,7 @@ pub async fn load_site_cache(pool: &PgPool) -> anyhow::Result<SiteCache> {
         review_url: { let id = crate::reviews::place_id(pool).await?; if id.is_empty() { String::new() } else { crate::reviews::write_review_url(&id) } },
         google_reviews: crate::reviews::cached(pool).await?.filter(|r| !r.reviews.is_empty()),
         glossary: Arc::new(crate::glossary::load(pool).await?),
+        spellings: crate::settings::search_spellings(pool).await?,
     })
 }
 

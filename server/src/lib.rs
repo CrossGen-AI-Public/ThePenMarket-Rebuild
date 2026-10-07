@@ -6,6 +6,7 @@ pub mod engine;
 pub mod gloss;
 pub mod media;
 pub mod money;
+pub mod spelling;
 pub mod text;
 pub mod wp;
 

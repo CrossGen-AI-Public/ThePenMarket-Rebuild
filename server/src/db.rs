@@ -186,6 +186,10 @@ pub struct ShopFilter {
     pub min_cents: Option<i64>,
     pub max_cents: Option<i64>,
     pub q: Option<String>,
+    /// The same search in the other spellings on his list (`spelling::expand`); matched as well as `q`.
+    pub q_alts: Vec<String>,
+    /// A product tag's slug: the /product-tag/{slug}/ archive.
+    pub tag: Option<String>,
     pub on_sale: bool,
     pub include_sold: bool,
     pub sort: String,
@@ -235,9 +239,36 @@ impl ShopFilter {
         if self.on_sale {
             qb.push(" AND p.sale_price_cents IS NOT NULL ");
         }
-        if let Some(q) = self.q.as_deref().map(str::trim).filter(|q| !q.is_empty()) {
-            qb.push(" AND (p.search_tsv @@ websearch_to_tsquery('english', ").push_bind(q.to_string()).push(") OR p.title ILIKE ").push_bind(format!("%{q}%")).push(" OR p.sku = ").push_bind(q.to_string()).push(") ");
+        if let Some(t) = &self.tag {
+            qb.push(" AND EXISTS (SELECT 1 FROM product_tag_link l JOIN product_tag t ON t.id = l.tag_id WHERE l.product_id = p.id AND t.slug = ").push_bind(t.clone()).push(") ");
         }
+        let variants = self.variants();
+        if !variants.is_empty() {
+            qb.push(" AND (");
+            for (i, v) in variants.iter().enumerate() {
+                if i > 0 {
+                    qb.push(" OR ");
+                }
+                qb.push("p.search_tsv @@ websearch_to_tsquery('english', ").push_bind(v.clone()).push(") OR p.title ILIKE ").push_bind(format!("%{v}%")).push(" OR p.sku = ").push_bind(v.clone());
+                qb.push(" OR EXISTS (SELECT 1 FROM product_tag_link l JOIN product_tag t ON t.id = l.tag_id WHERE l.product_id = p.id AND t.name ILIKE ").push_bind(v.clone()).push(")");
+            }
+            qb.push(") ");
+        }
+    }
+
+    /// The search and its other spellings, trimmed, empty ones dropped.
+    fn variants(&self) -> Vec<String> {
+        self.q.iter().chain(self.q_alts.iter()).map(|v| v.trim().to_string()).filter(|v| !v.is_empty()).collect()
+    }
+}
+
+/// `ts_rank` over every spelling of the search at once (the tsqueries OR'd together).
+fn push_rank_query(qb: &mut QueryBuilder<'_, Postgres>, variants: &[String]) {
+    for (i, v) in variants.iter().enumerate() {
+        if i > 0 {
+            qb.push(" || ");
+        }
+        qb.push("websearch_to_tsquery('english', ").push_bind(v.clone()).push(")");
     }
 }
 
@@ -274,7 +305,8 @@ pub async fn shop(pool: &PgPool, f: &ShopFilter, ranges: &[PriceRange]) -> anyho
     let mut qb = QueryBuilder::new(PRODUCT_SELECT);
     f.push_where(&mut qb, "");
     const VIEWS_90D: &str = "(SELECT count(DISTINCT v.visitor) FROM visit_event v WHERE v.product_id = p.id AND v.kind = 'view' AND v.at > now() - interval '90 days')";
-    let q = f.q.as_deref().map(str::trim).filter(|q| !q.is_empty());
+    let variants = f.variants();
+    let q = (!variants.is_empty()).then_some(());
     match (f.sort.as_str(), q) {
         ("price-asc", _) => {
             qb.push(" ORDER BY COALESCE(p.sale_price_cents, p.price_cents) ASC, p.title ");
@@ -289,8 +321,10 @@ pub async fn shop(pool: &PgPool, f: &ShopFilter, ranges: &[PriceRange]) -> anyho
             qb.push(format!(" ORDER BY p.status ASC, {VIEWS_90D} DESC, p.listed_year DESC NULLS LAST, p.listed_month DESC NULLS LAST, p.wp_id DESC "));
         }
         // A search with no sort chosen: best text match first, then what other visitors opened most.
-        ("" | "relevance", Some(q)) => {
-            qb.push(" ORDER BY p.status ASC, ts_rank(p.search_tsv, websearch_to_tsquery('english', ").push_bind(q.to_string()).push(format!(")) DESC, {VIEWS_90D} DESC, p.listed_year DESC NULLS LAST, p.wp_id DESC "));
+        ("" | "relevance", Some(())) => {
+            qb.push(" ORDER BY p.status ASC, ts_rank(p.search_tsv, ");
+            push_rank_query(&mut qb, &variants);
+            qb.push(format!(") DESC, {VIEWS_90D} DESC, p.listed_year DESC NULLS LAST, p.wp_id DESC "));
         }
         _ => {
             qb.push(" ORDER BY p.status ASC, p.listed_year DESC NULLS LAST, p.listed_month DESC NULLS LAST, p.wp_id DESC ");
@@ -544,7 +578,8 @@ impl From<PostRow> for PostCard {
 
 const POST_SELECT: &str = "SELECT p.id, p.slug, p.title, p.excerpt, p.meta_description, p.author_name, p.featured_path, p.featured_alt, p.published_at, p.modified_at, p.word_count, bc.name AS category_name, bc.slug AS category_slug FROM post p LEFT JOIN blog_category bc ON bc.id = p.category_id";
 
-pub async fn posts(pool: &PgPool, category: Option<&str>, q: Option<&str>, page: i64, per_page: i64) -> anyhow::Result<(Vec<PostCard>, i64)> {
+/// `q` is the search in every spelling on his list (the visitor's own first); empty = no search.
+pub async fn posts(pool: &PgPool, category: Option<&str>, q: &[String], page: i64, per_page: i64) -> anyhow::Result<(Vec<PostCard>, i64)> {
     let mut count = QueryBuilder::new("SELECT count(*) AS n FROM post p LEFT JOIN blog_category bc ON bc.id = p.category_id WHERE p.status = 'published' ");
     let mut list = QueryBuilder::new(POST_SELECT);
     list.push(" WHERE p.status = 'published' ");
@@ -552,8 +587,16 @@ pub async fn posts(pool: &PgPool, category: Option<&str>, q: Option<&str>, page:
         if let Some(c) = category {
             qb.push(" AND bc.slug = ").push_bind(c.to_string());
         }
-        if let Some(q) = q.map(str::trim).filter(|q| !q.is_empty()) {
-            qb.push(" AND (p.search_tsv @@ websearch_to_tsquery('english', ").push_bind(q.to_string()).push(") OR p.title ILIKE ").push_bind(format!("%{q}%")).push(") ");
+        let variants: Vec<&str> = q.iter().map(|v| v.trim()).filter(|v| !v.is_empty()).collect();
+        if !variants.is_empty() {
+            qb.push(" AND (");
+            for (i, v) in variants.iter().enumerate() {
+                if i > 0 {
+                    qb.push(" OR ");
+                }
+                qb.push("p.search_tsv @@ websearch_to_tsquery('english', ").push_bind(v.to_string()).push(") OR p.title ILIKE ").push_bind(format!("%{v}%"));
+            }
+            qb.push(") ");
         }
     }
     let total: i64 = count.build().fetch_one(pool).await?.get("n");
@@ -710,10 +753,21 @@ pub async fn listing(pool: &PgPool, slug: &str) -> anyhow::Result<Option<Listing
 }
 
 // ---------- redirects and forms ----------
-pub async fn redirect_for(pool: &PgPool, path: &str) -> anyhow::Result<Option<String>> {
+/// The redirect for an old address. An old URL that carried a query (`/index.php?main_page=…`) is
+/// matched with its query first, then on its path alone; a trailing slash either way is the same URL.
+pub async fn redirect_for(pool: &PgPool, path: &str, query: Option<&str>) -> anyhow::Result<Option<String>> {
     let alt = if path.ends_with('/') { path.trim_end_matches('/').to_string() } else { format!("{path}/") };
-    let row = sqlx::query("UPDATE redirect SET hits = hits + 1 WHERE old_path = $1 OR old_path = $2 RETURNING new_path").bind(path).bind(alt).fetch_optional(pool).await?;
-    Ok(row.map(|r| r.get("new_path")))
+    let mut wanted: Vec<String> = vec![];
+    if let Some(q) = query.filter(|q| !q.is_empty()) {
+        wanted.push(format!("{path}?{q}"));
+        wanted.push(format!("{alt}?{q}"));
+    }
+    wanted.push(path.to_string());
+    wanted.push(alt);
+    let row = sqlx::query("SELECT id, new_path FROM redirect WHERE old_path = ANY($1) ORDER BY array_position($1, old_path) LIMIT 1").bind(&wanted).fetch_optional(pool).await?;
+    let Some(row) = row else { return Ok(None) };
+    sqlx::query("UPDATE redirect SET hits = hits + 1 WHERE id = $1").bind(row.get::<i32, _>("id")).execute(pool).await?;
+    Ok(Some(row.get("new_path")))
 }
 
 pub async fn save_form(pool: &PgPool, kind: &str, fields: serde_json::Value, photo_key: Option<String>) -> anyhow::Result<i32> {
@@ -741,4 +795,40 @@ pub async fn term_slugs_with_products(pool: &PgPool, table: &str, fk: &str) -> a
     let sql = format!("SELECT t.slug FROM {table} t WHERE EXISTS (SELECT 1 FROM product p WHERE p.{fk} = t.id AND p.status IN ('live', 'sold')) ORDER BY t.sort_order, t.name");
     let rows = sqlx::query(&sql).fetch_all(pool).await?;
     Ok(rows.iter().map(|r| r.get::<String, _>("slug")).collect())
+}
+
+// ---------- product tags ----------
+#[derive(Clone, Debug, FromRow)]
+pub struct Tag {
+    pub slug: String,
+    pub name: String,
+    /// Items with this tag that a visitor can buy right now.
+    pub live: i64,
+}
+
+impl Tag {
+    pub fn url(&self) -> String {
+        format!("/product-tag/{}/", self.slug)
+    }
+}
+
+const TAG_SELECT: &str = "SELECT t.slug, t.name, (SELECT count(*) FROM product_tag_link l2 JOIN product p2 ON p2.id = l2.product_id WHERE l2.tag_id = t.id AND p2.status = 'live') AS live FROM product_tag t";
+
+pub async fn product_tags(pool: &PgPool, product_id: i32) -> anyhow::Result<Vec<Tag>> {
+    let sql = format!("{TAG_SELECT} JOIN product_tag_link l ON l.tag_id = t.id WHERE l.product_id = $1 ORDER BY l.position, t.name");
+    Ok(sqlx::query_as(&sql).bind(product_id).fetch_all(pool).await?)
+}
+
+pub async fn tag_by_slug(pool: &PgPool, slug: &str) -> anyhow::Result<Option<Tag>> {
+    let sql = format!("{TAG_SELECT} WHERE t.slug = $1");
+    Ok(sqlx::query_as(&sql).bind(slug).fetch_optional(pool).await?)
+}
+
+/// A tag archive is indexed (and in the sitemap) once it holds this many items for sale; below that
+/// it is a thin page that still works for visitors.
+pub const TAG_INDEX_MIN: i64 = 3;
+
+pub async fn indexable_tags(pool: &PgPool) -> anyhow::Result<Vec<Tag>> {
+    let sql = format!("SELECT * FROM ({TAG_SELECT}) x WHERE x.live >= $1 ORDER BY x.slug");
+    Ok(sqlx::query_as(&sql).bind(TAG_INDEX_MIN).fetch_all(pool).await?)
 }

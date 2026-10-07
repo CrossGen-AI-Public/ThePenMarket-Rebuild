@@ -51,7 +51,7 @@
   function openEditor(el) {
     if (el.classList.contains("is-editing")) return;
     var field = el.getAttribute("data-edit");
-    var current = el.getAttribute("data-slug") !== null && pickers[field] ? el.getAttribute("data-slug") : (field === "description" ? (el.getAttribute("data-text") || "") : el.textContent.trim());
+    var current = el.getAttribute("data-slug") !== null && pickers[field] ? el.getAttribute("data-slug") : (field === "description" || field === "tags" ? (el.getAttribute("data-text") || "") : el.textContent.trim());
     var original = el.innerHTML;
     el.classList.add("is-editing");
     var box = document.createElement("span"); box.className = "adm-editor";
@@ -59,6 +59,7 @@
     function close(restore) { el.classList.remove("is-editing"); if (restore) el.innerHTML = original; }
     function done(j) {
       if (field === "description") { el.innerHTML = j.html || ""; el.setAttribute("data-text", input.value); }
+      else if (field === "tags") { el.innerHTML = j.html || ""; el.setAttribute("data-text", j.display || ""); }
       else if (pickers[field]) { var sel = input; var opt = sel.options[sel.selectedIndex]; el.setAttribute("data-slug", sel.value); el.textContent = sel.value ? opt.textContent : ""; }
       else { el.textContent = j.display; }
       if (field === "status") { document.body.setAttribute("data-status", j.status); }
@@ -78,6 +79,24 @@
       if (field === "price" || field === "sale_price") { input.inputMode = "decimal"; input.placeholder = field === "sale_price" ? "blank = no sale" : "149.99"; }
       if (field === "length_cm") input.placeholder = "13.4";
       box.appendChild(input);
+      if (field === "tags") {
+        input.placeholder = "Gift, Desk set, Parker 51";
+        var th = document.createElement("span"); th.className = "hint"; th.textContent = "Separate tags with commas. Each tag gets its own page listing everything with it."; box.appendChild(th);
+        // His earlier tags, offered as he types, so "Gift" and "gifts" do not become two tags.
+        var names = [];
+        var fill = function () {
+          var dl = document.getElementById("adm-tag-list"); if (!dl) return;
+          var head = input.value.replace(/[^,]*$/, ""), prefix = head ? head.replace(/\s*$/, " ") : "";
+          dl.innerHTML = "";
+          names.forEach(function (t) { var op = document.createElement("option"); op.value = prefix + t; dl.appendChild(op); });
+        };
+        loadOptions().then(function (o) {
+          names = o.tags || [];
+          var dl = document.createElement("datalist"); dl.id = "adm-tag-list"; box.appendChild(dl);
+          input.setAttribute("list", "adm-tag-list"); fill();
+        });
+        input.addEventListener("input", fill);
+      }
     }
     var ok = document.createElement("button"); ok.type = "button"; ok.className = "save"; ok.textContent = "Save";
     var no = document.createElement("button"); no.type = "button"; no.className = "cancel"; no.textContent = "Cancel";

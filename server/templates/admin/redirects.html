@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="admin-page">
+  <div class="adm-top"><div><h1>Old addresses</h1><p class="lead"><a href="/admin/">Admin home</a></p></div></div>
+  <p>Every address your old site had still works here. Pens, posts, brands and pages kept the same address, so they need nothing. The {{ total }} below are the ones that moved: each sends visitors and Google to its new page with a permanent (301) redirect, which keeps the search ranking it earned.{% if his > 0 %} {{ his }} of them came from your lists.{% endif %}</p>
+  {% if deleted %}<div class="adm-ok">Removed. That old address now shows “page not found” unless the new site has a page there.</div>{% endif %}
+
+  {% if !report.is_empty() %}
+  <h2>Your list: {{ added }} added, {{ report.len() }} lines checked</h2>
+  <table class="adm adm-report">
+    <tr><th>Old address</th><th>Now goes to</th><th>What happened</th></tr>
+    {% for o in report %}
+    <tr class="is-{{ o.css() }}"><td><code>{{ o.old }}</code></td><td>{% if !o.to.is_empty() %}<a href="{{ o.to }}" target="_blank" rel="noopener"><code>{{ o.to }}</code></a>{% endif %}</td><td>{{ o.note }}</td></tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+
+  <h2>Add old addresses</h2>
+  <form class="adm-form" method="post" action="/admin/redirects/">
+    <input type="hidden" name="csrf" value="{{ page.csrf }}">
+    <p>Paste your list, one address per line. Full addresses (<code>https://thepenmarket.com/…</code>) and the part after the domain both work. To choose where one goes, put the new address after it on the same line, like <code>/old-sheaffer-page.html  /brand/sheaffer/</code>. A line with only the old address is matched to the new page with the same name; any that can’t be matched are listed with a shop search you can keep or change, ready to paste back.</p>
+    <label for="lines">Addresses</label>
+    <textarea id="lines" name="lines" rows="10" placeholder="https://thepenmarket.com/store/parker-51.html&#10;/old-sheaffer-page.html  /brand/sheaffer/">{{ retry }}</textarea>
+    <div class="adm-actions"><button type="submit" class="btn">Check and add</button><span class="adm-hint">Each line is checked against the new site first, so nothing that already works gets changed. Up to 2,000 lines at a time.</span></div>
+  </form>
+
+  <h2>All old addresses</h2>
+  <form class="adm-filter" method="get" action="/admin/redirects/">
+    <input type="search" name="q" value="{{ q }}" placeholder="Find an address" aria-label="Find an address">
+    <label class="adm-check"><input type="checkbox" name="show" value="mine"{% if mine %} checked{% endif %}> only the ones from your lists</label>
+    <button type="submit" class="btn btn-sm">Find</button>
+    <a href="/admin/redirects.csv">Download all {{ total }} as a spreadsheet (CSV)</a>
+  </form>
+  <table class="adm">
+    <tr><th>Old address</th><th>Goes to</th><th>Visits</th><th>Why</th><th></th></tr>
+    {% for r in rows %}
+    <tr>
+      <td><code>{{ r.old_path }}</code></td>
+      <td><a href="{{ r.new_path }}" target="_blank" rel="noopener"><code>{{ r.new_path }}</code></a></td>
+      <td>{{ r.hits }}</td>
+      <td>{% if r.added_by == "admin" %}<span class="adm-chip adm-live">yours</span> {% endif %}{{ r.reason }}</td>
+      <td>{% if r.added_by == "admin" %}<form method="post" action="/admin/redirects/{{ r.id }}/delete/"><input type="hidden" name="csrf" value="{{ page.csrf }}"><button type="submit" class="adm-link-btn" aria-label="Remove the redirect for {{ r.old_path }}">Remove</button></form>{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% if (shown as i64) < total %}<p class="adm-hint">Showing {{ shown }}. Search above to find a particular one, or download the spreadsheet for the full list.</p>{% endif %}
+</div>
+{% endblock %}

@@ -18,3 +18,5 @@ Work on a branch, `bash scripts/gate.sh` green, then `/cg:ship`. Production is t
 - Analytics are first party (`insights.rs`, `track.js`). Never add a third-party tracker; `/privacy/` describes exactly what is recorded.
 - `backup/`, `scrape/`, `research/docs/crawl-*`, `server/media/` and `*.env` are never committed.
 - Secrets live in `~/.config/thepenmarket.env` on the box. Never print them.
+- His unpublished copy (pages, nib glossary) stays in `$BACKUP_DIR/client-copy/` and reaches a database only through `scripts/load-his-copy.py`; the repo is public, so never commit it.
+- Search spellings default to the examples in his 2026-10-07 e-mail; once he saves `/admin/search/`, his list rules, even empty.

@@ -135,7 +135,7 @@ pub struct AboutTpl {
 pub async fn about(AxState(state): AxState<State>) -> AppResult {
     let cat = state.catalog();
     let s = engine::stats(&cat);
-    let (_, post_count) = db::posts(&state.pool, None, None, 1, 1).await?;
+    let (_, post_count) = db::posts(&state.pool, None, &[], 1, 1).await?;
     let (_, listing_count) = db::listings(&state.pool, 1, 1).await?;
     let mut page = PageMeta::new(&state, "About ThePenMarket.com: Nathaniel Cerf, Vintage Pen Restorer Since 2007", "ThePenMarket.com is a place where folks can buy, sell and trade pens of any era. Owner Nathaniel Cerf has restored vintage pens for more than 20 years; online since 2007, now in Norwich, Connecticut.", "/about-us/");
     page.section = "about".into();

@@ -153,7 +153,9 @@ pub async fn post(AxState(state): AxState<State>, Path(slug): Path<String>, Orig
     };
     let title = format!("{} | Drippy Musings | ThePenMarket.com", row.title);
     // A short or missing description is filled from the post's own opening words.
-    let description = if row.meta_description.chars().count() >= 50 { row.meta_description.clone() } else { crate::text::summary(&format!("{}. {}", row.title, crate::text::strip_tags(&body)), 155) };
+    let description = if row.meta_description.chars().count() >= 50 { row.meta_description.clone() } else { crate::text::summary(&format!("{} {}", row.title.trim_end_matches('.'), crate::text::strip_tags(&body)), 155) };
+    // A post that is mostly a picture: say what and when it is.
+    let description = if description.chars().count() >= 50 { description } else { format!("{} A Drippy Musings post from ThePenMarket.com, {}.", description.trim_end_matches('.'), row.published_at.format("%B %-d, %Y")) };
     let mut page = PageMeta::new(&state, &title, &description, &format!("/{slug}/"));
     page.section = "blog".into();
     page.edit_link = Some(("Edit this post".into(), format!("/admin/posts/{}/", row.id)));

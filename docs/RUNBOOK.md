@@ -35,10 +35,37 @@ DEPLOYED_URL=http://100.117.164.79:8140 bash scripts/gate.sh http://127.0.0.1:81
 ```
 Output under `research/gate/` (results.txt, per-row logs, shots/).
 
+**The whole site, not a sample** (before a launch, after a big change; about an hour on ~700 URLs):
+```
+ADMIN_TEST_EMAIL=… ADMIN_TEST_PASSWORD=… PYTHON=<python with playwright> bash scripts/full_audit.sh http://127.0.0.1:8140 research/audit/$(date +%F)
+```
+Every URL in the site's own sitemaps: 200, SEO, every link and image, console errors (1440 and 390), overflow (320, 390, 768, 1300); every row of the redirect table (301 and the destination opens); every admin screen signed in (200 and `no-store`); the security headers and `security.txt`. Dead links to other websites inside his old posts are listed in `links-external.txt` for him and do not fail it; any broken link to our own site does.
+
 ## Rate limits and bodies
-- `/api/guide`: 10 requests per minute per IP (`GUIDE_RATE_PER_MIN`), 4 tool rounds per turn, 24 turns of history.
-- Forms: 20 per minute per IP, 10 MB photo (re-encoded to JPEG, metadata stripped, stored under `server/uploads/`, not served).
-- Everything else: 64 KB request bodies.
+- `/api/guide`: 10 requests per minute per IP (`GUIDE_RATE_PER_MIN`), 80 per IP per day, `GUIDE_DAILY_MAX` for the whole site (default 600), 8,000 characters of conversation, 60 seconds per answer, 4 tool rounds, one hand-off to his inbox per answer and three per IP a day. `GUIDE_ENABLED=0` turns the guide off (the page shows his phone and e-mail).
+- Forms: 20 per minute per IP, 10 MB photo (11 MB request), decoded with an 8000 px / 256 MB cap two at a time off the request threads, re-encoded to JPEG (metadata stripped), stored under `server/uploads/`, not served.
+- Checkout: 20 per minute per IP; one visitor (cookie or address) holds at most two pens at a time.
+- Admin sign-in, code, reset, step-up and erase: 10 per minute per IP. Sign-in codes: 5 per account per hour. Reset links: 3 per account per hour.
+- Analytics (`/api/t`): 120 batches per minute per IP, 600 events per visitor per day, signed visitor cookie, same-origin only.
+- Everything else: 64 KB request bodies; every request ends after 120 seconds.
+
+## Security (review of 2026-10-12)
+Reviewed against OWASP ASVS 5.0 and the OWASP cheat sheets; the findings and fixes are in the commit "Security hardening from the 2026-10-12 review". What to know when running it:
+- **`TRUSTED_PROXIES`** (comma-separated addresses or CIDRs): the only peers whose `X-Forwarded-For` / `X-Forwarded-Proto` are believed; from anyone else those headers are stripped. Default: loopback. `deploy-droplet.sh` passes the `web` Docker network's subnet (where Caddy is). Get it wrong and every visitor shares Caddy's address in the rate limiters, or (worse) clients pick their own.
+- **CSRF**: every form and `X-CSRF` call needs the HMAC token the page renders (`PageMeta.csrf`, filled for every page); the raw cookie is not a token. The cookie is `__Host-pm_csrf` (HttpOnly, Secure) on HTTPS, `pm_csrf` on plain HTTP. POSTs a browser marks cross-site (`Sec-Fetch-Site`, else `Origin`) are refused before any handler; the Stripe webhook is exempt (it has its signature).
+- **Sign-in**: one message for every failure. 10 wrong passwords in 15 minutes pause sign-in for an hour **from new devices only**; a device he confirmed with the e-mailed code still gets in with the right password. Forgot password always works and clears the pause. New passwords need 15 characters (NIST 800-63B rev 4) and are checked against Have I Been Pwned. A reset or a password change signs out everything and forgets remembered devices.
+- **Headers** on every response (redirects and errors included): CSP, HSTS, nosniff, `X-Frame-Options: DENY`, Referrer-Policy, Permissions-Policy, COOP `same-origin`, CORP `same-origin` (`cross-origin` for photos, so the buyer's receipt can show one). `/admin/*` is `no-store` and `noindex`. `/.well-known/security.txt` names info@thepenmarket.com.
+- **Container**: uid 10001, read-only filesystem, no capabilities, `no-new-privileges`, 1 GB / 256 processes; only `uploads/` and `media/` are writable. Postgres is on `thepenmarket-internal`, a Docker network only the app joins. The database dump is private in transit and deleted after the restore.
+- **Not done, on purpose**: `style-src` still allows inline styles (templates use `style=` attributes; removing it means moving them to classes); the CSRF token is not tied to the admin session (the `__Host-` cookie and the same-origin check cover the attack it would stop).
+
+## Outgoing e-mail (before launch)
+The site sends through any SMTP service: `SMTP_URL` and `MAIL_FROM` in the env file. Until they are set nothing is e-mailed (codes, resets, form copies, order notices and buyer receipts go to `uploads/admin-mail.log`), and the new-device sign-in code is skipped. Decided direction: Twilio SendGrid **on Nathaniel's account**, sending as info@thepenmarket.com:
+```
+SMTP_URL=smtp://apikey:<SendGrid API key>@smtp.sendgrid.net:2525?tls=required
+MAIL_FROM=ThePenMarket.com <info@thepenmarket.com>
+```
+Port 2525 because DigitalOcean blocks the usual SMTP ports on new droplets (check on his droplet). Authenticate the domain in SendGrid (it gives DNS records to add at GoDaddy: SPF/DKIM) or receipts land in spam.
+
 
 ## The admin (Nathaniel's sign-in, click-to-edit, preview)
 Spec: `docs/spec/0001-admin-login-click-to-edit-preview.md`. Sign-in page: **https://penmarket.crossgen-ai.com/admin/login/** (not linked anywhere; `robots.txt` disallows `/admin/`). Nathaniel's account is `nathaniel@thepenmarket.com`; he changes his password at `/admin/password/` (Password button in the editing bar).
@@ -55,7 +82,7 @@ ADMIN_PASSWORD='…' ./target/release/admin create nathaniel@example.com --name 
 ```
 - E-mail: with `SMTP_URL` (`smtps://user:pass@host:465`) and `MAIL_FROM` in the env file, codes and reset links are sent. Without them every message is appended to `server/uploads/admin-mail.log` (on the droplet `/srv/apps/thepenmarket/uploads/admin-mail.log`); read the six-digit code from there. `ADMIN_ALERT_EMAIL` gets a copy of lockout notices.
 - On the droplet, run the CLI inside the container: `docker exec -it -e ADMIN_PASSWORD='…' thepenmarket /app/admin create …`.
-- Data: `admin_account`, `admin_session`, `admin_device`, `admin_code`; every change is an `event_log` row (`admin.*`) shown at `/admin/history/` and downloadable as CSV. Photos he removes are archived (`product_image.archived_at`), never deleted. Hidden pens are `product.status = 'draft'` and 404 for everyone but him.
+- Data: `admin_account`, `admin_session`, `admin_device`, `admin_code`; every change is an `event_log` row (`admin.*`) shown at `/admin/history/` and downloadable as CSV. Photos he removes are archived (`product_image.archived_at`), never deleted. Hidden pens are `product.status = 'draft'` and 404 for everyone but him; deleted pens are `'archived'` and 301 to their category (see "Sold Pen Archive and deleting pens").
 - **Re-importing is now guarded**: `import` refuses once any admin edit exists, because it truncates `product`. `FORCE_IMPORT=1` overrides. Deploy with `SKIP_IMPORT=1` from here on.
 - The droplet keeps its own database after the first restore, so once Nathaniel edits on https://penmarket.crossgen-ai.com/ the droplet is the source of truth; `push-droplet.sh` no longer touches its data or the photos he added (`media/uploads/admin/`).
 - Gate row: `ADMIN_TEST_EMAIL=… ADMIN_TEST_PASSWORD=… bash scripts/gate.sh …` adds an `admin` row (sign in, code, inline edit and revert, preview toggle, history, every admin page at 1440 and 390, the writing toolbar, the heat map toggle).
@@ -83,6 +110,9 @@ Everything is reached from **/admin/** (where sign-in now lands). All of it is a
 - **Classic view** (footer switch): larger text, photograph instead of the 3D pen, no motion; remembered per browser. The 3D pen's "+" markers are buttons that move the camera in.
 - `import` also refuses after post, page, brand or media edits (same `FORCE_IMPORT=1` override).
 
+## Old addresses from before WordPress
+`routes/legacy.rs` answers the shapes his ASP.NET shop and WordPress's dated permalinks used, which were never in a sitemap and still appear in his posts: `productList.aspx/...` (category, brand, filler), `product-detail.aspx/<id>-<sku>-<name>` (that pen if its slug survives, else a search), `new-pens.aspx/...` (brand or search), `TradingPostList.aspx` (the Trading Post), `/YYYY/MM/slug/` (the post, or a blog search), `/on-sale/`. It runs after the redirect table, so his own entries in `/admin/redirects/` win.
+
 ## Nathaniel's 2026-10-07 questions (migration 0006)
 - **Tags (his q1).** "Tags" row in Item specifics on any product page while signed in: comma separated, his earlier tags offered as he types, 20 at most (`admin/api.rs` field `tags`, `store::set_product_tags`). Each tag has a page at the old WooCommerce shape `/product-tag/{slug}/` (`shop::tag`), `noindex` and out of `sitemap-categories.xml` until it holds `db::TAG_INDEX_MIN` (3) live items. A tag nothing uses is deleted, and an old tag address with no new tag of that name still 301s through the redirect table. Shop search matches tag names. A forced re-import empties the tag links (FK cascade) but keeps the tag names; tag edits are `admin.edit`, so the importer's guard already refuses.
 - **Old addresses (q2, q3).** `/admin/redirects/` lists the redirect table (his own first), searches it, downloads it as CSV (`/admin/redirects.csv`), and takes pasted lists: one address per line, optionally followed by its destination. Each line is checked against the running site first (`Probe`, loopback to `HOST:PORT`, no redirects followed): already a page or already redirected = left alone; no destination = matched by the last path segment to a product / post / custom page / brand / category / published glossary entry / Trading Post listing; no match = listed back with a shop-search suggestion to paste again. A destination must be on this site and answer 200. Old URLs with a query string (`/index.php?main_page=…`, `/?page_id=12`) match on path + query first (`db::redirect_for`). His rows carry `redirect.added_by = 'admin'`, only those can be removed, and a forced re-import puts them back.
@@ -91,6 +121,11 @@ Everything is reached from **/admin/** (where sign-in now lands). All of it is a
 - **His pages and nib glossary (q5).** The copy he e-mailed on 2026-09-18 lives in `$BACKUP_DIR/client-copy/` and is never committed (the repo is public). `set -a; . ~/.config/thepenmarket.env; set +a; python3 scripts/load-his-copy.py` fills Pen Grading, Defining Nibs and Buyer's Guide only while empty and publishes them, and puts his 34 nib-glossary definitions into glossary drafts (fills empty ones, adds missing words; never publishes). Safe to run again. `--dry-run` prints the SQL.
 - **Hero photo (q6).** `/admin/settings/` "Spinning 3D pen or your photograph" (setting `hero_mode`). The photo is the featured pen's first photo. A running or decided `hero-stage` experiment overrides it.
 - **Whole pen in frame (q7).** Product photos in cards, category tiles, hero thumbnails, product thumbnails and guide cards use `object-fit: contain` on the grey ground (was `cover`, which cut the ends off long pens).
+
+## Sold Pen Archive, deleting pens, buyer receipts (migration 0007; meeting of 2026-10-05)
+- **`/sold-pens/`**: every sold pen, most recently sold first (`product.sold_at`, kept by a trigger whenever status becomes `sold`; pens sold before 0007 have no date and follow the dated ones), searchable and filterable like the shop, in the menu, footer and `sitemap-categories.xml`. Sold pens no longer appear in category lists; every list says how many sold pens match its filters and links to them in the archive. `?sold=1` on the shop still works for old links.
+- **Deleting a pen**: "Delete this pen…" under the status menu on its page (password re-entered, refused while someone is checking it out). The pen becomes `archived`: gone from every list, search, sitemap, the archive and the guide; its address 301s to its category. `/admin/pens/` ("Hidden and deleted pens" on the admin home) lists hidden pens (including ones added by accident) and deleted ones: **Restore** brings a pen back hidden; **Erase for good** (password typed again) deletes the row, its photo rows and tags, and adds a redirect from its address to its category (`added_by='admin'`, so it survives a re-import). Orders keep their own copy of name, SKU and price.
+- **Buyer receipt**: when Stripe reports a pen paid, the buyer is e-mailed (from `MAIL_FROM`, reply-to info@) the order, the pen's photo and its description as it read at that moment; the description and photo URL are copied onto the order (`shop_order.product_description`, `product_image`). A buyer whose payment was refunded because the pen had just sold is told so. Both go to the mail log until SMTP is set.
 
 ## Online checkout (Stripe, migration 0005)
 Decided 2026-10-05: Nathaniel goes with Stripe, on **his own Stripe account** (he invites Brittany as a Developer; keys are never e-mailed). Built so far: **pens only**. The Trading Post $5 listing fee and the $125/yr Unlimited Posts membership are **not built**; the membership page keeps its demo notice whatever the keys say.

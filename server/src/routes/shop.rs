@@ -466,6 +466,8 @@ async fn term_page(state: State, table: &str, kind: &str, base_prefix: &str, slu
         _ => format!("Pens {}: {} in Stock | ThePenMarket.com", t.name, n),
     };
     let desc = if definition.is_empty() { format!("{} at ThePenMarket.com: {intro}", t.name) } else { crate::text::summary(&definition, 155) };
+    // A one-line definition still needs a description a search result can show: add the stock line.
+    let desc = if desc.chars().count() >= 50 { desc } else { crate::text::summary(&format!("{desc} {intro}"), 155) };
     let posts = db::posts_matching(&state.pool, &t.name, 3).await?;
     let fixed = match kind {
         "brand" => Fixed { brand: Some(slug.clone()), ..Default::default() },

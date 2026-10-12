@@ -91,7 +91,7 @@ pub async fn read_multipart(state: &State, cookie: &CsrfCookie, peer: SocketAddr
         rand::rng().fill_bytes(&mut rnd);
         let key = format!("{}.jpg", hex::encode(rnd));
         let dest = state.cfg.uploads_dir.join(&key);
-        match crate::media::reencode_upload(&bytes, &dest) {
+        match crate::media::reencode_upload_async(bytes.to_vec(), dest.clone()).await {
             Ok(_) => photo_key = Some(key),
             Err(_) => return Err(AppError::BadRequest("the photo could not be read as an image (JPEG, PNG or WebP)".into())),
         }

@@ -291,7 +291,7 @@ pub async fn upload_photo(AxState(state): AxState<State>, Extension(cookie): Ext
     };
     let key = format!("uploads/admin/{}/{}-{}.jpg", chrono::Utc::now().format("%Y/%m"), p.id, super::auth::random_token(6));
     let dest = state.cfg.media_dir.join(&key);
-    let imported = match crate::media::reencode_upload_with_variants(&bytes, &dest) {
+    let imported = match crate::media::reencode_upload_with_variants_async(bytes.to_vec(), dest.clone()).await {
         Ok(i) => i,
         Err(_) => return Ok(api_err(StatusCode::BAD_REQUEST, "That file could not be read as a photo (JPEG, PNG or WebP).")),
     };

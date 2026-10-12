@@ -13,7 +13,8 @@ Restart=on-failure
 RestartSec=5
 Environment=APP_DIR=%h/thepenmarket/server
 Environment=PORT=8140
-Environment=HOST=0.0.0.0
+# The Tailscale address only: not reachable from the LAN, and nothing can claim a forwarded IP.
+Environment=HOST=100.117.164.79
 Environment=SITE_ORIGIN=http://100.117.164.79:8140
 Environment=RUST_LOG=info,sqlx=warn
 # DATABASE_URL, CSRF_SECRET and the three GUIDE_AI_* lines (the hosted model crossgen-ai.com uses).

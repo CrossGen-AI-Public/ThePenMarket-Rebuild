@@ -359,7 +359,7 @@ code{font-family:Menlo,Consolas,monospace;font-size:.9em;background:var(--grey);
 .specs th{width:38%;color:var(--muted);font-weight:500}
 .specs td a{color:var(--red)}
 .prose{font-size:16px;line-height:1.7;color:var(--ink-2);max-width:68ch}
-.prose a{color:var(--red)}
+.prose a{color:var(--red);overflow-wrap:anywhere}
 .prose p,.prose ul,.prose ol,.prose blockquote,.prose figure,.prose h2,.prose h3,.prose h4,.prose table{margin-bottom:1.1em}
 .prose h2,.prose h3,.prose h4{color:var(--ink);margin-top:1.6em}
 .prose ul,.prose ol{padding-left:1.4em}

@@ -3,7 +3,7 @@
 
 use std::path::PathBuf;
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Config {
     pub database_url: String,
     pub host: String,
@@ -36,6 +36,24 @@ pub struct Config {
     /// it the webhook refuses every call, so checkout stays off until both are set.
     pub stripe_secret_key: String,
     pub stripe_webhook_secret: String,
+}
+
+/// Secrets never reach a log line: Debug shows which ones are set, not their values.
+impl std::fmt::Debug for Config {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let set = |v: &str| if v.is_empty() { "unset" } else { "set" };
+        f.debug_struct("Config")
+            .field("host", &self.host)
+            .field("port", &self.port)
+            .field("site_origin", &self.site_origin)
+            .field("database_url", &set(&self.database_url))
+            .field("csrf_secret", &set(&self.csrf_secret))
+            .field("guide_ai_url", &self.guide_ai_url)
+            .field("guide_ai_key", &set(&self.guide_ai_key))
+            .field("stripe_secret_key", &set(&self.stripe_secret_key))
+            .field("stripe_webhook_secret", &set(&self.stripe_webhook_secret))
+            .finish_non_exhaustive()
+    }
 }
 
 impl Config {

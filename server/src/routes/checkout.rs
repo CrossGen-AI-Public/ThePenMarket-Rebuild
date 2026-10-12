@@ -43,6 +43,8 @@ fn contact_line(sku: &str) -> String {
     format!("Questions: call {} or e-mail {}{}.", Entity::PHONE, Entity::EMAIL, if sku.is_empty() { String::new() } else { format!(" and mention SKU {sku}") })
 }
 
+const MAX_HOLDS: i64 = 2;
+
 #[derive(Deserialize)]
 pub struct BuyForm {
     pub csrf: String,
@@ -66,11 +68,20 @@ pub async fn buy(AxState(state): AxState<State>, Extension(cookie): Extension<Cs
     let now = chrono::Utc::now().timestamp();
     let session_expires = now + stripe::SESSION_MINUTES * 60;
     let hold_until = session_expires + stripe::HOLD_GRACE_MINUTES * 60;
+    // Two pens at a time per visitor: enough for anyone buying, too few to hold the whole case hostage.
+    let ip_key = crate::admin::auth::sha256_hex(&format!("hold-ip:{}", security::client_ip(&headers, peer.ip())));
+    if orders::holds_elsewhere(&state.pool, &visitor_key(&cookie), &ip_key, pen.id).await? >= MAX_HOLDS {
+        return done(&state, &back, "Checkout", "Finish your other checkout first", vec![
+            format!("You are already checking out {MAX_HOLDS} pens. Pay for them, or let one go, and then come back for this one."),
+            contact_line(&pen.sku),
+        ], &back, "Back to the pen");
+    }
     let order_id = match orders::place_hold(&state.pool, &pen, &visitor_key(&cookie), shipping, hold_until).await? {
         Hold::Taken => return Ok(Redirect::to(&back).into_response()),
         Hold::Yours { url, .. } => return Ok(Redirect::to(&url).into_response()),
         Hold::Placed(id) => id,
     };
+    orders::set_holder_ip(&state.pool, order_id, &ip_key).await?;
     let item = stripe::CheckoutItem {
         product_id: pen.id,
         order_id,

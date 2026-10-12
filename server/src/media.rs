@@ -76,9 +76,35 @@ pub fn import_image(src: &Path, media_dir: &Path, rel: &str) -> anyhow::Result<I
     Ok(Imported { rel: rel.to_string(), width: w, height: h, has_480, has_960 })
 }
 
+/// Decode an uploaded image with hard limits: at most 8000 px a side and 256 MB of memory, so a small
+/// file that claims to be enormous (a decompression bomb) is refused instead of filling the server.
+fn decode_limited(bytes: &[u8]) -> anyhow::Result<DynamicImage> {
+    let mut reader = image::ImageReader::new(std::io::Cursor::new(bytes)).with_guessed_format()?;
+    let mut limits = image::Limits::default();
+    limits.max_image_width = Some(8000);
+    limits.max_image_height = Some(8000);
+    limits.max_alloc = Some(256 * 1024 * 1024);
+    reader.limits(limits);
+    Ok(reader.decode()?)
+}
+
+/// Image work is slow and CPU-bound: it runs on the blocking pool, two at a time, never on the
+/// threads that answer page requests.
+static IMAGE_SLOTS: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(2);
+
+pub async fn reencode_upload_async(bytes: Vec<u8>, dest: std::path::PathBuf) -> anyhow::Result<(u32, u32)> {
+    let _slot = IMAGE_SLOTS.acquire().await?;
+    tokio::task::spawn_blocking(move || reencode_upload(&bytes, &dest)).await?
+}
+
+pub async fn reencode_upload_with_variants_async(bytes: Vec<u8>, dest: std::path::PathBuf) -> anyhow::Result<Imported> {
+    let _slot = IMAGE_SLOTS.acquire().await?;
+    tokio::task::spawn_blocking(move || reencode_upload_with_variants(&bytes, &dest)).await?
+}
+
 /// Re-encode an uploaded photo (repair / sell forms) to a bounded JPEG: strips metadata, caps size.
 pub fn reencode_upload(bytes: &[u8], dest: &Path) -> anyhow::Result<(u32, u32)> {
-    let img = image::load_from_memory(bytes)?;
+    let img = decode_limited(bytes)?;
     let img = if img.width() > 1600 { img.resize(1600, u32::MAX, image::imageops::FilterType::Lanczos3) } else { img };
     if let Some(dir) = dest.parent() {
         fs::create_dir_all(dir)?;
@@ -90,7 +116,7 @@ pub fn reencode_upload(bytes: &[u8], dest: &Path) -> anyhow::Result<(u32, u32)> 
 /// An admin photo upload: bounded JPEG original (metadata dropped) plus the 480 and 960 variants
 /// the catalog uses, so an uploaded photo serves exactly like an imported one.
 pub fn reencode_upload_with_variants(bytes: &[u8], dest: &Path) -> anyhow::Result<Imported> {
-    let img = image::load_from_memory(bytes)?;
+    let img = decode_limited(bytes)?;
     let img = if img.width() > 2400 { img.resize(2400, u32::MAX, image::imageops::FilterType::Lanczos3) } else { img };
     if let Some(dir) = dest.parent() {
         fs::create_dir_all(dir)?;

@@ -23,6 +23,12 @@ pub fn decode(s: &str) -> String {
     html_escape::decode_html_entities(s).replace('\u{a0}', " ")
 }
 
+/// A search term for LIKE / ILIKE: `%` and `_` match themselves, not "anything" (backslash is
+/// Postgres's default LIKE escape).
+pub fn like_escape(s: &str) -> String {
+    s.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_")
+}
+
 pub fn escape(s: &str) -> String {
     html_escape::encode_text(s).to_string()
 }

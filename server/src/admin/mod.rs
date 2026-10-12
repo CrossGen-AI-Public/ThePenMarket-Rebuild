@@ -74,7 +74,7 @@ pub async fn context(AxState(state): AxState<State>, mut req: Request, next: Nex
     let ip = crate::security::client_ip(req.headers(), peer).to_string();
     let name = auth::cookie_name(https, SESSION_COOKIE);
     let mut ctx: Option<AdminCtx> = None;
-    let csrf = cookie(req.headers(), crate::security::CSRF_COOKIE).map(|c| crate::security::csrf_token(&state.cfg.csrf_secret, &c)).unwrap_or_default();
+    let csrf = req.extensions().get::<crate::security::CsrfCookie>().map(|c| crate::security::csrf_token(&state.cfg.csrf_secret, &c.0)).unwrap_or_default();
     if let Some(token) = cookie(req.headers(), &name).filter(|t| t.len() == 64) {
         if let Ok(Some(s)) = store::session_by_token(&state.pool, &auth::sha256_hex(&token)).await {
             if let Ok(Some(acc)) = store::account_by_id(&state.pool, s.account_id).await {

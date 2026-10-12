@@ -33,6 +33,13 @@ fn today() -> String {
     chrono::Utc::now().format("%Y-%m-%d").to_string()
 }
 
+/// RFC 9116: where to report a security problem with the site. Expires is always about six months out.
+pub async fn security_txt(AxState(state): AxState<State>) -> AppResult {
+    let o = state.origin();
+    let expires = (chrono::Utc::now() + chrono::Duration::days(180)).format("%Y-%m-%dT00:00:00Z");
+    text(format!("Contact: mailto:{}\nExpires: {expires}\nPreferred-Languages: en\nCanonical: {o}/.well-known/security.txt\n", crate::app::Entity::EMAIL))
+}
+
 pub async fn robots(AxState(state): AxState<State>) -> AppResult {
     let o = state.origin();
     text(format!(

@@ -6,7 +6,9 @@ use argon2::Argon2;
 use rand::RngCore;
 use sha1::Digest as _;
 
-pub const PASSWORD_MIN: usize = 12;
+/// NIST SP 800-63B rev 4: 15 when the password is the only thing standing in the way (an e-mailed
+/// code is not a second factor by its rules).
+pub const PASSWORD_MIN: usize = 15;
 pub const PASSWORD_MAX: usize = 128;
 pub const SESSION_IDLE_MIN: i64 = 60;
 pub const SESSION_ABSOLUTE_HOURS: i64 = 12;
@@ -46,8 +48,16 @@ pub fn verify_password(pw: &str, phc: &str) -> bool {
 
 /// A hash to verify against when the account does not exist, so a wrong e-mail costs the same
 /// time as a wrong password (no user enumeration by timing).
+/// Checked against when the e-mail is not an account, so a wrong address costs the same one argon2
+/// verification as a wrong password (computed once; hashing it per request would itself be a tell).
 pub fn dummy_hash() -> String {
-    hash_password("dummy-password-for-constant-time").unwrap_or_default()
+    static H: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    H.get_or_init(|| hash_password("dummy-password-for-constant-time").unwrap_or_default()).clone()
+}
+
+/// Constant-time string comparison (hashes, tokens).
+pub fn eq_ct(a: &str, b: &str) -> bool {
+    a.len() == b.len() && a.bytes().zip(b.bytes()).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
 }
 
 pub fn sha256_hex(s: &str) -> String {

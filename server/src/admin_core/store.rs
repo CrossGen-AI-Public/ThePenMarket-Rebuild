@@ -3,7 +3,7 @@
 use chrono::{DateTime, Duration, Utc};
 use sqlx::{PgPool, Row};
 
-#[derive(Clone, Debug, sqlx::FromRow)]
+#[derive(Clone, sqlx::FromRow)]
 pub struct Account {
     pub id: i32,
     pub email: String,
@@ -175,6 +175,36 @@ pub async fn code_by_id(pool: &PgPool, id: i32, kind: &str) -> anyhow::Result<Op
 
 pub async fn code_by_hash(pool: &PgPool, kind: &str, code_hash: &str) -> anyhow::Result<Option<Code>> {
     Ok(sqlx::query_as("SELECT id, account_id, code_hash, expires_at, used_at, attempts FROM admin_code WHERE kind = $1 AND code_hash = $2").bind(kind).bind(code_hash).fetch_optional(pool).await?)
+}
+
+/// One guess at an e-mailed code, counted and checked in a single statement so parallel guesses
+/// cannot exceed the attempt limit. Some(true) = right and now used; Some(false) = wrong (counted);
+/// None = the code is used, expired, out of attempts or not this account's.
+pub async fn try_code(pool: &PgPool, id: i32, account_id: i32, kind: &str, typed_hash: &str, max_attempts: i32) -> anyhow::Result<Option<bool>> {
+    let row = sqlx::query("UPDATE admin_code SET attempts = attempts + 1 WHERE id = $1 AND account_id = $2 AND kind = $3 AND used_at IS NULL AND expires_at > now() AND attempts < $4 RETURNING code_hash")
+        .bind(id).bind(account_id).bind(kind).bind(max_attempts).fetch_optional(pool).await?;
+    let Some(row) = row else { return Ok(None) };
+    let stored: String = row.get("code_hash");
+    if !crate::admin_core::auth::eq_ct(&stored, typed_hash) {
+        return Ok(Some(false));
+    }
+    Ok(Some(consume_code(pool, id).await?))
+}
+
+/// Marks a code used if nobody else already did; false when it was not free to use.
+pub async fn consume_code(pool: &PgPool, id: i32) -> anyhow::Result<bool> {
+    Ok(sqlx::query("UPDATE admin_code SET used_at = now() WHERE id = $1 AND used_at IS NULL AND expires_at > now()").bind(id).execute(pool).await?.rows_affected() == 1)
+}
+
+/// How many codes of a kind were issued to an account in the last hour (sign-in codes, reset links).
+pub async fn codes_last_hour(pool: &PgPool, account_id: i32, kind: &str) -> anyhow::Result<i64> {
+    Ok(sqlx::query_scalar("SELECT count(*) FROM admin_code WHERE account_id = $1 AND kind = $2 AND created_at > now() - interval '1 hour'").bind(account_id).bind(kind).fetch_one(pool).await?)
+}
+
+/// After a password reset or change: every remembered device must pass the e-mailed code again.
+pub async fn revoke_all_devices(pool: &PgPool, account_id: i32) -> anyhow::Result<()> {
+    sqlx::query("UPDATE admin_device SET revoked_at = now() WHERE account_id = $1 AND revoked_at IS NULL").bind(account_id).execute(pool).await?;
+    Ok(())
 }
 
 pub async fn bump_code_attempts(pool: &PgPool, id: i32) -> anyhow::Result<i32> {

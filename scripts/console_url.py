@@ -3,12 +3,16 @@
 Chromium with WebGL on (SwiftShader) and fail on any console error, uncaught exception, failed
 request, or THREE / WebGL / shader complaint. Usage: console_url.py <base-url> <route> [route...]
 """
+import os
 import sys
 from playwright.sync_api import sync_playwright
 
 base = sys.argv[1].rstrip("/")
 routes = [""] + [r for r in sys.argv[2:] if r]
 widths = [1440, 500]
+if os.environ.get("WIDTHS"):  # the full audit checks fewer widths on every page
+    widths = [int(w) for w in os.environ["WIDTHS"].split(",")]
+WAIT_MS = int(os.environ.get("WAIT_MS", "2500"))
 total = 0
 with sync_playwright() as p:
     b = p.chromium.launch(headless=True, args=["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"])
@@ -23,7 +27,7 @@ with sync_playwright() as p:
             pg.on("response", lambda res, bad=bad: bad.append(f"http {res.status}: {res.url[:120]}") if res.status >= 400 else None)
             try:
                 pg.goto(f"{base}/{r}", wait_until="load", timeout=60000)
-                pg.wait_for_timeout(2500)
+                pg.wait_for_timeout(WAIT_MS)
             except Exception as e:
                 bad.append(f"load: {str(e)[:120]}")
             pg.close()

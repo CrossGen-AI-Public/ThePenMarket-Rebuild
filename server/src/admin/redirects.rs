@@ -97,7 +97,7 @@ pub struct ListQuery {
 
 async fn render(state: &State, cookie: &CsrfCookie, q: &str, mine: bool, report: Vec<Outcome>, deleted: bool) -> AppResult {
     let counts = sqlx::query("SELECT count(*) AS total, count(*) FILTER (WHERE added_by = 'admin') AS his FROM redirect").fetch_one(&state.pool).await?;
-    let like = format!("%{}%", q.trim());
+    let like = format!("%{}%", crate::text::like_escape(q.trim()));
     let rows: Vec<RedirectRow> = sqlx::query_as(
         "SELECT id, old_path, new_path, hits, reason, added_by FROM redirect
          WHERE ($1 = '%%' OR old_path ILIKE $1 OR new_path ILIKE $1) AND (NOT $2 OR added_by = 'admin')
@@ -203,7 +203,8 @@ pub fn normalize(raw: &str) -> Option<String> {
         out.push_str(q);
     }
     let blocked = ["/admin", "/static/", "/media/", "/api/"];
-    if out == "/" || blocked.iter().any(|b| out.starts_with(b)) {
+    // "//host" (what "/\\host" parses to) is another site to a browser, never a path here.
+    if out == "/" || out.starts_with("//") || out.contains('\\') || blocked.iter().any(|b| out.starts_with(b)) {
         return None;
     }
     Some(out)
@@ -212,6 +213,9 @@ pub fn normalize(raw: &str) -> Option<String> {
 /// A destination must be on this site: a path, or a full URL on his domain or this server's origin.
 fn normalize_target(raw: &str, site_origin: &str) -> Option<String> {
     let raw = raw.trim();
+    if raw.contains('\\') {
+        return None;
+    }
     if raw.starts_with("http://") || raw.starts_with("https://") || raw.starts_with("//") {
         let full = if raw.starts_with("//") { format!("http:{raw}") } else { raw.to_string() };
         let url = reqwest::Url::parse(&full).ok()?;
@@ -387,6 +391,15 @@ async fn add_line(state: &State, probe: &Probe, line: &str) -> anyhow::Result<Ou
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn never_another_site() {
+        assert_eq!(normalize("/\\evil.com/x"), None);
+        assert_eq!(normalize_target("/\\evil.com", "https://thepenmarket.com"), None);
+        assert_eq!(normalize_target("https://evil.com/x", "https://thepenmarket.com"), None);
+        assert_eq!(normalize_target("//evil.com/x", "https://thepenmarket.com"), None);
+        assert_eq!(normalize_target("https://thepenmarket.com/shop/", "https://thepenmarket.com").as_deref(), Some("/shop/"));
+    }
 
     #[test]
     fn pasted_addresses() {

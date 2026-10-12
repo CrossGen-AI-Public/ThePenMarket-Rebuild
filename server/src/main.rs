@@ -26,6 +26,7 @@ use tracing_subscriber::EnvFilter;
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt().with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info,sqlx=warn"))).init();
     let cfg = thepenmarket::config::load()?;
+    security::init_trusted_proxies(&std::env::var("TRUSTED_PROXIES").unwrap_or_default());
     let pool = PgPoolOptions::new().max_connections(8).acquire_timeout(Duration::from_secs(5)).connect(&cfg.database_url).await?;
     sqlx::migrate!("./migrations").run(&pool).await?;
     db::set_media_dir(cfg.media_dir.clone());

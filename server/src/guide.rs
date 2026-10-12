@@ -165,6 +165,57 @@ pub async fn health(AxState(state): AxState<State>) -> Response {
     Json(json!({"backend": "openai-compatible", "model": state.cfg.guide_ai_model, "host": host, "catalog": cat.pens.len(), "generated_at": cat.generated_at})).into_response()
 }
 
+/// Spending limits for the model, which costs money per call: a daily ceiling for the whole site
+/// (`GUIDE_DAILY_MAX`, default 600 conversations' turns), a daily ceiling per visitor address, and at
+/// most a few hand-offs to Nathaniel's inbox per address per day. `GUIDE_ENABLED=0` turns it off.
+struct Daily {
+    day: chrono::NaiveDate,
+    total: u64,
+    per_ip: std::collections::HashMap<std::net::IpAddr, (u32, u32)>,
+}
+static DAILY: std::sync::Mutex<Option<Daily>> = std::sync::Mutex::new(None);
+const PER_IP_DAY: u32 = 80;
+const HANDOFFS_PER_IP_DAY: u32 = 3;
+const MAX_INPUT_CHARS: usize = 8000;
+
+enum Budget {
+    Ok,
+    SiteFull,
+    VisitorFull,
+}
+
+fn spend(ip: std::net::IpAddr) -> Budget {
+    let max: u64 = std::env::var("GUIDE_DAILY_MAX").ok().and_then(|v| v.parse().ok()).unwrap_or(600);
+    let today = chrono::Utc::now().date_naive();
+    let Ok(mut g) = DAILY.lock() else { return Budget::Ok };
+    let d = g.get_or_insert_with(|| Daily { day: today, total: 0, per_ip: Default::default() });
+    if d.day != today {
+        *d = Daily { day: today, total: 0, per_ip: Default::default() };
+    }
+    if d.total >= max {
+        return Budget::SiteFull;
+    }
+    let e = d.per_ip.entry(ip).or_insert((0, 0));
+    if e.0 >= PER_IP_DAY {
+        return Budget::VisitorFull;
+    }
+    e.0 += 1;
+    d.total += 1;
+    Budget::Ok
+}
+
+/// May this address send Nathaniel another hand-off today?
+fn handoff_allowed(ip: std::net::IpAddr) -> bool {
+    let Ok(mut g) = DAILY.lock() else { return false };
+    let Some(d) = g.as_mut() else { return false };
+    let e = d.per_ip.entry(ip).or_insert((0, 0));
+    if e.1 >= HANDOFFS_PER_IP_DAY {
+        return false;
+    }
+    e.1 += 1;
+    true
+}
+
 fn err(status: StatusCode, msg: &str) -> Response {
     (status, Json(json!({"error": msg}))).into_response()
 }
@@ -173,7 +224,11 @@ pub async fn chat(AxState(state): AxState<State>, ConnectInfo(peer): ConnectInfo
     if state.cfg.guide_ai_url.is_empty() || state.cfg.guide_ai_key.is_empty() {
         return Ok(err(StatusCode::SERVICE_UNAVAILABLE, "no model configured"));
     }
-    if !state.guide_limiter.allow(security::client_ip(&headers, peer.ip())) {
+    if std::env::var("GUIDE_ENABLED").map(|v| v == "0" || v.eq_ignore_ascii_case("false")).unwrap_or(false) {
+        return Ok(err(StatusCode::SERVICE_UNAVAILABLE, "the guide is resting; call (847) 708-5062 or e-mail info@thepenmarket.com"));
+    }
+    let ip = security::client_ip(&headers, peer.ip());
+    if !state.guide_limiter.allow(ip) {
         return Ok(err(StatusCode::TOO_MANY_REQUESTS, "too many requests, try again in a minute"));
     }
     let Json(body) = match body {
@@ -181,10 +236,35 @@ pub async fn chat(AxState(state): AxState<State>, ConnectInfo(peer): ConnectInfo
         Err(_) => return Ok(err(StatusCode::BAD_REQUEST, "body must be JSON {messages:[{role,content}]}")),
     };
     let messages: Vec<Msg> = body.messages.into_iter().filter(|m| (m.role == "user" || m.role == "assistant") && !m.content.trim().is_empty()).map(|m| Msg { role: m.role, content: m.content.chars().take(2000).collect() }).collect();
-    let messages: Vec<Msg> = messages.into_iter().rev().take(24).collect::<Vec<_>>().into_iter().rev().collect();
+    let mut messages: Vec<Msg> = messages.into_iter().rev().take(24).collect::<Vec<_>>().into_iter().rev().collect();
     if messages.last().map(|m| m.role != "user").unwrap_or(true) {
         return Ok(err(StatusCode::BAD_REQUEST, "messages must end with a user turn"));
     }
+    // The oldest turns go first when a conversation gets long; the newest question always stays.
+    while messages.len() > 1 && messages.iter().map(|m| m.content.chars().count()).sum::<usize>() > MAX_INPUT_CHARS {
+        messages.remove(0);
+    }
+    match spend(ip) {
+        Budget::Ok => {}
+        Budget::SiteFull => {
+            tracing::warn!("guide: daily limit for the whole site reached");
+            return Ok(err(StatusCode::SERVICE_UNAVAILABLE, "the guide has answered all it can for today; call (847) 708-5062 or e-mail info@thepenmarket.com"));
+        }
+        Budget::VisitorFull => return Ok(err(StatusCode::TOO_MANY_REQUESTS, "that's a lot of questions for one day; call (847) 708-5062 or e-mail info@thepenmarket.com")),
+    }
+    // The whole answer, every model call and tool included, has 60 seconds.
+    match tokio::time::timeout(std::time::Duration::from_secs(60), converse(&state, messages, ip)).await {
+        Ok(r) => r,
+        Err(_) => {
+            tracing::warn!("guide: answer took longer than 60 seconds");
+            Ok(err(StatusCode::GATEWAY_TIMEOUT, "the model took too long; try a shorter question"))
+        }
+    }
+}
+
+async fn converse(state: &State, messages: Vec<Msg>, ip: std::net::IpAddr) -> Result<Response, AppError> {
+    let state = state.clone();
+    let mut handed_off = false;
 
     let mut msgs: Vec<Value> = vec![json!({"role": "system", "content": system_prompt(&state)})];
     msgs.extend(messages.iter().map(|m| json!({"role": m.role, "content": m.content})));
@@ -218,6 +298,13 @@ pub async fn chat(AxState(state): AxState<State>, ConnectInfo(peer): ConnectInfo
             let name = c["function"]["name"].as_str().unwrap_or("").to_string();
             let raw = c["function"]["arguments"].as_str().unwrap_or("{}");
             let args: Value = serde_json::from_str(raw).unwrap_or_else(|_| json!({}));
+            // One hand-off per answer, and a few per visitor a day: a crafted message cannot make the
+            // model fill Nathaniel's inbox.
+            if name == "handoff" && (handed_off || !handoff_allowed(ip)) {
+                msgs.push(json!({"role": "tool", "tool_call_id": c["id"], "name": name, "content": json!({"ok": true, "phone": "(847) 708-5062", "email": "info@thepenmarket.com", "note": "already passed on"}).to_string()}));
+                continue;
+            }
+            handed_off |= name == "handoff";
             let (for_model, for_page) = run_tool(&state, &name, &args).await;
             if let Some(p) = for_page {
                 tool_results.push(ToolResult { name: name.clone(), args: args.clone(), result: p });

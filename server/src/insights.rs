@@ -31,18 +31,47 @@ fn valid_visitor(v: &str) -> bool {
     v.len() == 24 && v.chars().all(|c| c.is_ascii_hexdigit())
 }
 
+/// The visitor cookie is `<id>.<signature>`: only ids this site handed out are counted, so nobody can
+/// invent visitors to push a phrase into "popular searches" or tilt an experiment.
+fn visitor_sig(secret: &str, id: &str) -> String {
+    crate::security::csrf_token(secret, &format!("visitor:{id}"))[..16].to_string()
+}
+
+fn read_visitor(secret: &str, cookie: &str) -> Option<String> {
+    let (id, sig) = cookie.split_once('.')?;
+    (valid_visitor(id) && crate::admin::auth::eq_ct(sig, &visitor_sig(secret, id))).then(|| id.to_string())
+}
+
+/// Events one visitor may record in a day; a person reading the site never comes near it.
+const EVENTS_PER_VISITOR_DAY: u32 = 600;
+static SPENT: std::sync::Mutex<Option<(chrono::NaiveDate, std::collections::HashMap<String, u32>)>> = std::sync::Mutex::new(None);
+
+fn take_events(visitor: &str, n: u32) -> u32 {
+    let today = chrono::Utc::now().date_naive();
+    let Ok(mut g) = SPENT.lock() else { return 0 };
+    let (day, map) = g.get_or_insert_with(|| (today, Default::default()));
+    if *day != today {
+        *day = today;
+        map.clear();
+    }
+    let used = map.entry(visitor.to_string()).or_insert(0);
+    let allowed = n.min(EVENTS_PER_VISITOR_DAY.saturating_sub(*used));
+    *used += allowed;
+    allowed
+}
+
 fn opted_out(headers: &HeaderMap) -> bool {
     let is_one = |k: &str| headers.get(k).and_then(|v| v.to_str().ok()).map(|v| v.trim() == "1").unwrap_or(false);
     is_one("dnt") || is_one("sec-gpc")
 }
 
 /// Give every page request a visitor id (unless the browser opted out) and expose it on the task.
-pub async fn visitor(req: Request, next: Next) -> Response {
+pub async fn visitor(AxState(state): AxState<State>, req: Request, next: Next) -> Response {
     let path = req.uri().path();
     if path.starts_with("/static/") || path.starts_with("/media/") || path.starts_with("/admin/") || path == "/healthz" {
         return VISITOR.scope(None, next.run(req)).await;
     }
-    let existing = crate::admin::cookie(req.headers(), VISITOR_COOKIE).filter(|v| valid_visitor(v));
+    let existing = crate::admin::cookie(req.headers(), VISITOR_COOKIE).and_then(|v| read_visitor(&state.cfg.csrf_secret, &v));
     let out = opted_out(req.headers());
     let https = crate::admin::is_https(req.headers());
     let (id, fresh) = match (existing, out) {
@@ -56,7 +85,7 @@ pub async fn visitor(req: Request, next: Next) -> Response {
     };
     let mut res = VISITOR.scope(id.clone(), next.run(req)).await;
     if let (Some(v), true) = (id, fresh) {
-        let c = format!("{VISITOR_COOKIE}={v}; Path=/; SameSite=Lax; Max-Age=31536000{}", if https { "; Secure" } else { "" });
+        let c = format!("{VISITOR_COOKIE}={v}.{}; Path=/; SameSite=Lax; Max-Age=31536000{}", visitor_sig(&state.cfg.csrf_secret, &v), if https { "; Secure" } else { "" });
         if let Ok(hv) = HeaderValue::from_str(&c) {
             res.headers_mut().append(header::SET_COOKIE, hv);
         }
@@ -117,11 +146,12 @@ fn clean_detail(kind: &str, d: &serde_json::Map<String, serde_json::Value>) -> s
 /// `POST /api/t`: the tracker's batches. Always answers 204 so the page never waits on it.
 pub async fn ingest(AxState(state): AxState<State>, ConnectInfo(peer): ConnectInfo<SocketAddr>, headers: HeaderMap, admin: Option<axum::Extension<crate::admin::AdminCtx>>, body: Bytes) -> Response {
     let done = StatusCode::NO_CONTENT.into_response();
-    let cross_site = headers.get("sec-fetch-site").and_then(|v| v.to_str().ok()).map(|v| v != "same-origin").unwrap_or(false);
+    // Browsers send Sec-Fetch-Site with every fetch; a batch without it came from a script, not a page.
+    let cross_site = headers.get("sec-fetch-site").and_then(|v| v.to_str().ok()).map(|v| v != "same-origin").unwrap_or(true);
     if admin.is_some() || cross_site || opted_out(&headers) || !state.track_limiter.allow(crate::security::client_ip(&headers, peer.ip())) {
         return done;
     }
-    let Some(visitor) = crate::admin::cookie(&headers, VISITOR_COOKIE).filter(|v| valid_visitor(v)) else { return done };
+    let Some(visitor) = crate::admin::cookie(&headers, VISITOR_COOKIE).and_then(|v| read_visitor(&state.cfg.csrf_secret, &v)) else { return done };
     let Ok(batch) = serde_json::from_slice::<Batch>(&body) else { return done };
     let path: String = batch.p.split('?').next().unwrap_or("").chars().take(200).collect();
     if !path.starts_with('/') {
@@ -131,7 +161,8 @@ pub async fn ingest(AxState(state): AxState<State>, ConnectInfo(peer): ConnectIn
         "phone" | "tablet" | "desktop" => batch.d.as_str(),
         _ => "",
     };
-    for ev in batch.e.iter().take(MAX_EVENTS) {
+    let allowed = take_events(&visitor, batch.e.len().min(MAX_EVENTS) as u32) as usize;
+    for ev in batch.e.iter().take(allowed) {
         if !matches!(ev.k.as_str(), "view" | "click" | "scroll" | "search" | "exposure" | "conversion") {
             continue;
         }

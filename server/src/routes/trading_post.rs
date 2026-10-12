@@ -90,9 +90,10 @@ pub async fn listing(AxState(state): AxState<State>, Path(slug): Path<String>) -
     if !l.image_large.is_empty() {
         page.og_image = state.abs(&l.image_large);
     }
-    page = page.with_jsonld(vec![
-        org_node(&state),
-        serde_json::json!({
+    // A listing with no photo is not marked up as a product: search engines require an image for one.
+    let mut nodes = vec![org_node(&state)];
+    if !l.image_large.is_empty() {
+        nodes.push(serde_json::json!({
             "@type": "Product",
             "@id": state.abs(&format!("/trading-post/{slug}/#listing")),
             "name": l.title,
@@ -100,9 +101,10 @@ pub async fn listing(AxState(state): AxState<State>, Path(slug): Path<String>) -
             "image": if l.image_large.is_empty() { serde_json::Value::Null } else { serde_json::json!([state.abs(&l.image_large)]) },
             "url": state.abs(&format!("/trading-post/{slug}/")),
             "offers": {"@type": "Offer", "priceCurrency": "USD", "price": l.price.trim_start_matches('$').replace(',', ""), "availability": "https://schema.org/InStock", "itemCondition": "https://schema.org/UsedCondition", "description": "Private classified listing on the ThePenMarket.com Trading Post; the sale is between buyer and seller."}
-        }),
-        breadcrumb_node(&state, &[("Home", "/"), ("Trading Post", "/trading-post/"), (l.title.as_str(), &format!("/trading-post/{slug}/"))]),
-    ]);
+        }));
+    }
+    nodes.push(breadcrumb_node(&state, &[("Home", "/"), ("Trading Post", "/trading-post/"), (l.title.as_str(), &format!("/trading-post/{slug}/"))]));
+    page = page.with_jsonld(nodes);
     html(&TpListingTpl { page, l, more, tp_email: Entity::TP_EMAIL.to_string() })
 }
 

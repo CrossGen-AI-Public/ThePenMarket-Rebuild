@@ -22,7 +22,7 @@ path = "src/bin/admin.rs"
 axum = { version = "0.8", features = ["macros", "form", "query", "multipart"] }
 tokio = { version = "1", features = ["full"] }
 tower = "0.5"
-tower-http = { version = "0.6", features = ["fs", "set-header", "trace", "limit", "compression-gzip"] }
+tower-http = { version = "0.6", features = ["fs", "set-header", "trace", "limit", "compression-gzip", "timeout"] }
 sqlx = { version = "0.8", features = ["runtime-tokio", "tls-rustls", "postgres", "chrono", "migrate", "json", "bigdecimal"] }
 askama = "0.14"
 serde = { version = "1", features = ["derive"] }

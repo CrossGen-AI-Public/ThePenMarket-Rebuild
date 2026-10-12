@@ -112,7 +112,7 @@ pub async fn upload_media(AxState(state): AxState<State>, Extension(cookie): Ext
     }
     let Some(bytes) = bytes else { return Ok(api_err(StatusCode::BAD_REQUEST, "No photo was attached.")) };
     let key = format!("uploads/admin/blog/{}/{}.jpg", chrono::Utc::now().format("%Y/%m"), super::auth::random_token(8));
-    let imported = match crate::media::reencode_upload_with_variants(&bytes, &state.cfg.media_dir.join(&key)) {
+    let imported = match crate::media::reencode_upload_with_variants_async(bytes, state.cfg.media_dir.join(&key)).await {
         Ok(i) => i,
         Err(_) => return Ok(api_err(StatusCode::BAD_REQUEST, "That file could not be read as a photo (JPEG, PNG or WebP).")),
     };
@@ -123,7 +123,7 @@ pub async fn upload_media(AxState(state): AxState<State>, Extension(cookie): Ext
 
 /// `GET /admin/api/posts/?q=`: published posts by title, for the editor's "Link to a blog post".
 pub async fn post_lookup(AxState(state): AxState<State>, AuthApi(_admin): AuthApi, Query(q): Query<ListQuery>) -> AppResult {
-    let rows = sqlx::query("SELECT title, slug FROM post WHERE status = 'published' AND ($1 = '' OR title ILIKE '%' || $1 || '%') ORDER BY published_at DESC LIMIT 25").bind(q.q.trim()).fetch_all(&state.pool).await?;
+    let rows = sqlx::query("SELECT title, slug FROM post WHERE status = 'published' AND ($1 = '' OR title ILIKE '%' || $1 || '%') ORDER BY published_at DESC LIMIT 25").bind(crate::text::like_escape(q.q.trim())).fetch_all(&state.pool).await?;
     let out: Vec<serde_json::Value> = rows.iter().map(|r| serde_json::json!({"title": r.get::<String, _>("title"), "url": format!("/{}/", r.get::<String, _>("slug"))})).collect();
     Ok(Json(serde_json::json!({"ok": true, "posts": out})).into_response())
 }
@@ -165,7 +165,7 @@ pub struct ListQuery {
 
 pub async fn posts(AxState(state): AxState<State>, Extension(cookie): Extension<CsrfCookie>, Auth(_admin): Auth, Query(q): Query<ListQuery>) -> AppResult {
     let rows = sqlx::query("SELECT p.id, p.slug, p.title, p.status, p.published_at, p.body_html, COALESCE(bc.name, '') AS category FROM post p LEFT JOIN blog_category bc ON bc.id = p.category_id WHERE ($1 = '' OR p.title ILIKE '%' || $1 || '%') ORDER BY (p.status = 'draft') DESC, p.published_at DESC")
-        .bind(q.q.trim()).fetch_all(&state.pool).await?;
+        .bind(crate::text::like_escape(q.q.trim())).fetch_all(&state.pool).await?;
     let mut all: Vec<PostListRow> = rows
         .iter()
         .map(|r| {

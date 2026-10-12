@@ -133,6 +133,9 @@ pub async fn post(AxState(state): AxState<State>, Path(slug): Path<String>, Orig
         if let Some(target) = db::redirect_for(&state.pool, uri.path(), uri.query()).await? {
             return Ok(crate::app::moved(&target));
         }
+        if let Some(target) = crate::routes::legacy::resolve(&state.pool, uri.path()).await? {
+            return Ok(crate::app::moved(&target));
+        }
         return crate::routes::render_404(&state, uri.path());
     };
     let card = PostCard::from(row.clone());
@@ -149,7 +152,9 @@ pub async fn post(AxState(state): AxState<State>, Path(slug): Path<String>, Orig
         None => vec![],
     };
     let title = format!("{} | Drippy Musings | ThePenMarket.com", row.title);
-    let mut page = PageMeta::new(&state, &title, &row.meta_description, &format!("/{slug}/"));
+    // A short or missing description is filled from the post's own opening words.
+    let description = if row.meta_description.chars().count() >= 50 { row.meta_description.clone() } else { crate::text::summary(&format!("{}. {}", row.title, crate::text::strip_tags(&body)), 155) };
+    let mut page = PageMeta::new(&state, &title, &description, &format!("/{slug}/"));
     page.section = "blog".into();
     page.edit_link = Some(("Edit this post".into(), format!("/admin/posts/{}/", row.id)));
     if !card.image.is_empty() {

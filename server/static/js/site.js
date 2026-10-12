@@ -16,10 +16,6 @@
     });
   }
 
-  // footer mailing-list form: copy the CSRF cookie into the hidden field (double-submit)
-  var m = document.cookie.match(/(?:^|;\s*)pm_csrf=([0-9a-f]{32,})/);
-  if (m) $$("form[data-csrf-from-cookie] input[name=csrf]").forEach(function (i) { if (!i.value) i.value = m[1]; });
-
   // sort select submits its form
   $$("select[data-autosubmit]").forEach(function (sel) { sel.addEventListener("change", function () { sel.form.submit(); }); });
 

@@ -241,7 +241,7 @@ impl PageMeta {
             og_image: state.abs("/static/img/og-default.jpg"),
             jsonld: String::new(),
             noindex: false,
-            csrf: String::new(),
+            csrf: crate::security::form_token(),
             nav_counts: NavCounts { vintage: pick("vintage-pens"), pre_owned: pick("pre-owned-pens"), pencils: pick("pencils"), inkwells: pick("inkwells-blotters"), live_total: s.live_total },
             section: String::new(),
             asset_v: state.asset_v.clone(),

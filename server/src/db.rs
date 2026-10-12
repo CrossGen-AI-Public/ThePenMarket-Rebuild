@@ -253,8 +253,8 @@ impl ShopFilter {
                 if i > 0 {
                     qb.push(" OR ");
                 }
-                qb.push("p.search_tsv @@ websearch_to_tsquery('english', ").push_bind(v.clone()).push(") OR p.title ILIKE ").push_bind(format!("%{v}%")).push(" OR p.sku = ").push_bind(v.clone());
-                qb.push(" OR EXISTS (SELECT 1 FROM product_tag_link l JOIN product_tag t ON t.id = l.tag_id WHERE l.product_id = p.id AND t.name ILIKE ").push_bind(v.clone()).push(")");
+                qb.push("p.search_tsv @@ websearch_to_tsquery('english', ").push_bind(v.clone()).push(") OR p.title ILIKE ").push_bind(format!("%{}%", crate::text::like_escape(v))).push(" OR p.sku = ").push_bind(v.clone());
+                qb.push(" OR EXISTS (SELECT 1 FROM product_tag_link l JOIN product_tag t ON t.id = l.tag_id WHERE l.product_id = p.id AND t.name ILIKE ").push_bind(crate::text::like_escape(v)).push(")");
             }
             qb.push(") ");
         }
@@ -609,7 +609,7 @@ pub async fn posts(pool: &PgPool, category: Option<&str>, q: &[String], page: i6
                 if i > 0 {
                     qb.push(" OR ");
                 }
-                qb.push("p.search_tsv @@ websearch_to_tsquery('english', ").push_bind(v.to_string()).push(") OR p.title ILIKE ").push_bind(format!("%{v}%"));
+                qb.push("p.search_tsv @@ websearch_to_tsquery('english', ").push_bind(v.to_string()).push(") OR p.title ILIKE ").push_bind(format!("%{}%", crate::text::like_escape(v)));
             }
             qb.push(") ");
         }
@@ -642,7 +642,7 @@ pub async fn posts_by_slugs(pool: &PgPool, slugs: &[&str]) -> anyhow::Result<Vec
 
 pub async fn posts_matching(pool: &PgPool, q: &str, limit: i64) -> anyhow::Result<Vec<PostCard>> {
     let sql = format!("{POST_SELECT} WHERE p.status = 'published' AND (p.search_tsv @@ websearch_to_tsquery('english', $1) OR p.title ILIKE $2) ORDER BY ts_rank(p.search_tsv, websearch_to_tsquery('english', $1)) DESC, p.published_at DESC LIMIT $3");
-    let rows: Vec<PostRow> = sqlx::query_as(&sql).bind(q).bind(format!("%{q}%")).bind(limit).fetch_all(pool).await?;
+    let rows: Vec<PostRow> = sqlx::query_as(&sql).bind(q).bind(format!("%{}%", crate::text::like_escape(q))).bind(limit).fetch_all(pool).await?;
     Ok(rows.into_iter().map(PostCard::from).collect())
 }
 

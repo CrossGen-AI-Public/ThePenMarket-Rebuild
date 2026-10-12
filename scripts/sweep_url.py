@@ -3,12 +3,16 @@
 Chromium, so widths below Chrome's 500px window floor are real viewports) and fail on any route whose
 document is wider than the viewport. Usage: sweep_url.py <base-url> <route> [route...]
 """
+import os
 import sys
 from playwright.sync_api import sync_playwright
 
 base = sys.argv[1].rstrip("/")
 routes = [""] + [r for r in sys.argv[2:] if r]
 widths = [320, 360, 390, 430, 600, 768, 900, 1024, 1100, 1200, 1300]
+if os.environ.get("WIDTHS"):  # the full audit checks fewer widths on every page
+    widths = [int(w) for w in os.environ["WIDTHS"].split(",")]
+WAIT_MS = int(os.environ.get("WAIT_MS", "600"))
 JS = """() => {
   const d = document, w = window, vw = d.documentElement.clientWidth;
   const sw = Math.max(d.documentElement.scrollWidth, d.body.scrollWidth);
@@ -27,7 +31,7 @@ with sync_playwright() as p:
         for r in routes:
             try:
                 pg.goto(f"{base}/{r}", wait_until="load", timeout=60000)
-                pg.wait_for_timeout(600)
+                pg.wait_for_timeout(WAIT_MS)
                 res = pg.evaluate(JS)
                 if res["sw"] > res["vw"] or res["bad"]:
                     n_bad += 1

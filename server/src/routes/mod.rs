@@ -1,5 +1,6 @@
 //! The router: every public path, explicitly. Nothing else is reachable.
 
+pub mod legacy;
 pub mod blog;
 pub mod checkout;
 pub mod content;
@@ -51,10 +52,10 @@ pub fn router(state: State) -> Router {
         .route("/category/{slug}/", get(blog::category))
         .route("/trading-post/", get(trading_post::index))
         .route("/trading-post/{slug}/", get(trading_post::listing))
-        .route("/post-your-product/", get(trading_post::post_form).post(trading_post::post_submit))
-        .route("/pen-repairs/", get(pages::repairs).post(forms::repair))
-        .route("/sell-my-pens/", get(pages::sell).post(forms::sell))
-        .route("/contact/", get(pages::contact).post(forms::contact))
+        .route("/post-your-product/", get(trading_post::post_form).post(trading_post::post_submit).layer(axum::extract::DefaultBodyLimit::max(FORM_LIMIT)))
+        .route("/pen-repairs/", get(pages::repairs).post(forms::repair).layer(axum::extract::DefaultBodyLimit::max(FORM_LIMIT)))
+        .route("/sell-my-pens/", get(pages::sell).post(forms::sell).layer(axum::extract::DefaultBodyLimit::max(FORM_LIMIT)))
+        .route("/contact/", get(pages::contact).post(forms::contact).layer(axum::extract::DefaultBodyLimit::max(FORM_LIMIT)))
         .route("/mailing-list/", post(forms::mailing_list))
         .route("/guarantee/", get(pages::guarantee))
         .route("/about-us/", get(pages::about))
@@ -74,6 +75,7 @@ pub fn router(state: State) -> Router {
         .route("/healthz", get(healthz))
         .route("/robots.txt", get(seo::robots))
         .route("/llms.txt", get(seo::llms))
+        .route("/.well-known/security.txt", get(seo::security_txt))
         .route("/sitemap.xml", get(seo::sitemap_index))
         .route("/sitemap-products.xml", get(seo::sitemap_products))
         .route("/sitemap-categories.xml", get(seo::sitemap_categories))
@@ -87,15 +89,23 @@ pub fn router(state: State) -> Router {
         .merge(crate::admin::router())
         .merge(static_files)
         .layer(middleware::from_fn_with_state(state.clone(), crate::admin::context))
-        .layer(middleware::from_fn(crate::insights::visitor))
+        .layer(middleware::from_fn_with_state(state.clone(), crate::insights::visitor))
         .layer(middleware::from_fn_with_state(state.clone(), not_found_page))
-        .layer(middleware::from_fn(security::security_headers))
-        .layer(middleware::from_fn(security::csrf_cookie))
+        .layer(middleware::from_fn_with_state(state.clone(), security::csrf_cookie))
+        .layer(middleware::from_fn_with_state(state.clone(), security::same_origin))
         .layer(middleware::from_fn(security::trailing_slash))
+        // Outside the redirects and size limits, so 301s and 413s carry the headers too.
+        .layer(middleware::from_fn(security::security_headers))
         .layer(CompressionLayer::new())
         .layer(axum::extract::DefaultBodyLimit::max(64 * 1024))
+        // No request may hold a connection forever; the guide's own calls are bounded inside it.
+        .layer(tower_http::timeout::TimeoutLayer::with_status_code(axum::http::StatusCode::SERVICE_UNAVAILABLE, std::time::Duration::from_secs(120)))
+        .layer(middleware::from_fn(security::proxy_headers))
         .with_state(state)
 }
+
+/// Forms that take a phone photo (10 MB at most, in forms.rs) plus their text fields.
+const FORM_LIMIT: usize = 11 * 1024 * 1024;
 
 async fn healthz() -> &'static str {
     "ok"
@@ -126,6 +136,9 @@ async fn fallback(AxState(state): AxState<State>, OriginalUri(uri): OriginalUri)
     if let Some(target) = crate::db::redirect_for(&state.pool, &path, uri.query()).await? {
         return Ok(moved(&target));
     }
+    if let Some(target) = legacy::resolve(&state.pool, &path).await? {
+        return Ok(moved(&target));
+    }
     render_404(&state, &path)
 }
 
@@ -144,6 +157,9 @@ async fn not_found_page(AxState(state): AxState<State>, req: Request, next: Next
     if res.status() == StatusCode::NOT_FOUND && is_plain && !path.starts_with("/api/") && !path.starts_with("/static/") && !path.starts_with("/media/") {
         // A URL the router shapes but the data no longer has (a sold product from the old sitemap): the redirect table first.
         if let Ok(Some(target)) = crate::db::redirect_for(&state.pool, &path, query.as_deref()).await {
+            return moved(&target);
+        }
+        if let Ok(Some(target)) = legacy::resolve(&state.pool, &path).await {
             return moved(&target);
         }
         if let Ok(page) = render_404(&state, &path) {

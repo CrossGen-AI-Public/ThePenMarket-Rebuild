@@ -87,6 +87,17 @@ pub async fn place_hold(pool: &PgPool, pen: &ForSale, visitor_key: &str, shippin
     Ok(id.map(Hold::Placed).unwrap_or(Hold::Taken))
 }
 
+/// Pens this visitor (by cookie or by address) is holding at checkout right now, other than `product_id`.
+pub async fn holds_elsewhere(pool: &PgPool, visitor_key: &str, holder_ip: &str, product_id: i32) -> anyhow::Result<i64> {
+    Ok(sqlx::query_scalar("SELECT count(*) FROM shop_order WHERE status = 'open' AND expires_at > now() AND product_id <> $3 AND (visitor_key = $1 OR (holder_ip <> '' AND holder_ip = $2))")
+        .bind(visitor_key).bind(holder_ip).bind(product_id).fetch_one(pool).await?)
+}
+
+pub async fn set_holder_ip(pool: &PgPool, order_id: i32, holder_ip: &str) -> anyhow::Result<()> {
+    sqlx::query("UPDATE shop_order SET holder_ip = $2 WHERE id = $1").bind(order_id).bind(holder_ip).execute(pool).await?;
+    Ok(())
+}
+
 pub async fn attach_session(pool: &PgPool, order_id: i32, session_id: &str, url: &str) -> anyhow::Result<()> {
     sqlx::query("UPDATE shop_order SET stripe_session_id = $2, stripe_session_url = $3, updated_at = now() WHERE id = $1").bind(order_id).bind(session_id).bind(url).execute(pool).await?;
     Ok(())

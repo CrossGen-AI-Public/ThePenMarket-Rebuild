@@ -31,3 +31,6 @@ ALTER TABLE product ADD COLUMN deleted_at TIMESTAMPTZ;
 -- the order record keep them even if the listing is edited or erased later.
 ALTER TABLE shop_order ADD COLUMN product_description TEXT NOT NULL DEFAULT '';
 ALTER TABLE shop_order ADD COLUMN product_image TEXT NOT NULL DEFAULT '';
+
+-- Who is holding a pen at checkout, by a hash of their address, so one visitor cannot hold the case.
+ALTER TABLE shop_order ADD COLUMN holder_ip TEXT NOT NULL DEFAULT '';

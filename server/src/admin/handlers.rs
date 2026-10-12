@@ -164,7 +164,9 @@ pub struct LoginForm {
     pub csrf: String,
 }
 
-const WRONG: &str = "That e-mail or password is wrong.";
+/// One message for every failed sign-in, locked or not, real address or not, so the form never says
+/// which e-mail addresses have an account.
+const WRONG: &str = "That e-mail or password is wrong. After many tries, sign-in pauses for an hour; Forgot password works at any time.";
 
 pub async fn login(AxState(state): AxState<State>, Extension(cookie): Extension<CsrfCookie>, ConnectInfo(peer): ConnectInfo<SocketAddr>, headers: HeaderMap, Form(form): Form<LoginForm>) -> AppResult {
     if let Some(r) = rate_limited(&state, &headers, peer, &cookie) {
@@ -179,12 +181,7 @@ pub async fn login(AxState(state): AxState<State>, Extension(cookie): Extension<
     let page = meta(&state, "Sign in | ThePenMarket.com", "/admin/login/", &cookie);
     let acc = store::account_by_email(&state.pool, &form.email).await?;
     let (ok, acc) = match acc {
-        Some(a) => {
-            if a.locked_until.map(|t| t > Utc::now()).unwrap_or(false) {
-                return html(&LoginTpl { page, error: "This sign-in is locked for an hour after too many wrong passwords. You can use Forgot password.".into(), notice: String::new() });
-            }
-            (auth::verify_password(&form.password, &a.password_hash), Some(a))
-        }
+        Some(a) => (auth::verify_password(&form.password, &a.password_hash), Some(a)),
         None => {
             auth::verify_password(&form.password, &auth::dummy_hash());
             (false, None)
@@ -193,6 +190,18 @@ pub async fn login(AxState(state): AxState<State>, Extension(cookie): Extension<
     let Some(acc) = acc else {
         return html(&LoginTpl { page, error: WRONG.into(), notice: String::new() });
     };
+    let dev_name = auth::cookie_name(https, DEVICE_COOKIE);
+    let device = match super::cookie(&headers, &dev_name) {
+        Some(t) if t.len() == 64 => store::device_by_token(&state.pool, acc.id, &auth::sha256_hex(&t)).await?,
+        _ => None,
+    };
+    // A lock stops password guessing from new places. It does not lock the owner out of a device he
+    // already confirmed with an e-mailed code, so a stranger's wrong guesses cannot shut him out.
+    let locked = acc.locked_until.map(|t| t > Utc::now()).unwrap_or(false);
+    if locked && !(ok && device.is_some()) {
+        store::audit(&state.pool, "admin.login_refused_locked", serde_json::json!({"email": acc.email, "ip": ip})).await?;
+        return html(&LoginTpl { page, error: WRONG.into(), notice: String::new() });
+    }
     if !ok {
         let locked = store::record_failure(&state.pool, acc.id).await?;
         store::audit(&state.pool, "admin.login_failed", serde_json::json!({"email": acc.email, "ip": ip, "locked": locked})).await?;
@@ -204,14 +213,11 @@ pub async fn login(AxState(state): AxState<State>, Extension(cookie): Extension<
         }
         return html(&LoginTpl { page, error: WRONG.into(), notice: String::new() });
     }
-    store::clear_failures(&state.pool, acc.id).await?;
+    if !locked {
+        store::clear_failures(&state.pool, acc.id).await?;
+    }
 
     // Known device: straight in. New device: e-mail a code and hold a signed pending cookie.
-    let dev_name = auth::cookie_name(https, DEVICE_COOKIE);
-    let device = match super::cookie(&headers, &dev_name) {
-        Some(t) if t.len() == 64 => store::device_by_token(&state.pool, acc.id, &auth::sha256_hex(&t)).await?,
-        _ => None,
-    };
     if let Some(d) = device {
         let token = auth::random_token(32);
         store::create_session(&state.pool, acc.id, &auth::sha256_hex(&token), Some(d.id), &ip, &ua, true).await?;
@@ -228,6 +234,9 @@ pub async fn login(AxState(state): AxState<State>, Extension(cookie): Extension<
         store::audit(&state.pool, "admin.login", serde_json::json!({"email": acc.email, "ip": ip, "device": auth::device_name(&ua), "code_skipped": true})).await?;
         let c = auth::set_cookie(&auth::cookie_name(https, SESSION_COOKIE), &token, https, auth::SESSION_ABSOLUTE_HOURS * 3600);
         return Ok(with_cookies(Redirect::to("/admin/").into_response(), &[c]));
+    }
+    if store::codes_last_hour(&state.pool, acc.id, "device").await? >= 5 {
+        return html(&LoginTpl { page, error: "Five sign-in codes were already sent in the last hour. Use the newest one, or wait an hour.".into(), notice: String::new() });
     }
     let code = auth::six_digit_code();
     let code_id = store::create_code(&state.pool, acc.id, "device", &auth::sha256_hex(&code), auth::CODE_MIN, &ip).await?;
@@ -270,18 +279,18 @@ pub async fn verify(AxState(state): AxState<State>, Extension(cookie): Extension
     let page = meta(&state, "Is this you? | ThePenMarket.com", "/admin/verify/", &cookie);
     let acc = store::account_by_id(&state.pool, account_id).await?.ok_or(AppError::NotFound)?;
     let hint = hide_email(&acc.email);
-    let Some(code) = store::code_by_id(&state.pool, code_id, "device").await? else {
-        return html(&VerifyTpl { page, error: "That code is no longer valid. Sign in again to get a new one.".into(), email_hint: hint });
-    };
     let typed: String = form.code.chars().filter(|c| c.is_ascii_digit()).collect();
-    let good = code.account_id == account_id && code.used_at.is_none() && code.expires_at > Utc::now() && code.attempts < auth::CODE_ATTEMPTS && auth::sha256_hex(&typed) == code.code_hash;
-    if !good {
-        let n = store::bump_code_attempts(&state.pool, code.id).await?;
-        store::audit(&state.pool, "admin.code_failed", serde_json::json!({"email": acc.email, "ip": ip, "attempts": n})).await?;
-        let msg = if n >= auth::CODE_ATTEMPTS || code.expires_at <= Utc::now() { "That code is no longer valid. Sign in again to get a new one." } else { "That code isn't right. Check the e-mail and try again." };
-        return html(&VerifyTpl { page, error: msg.into(), email_hint: hint });
+    match store::try_code(&state.pool, code_id, account_id, "device", &auth::sha256_hex(&typed), auth::CODE_ATTEMPTS).await? {
+        Some(true) => {}
+        Some(false) => {
+            store::audit(&state.pool, "admin.code_failed", serde_json::json!({"email": acc.email, "ip": ip})).await?;
+            return html(&VerifyTpl { page, error: "That code isn't right. Check the e-mail and try again.".into(), email_hint: hint });
+        }
+        None => {
+            store::audit(&state.pool, "admin.code_failed", serde_json::json!({"email": acc.email, "ip": ip, "spent": true})).await?;
+            return html(&VerifyTpl { page, error: "That code is no longer valid. Sign in again to get a new one.".into(), email_hint: hint });
+        }
     }
-    store::use_code(&state.pool, code.id).await?;
     let mut cookies = vec![auth::clear_cookie(&auth::cookie_name(https, PENDING_COOKIE), https)];
     let mut device_id = None;
     if form.remember.is_some() {
@@ -334,11 +343,21 @@ pub async fn forgot(AxState(state): AxState<State>, Extension(cookie): Extension
     }
     let ip = ip_of(&headers, peer);
     if let Some(acc) = store::account_by_email(&state.pool, &form.email).await? {
-        let token = auth::random_token(32);
-        store::create_code(&state.pool, acc.id, "reset", &auth::sha256_hex(&token), auth::RESET_MIN, &ip).await?;
-        let link = state.abs(&format!("/admin/reset/{token}/"));
-        state.mailer.send(mail::reset_message(&acc.email, &link)).await?;
-        store::audit(&state.pool, "admin.reset_requested", serde_json::json!({"email": acc.email, "ip": ip})).await?;
+        // Three links an hour at most, so nobody can bury his inbox in reset e-mails.
+        if store::codes_last_hour(&state.pool, acc.id, "reset").await? < 3 {
+            let token = auth::random_token(32);
+            store::create_code(&state.pool, acc.id, "reset", &auth::sha256_hex(&token), auth::RESET_MIN, &ip).await?;
+            let link = state.abs(&format!("/admin/reset/{token}/"));
+            // Sent in the background: a real address must not answer slower (or fail louder) than a made-up one.
+            let msg = mail::reset_message(&acc.email, &link);
+            let st = std::sync::Arc::clone(&state);
+            tokio::spawn(async move {
+                if let Err(e) = st.mailer.send(msg).await {
+                    tracing::warn!("reset e-mail failed: {e:#}");
+                }
+            });
+            store::audit(&state.pool, "admin.reset_requested", serde_json::json!({"email": acc.email, "ip": ip})).await?;
+        }
     }
     html(&ForgotTpl { page: meta(&state, "Forgot password | ThePenMarket.com", "/admin/forgot/", &cookie), sent: true })
 }
@@ -387,10 +406,14 @@ pub async fn reset(AxState(state): AxState<State>, Extension(cookie): Extension<
     if !error.is_empty() {
         return html(&ResetTpl { page, token, error, invalid: false });
     }
+    // Claim the link first: two submissions at once cannot both use it.
+    if !store::consume_code(&state.pool, code.id).await? {
+        return html(&ResetTpl { page, token: String::new(), error: String::new(), invalid: true });
+    }
     let hash = auth::hash_password(&form.password)?;
     store::set_password(&state.pool, code.account_id, &hash).await?;
-    store::use_code(&state.pool, code.id).await?;
     store::revoke_all_sessions(&state.pool, code.account_id).await?;
+    store::revoke_all_devices(&state.pool, code.account_id).await?;
     let email = store::account_by_id(&state.pool, code.account_id).await?.map(|a| a.email).unwrap_or_default();
     store::audit(&state.pool, "admin.password_reset", serde_json::json!({"email": email, "ip": ip_of(&headers, peer)})).await?;
     Ok(Redirect::to("/admin/login/?notice=reset").into_response())
@@ -449,6 +472,7 @@ pub async fn password(AxState(state): AxState<State>, Extension(cookie): Extensi
     let hash = auth::hash_password(&form.password)?;
     store::set_password(&state.pool, acc.id, &hash).await?;
     store::revoke_other_sessions(&state.pool, acc.id, admin.session_id).await?;
+    store::revoke_all_devices(&state.pool, acc.id).await?;
     store::touch_step_up(&state.pool, admin.session_id).await?;
     store::audit(&state.pool, "admin.password_changed", serde_json::json!({"email": acc.email, "ip": ip_of(&headers, peer)})).await?;
     html(&PasswordTpl { page, error: String::new(), done: true })
@@ -549,7 +573,7 @@ pub async fn preview(AxState(state): AxState<State>, Extension(cookie): Extensio
     let on = form.on == "1";
     store::set_preview(&state.pool, admin.session_id, on).await?;
     store::audit(&state.pool, "admin.preview", serde_json::json!({"email": admin.email, "on": on})).await?;
-    let back = if form.back.starts_with('/') && !form.back.starts_with("//") { form.back } else { "/".to_string() };
+    let back = if form.back.starts_with('/') && !form.back.starts_with("//") && !form.back.contains('\\') { form.back } else { "/".to_string() };
     Ok(Redirect::to(&back).into_response())
 }
 

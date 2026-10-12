@@ -344,7 +344,14 @@ async fn render_archive(state: &State, base: &str, q: ShopQuery, fixed: Fixed, h
     let list: Vec<serde_json::Value> = result.items.iter().enumerate().map(|(i, p)| serde_json::json!({"@type": "ListItem", "position": i + 1 + ((page_n - 1) * PER_PAGE) as usize, "url": state.abs(&p.url), "name": p.title})).collect();
     let mut nodes = vec![
         org_node(state),
-        serde_json::json!({"@type": "CollectionPage", "@id": state.abs(&format!("{base}#collection")), "url": state.abs(base), "name": heading, "description": description, "isPartOf": {"@id": state.abs("/#website")}, "mainEntity": {"@type": "ItemList", "numberOfItems": result.total, "itemListElement": list}}),
+        {
+            let mut cp = serde_json::json!({"@type": "CollectionPage", "@id": state.abs(&format!("{base}#collection")), "url": state.abs(base), "name": heading, "description": description, "isPartOf": {"@id": state.abs("/#website")}});
+            // An empty list (nothing in a category for sale right now) is left out rather than described as empty.
+            if !list.is_empty() {
+                cp["mainEntity"] = serde_json::json!({"@type": "ItemList", "numberOfItems": result.total, "itemListElement": list});
+            }
+            cp
+        },
         breadcrumb_node(state, &crumbs.iter().map(|(a, b)| (a.as_str(), b.as_str())).collect::<Vec<_>>()),
     ];
     if !term_kind.is_empty() && !term_definition.is_empty() {
@@ -458,7 +465,7 @@ async fn term_page(state: State, table: &str, kind: &str, base_prefix: &str, slu
         "filling mechanism" => format!("{} Fountain Pens: What It Is, {} in Stock | ThePenMarket.com", t.name, n),
         _ => format!("Pens {}: {} in Stock | ThePenMarket.com", t.name, n),
     };
-    let desc = if definition.is_empty() { intro.clone() } else { crate::text::summary(&definition, 155) };
+    let desc = if definition.is_empty() { format!("{} at ThePenMarket.com: {intro}", t.name) } else { crate::text::summary(&definition, 155) };
     let posts = db::posts_matching(&state.pool, &t.name, 3).await?;
     let fixed = match kind {
         "brand" => Fixed { brand: Some(slug.clone()), ..Default::default() },
@@ -610,6 +617,8 @@ pub async fn product(AxState(state): AxState<State>, Extension(cookie): Extensio
     let price_now = if p.on_sale { p.sale_price.clone() } else { p.price.clone() };
     let title = format!("{} | {} | ThePenMarket.com", p.title, price_now);
     let description = if body.meta_description.is_empty() { crate::text::summary(&body.description_text, 155) } else { body.meta_description.clone() };
+    // A one-line listing still gets a description a search result can show: its name and price first.
+    let description = if description.chars().count() >= 50 { description } else { crate::text::summary(&format!("{}, {} at ThePenMarket.com. {}", p.title, price_now, description), 155) };
     let mut page = PageMeta::new(&state, &title, &description, &format!("/product/{slug}/"));
     page.section = "shop".into();
     if let Some(i) = images.first() {

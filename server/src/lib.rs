@@ -8,8 +8,10 @@ pub mod media;
 pub mod money;
 pub mod spelling;
 pub mod orders;
+pub mod shipping;
 pub mod stripe;
 pub mod text;
+pub mod tp_pay;
 pub mod wp;
 
 /// Admin sign-in, sessions and product edits shared by the server and the `admin` CLI.

@@ -7,9 +7,7 @@
   {% else if checkout_mode == "test" %}
   <div class="adm-warnbox">Checkout is in Stripe's test mode. Only Stripe's test cards work and no real money moves. Pens “bought” in test mode are marked sold; set them back to for sale on their page.</div>
   {% endif %}
-  {% if !shipping_set %}
-  <p class="adm-hint">No shipping charge is set, so buyers pay the pen's price only. Set a flat shipping charge (or 0 for free shipping) on <a href="/admin/settings/">Homepage and photos</a>.</p>
-  {% endif %}
+  <p class="adm-hint">{% if shipping_line.is_empty() %}No shipping rates are set, so buyers pay the pen's price only.{% else %}Shipping offered: {{ shipping_line }}.{% endif %}{% if !ship_saved %} These are the rates from your e-mail of October 12.{% endif %} Change them on <a href="/admin/settings/">Homepage and photos</a>.</p>
   <p class="adm-hint">{% if mail_connected %}Each sale is also e-mailed to you.{% else %}Outgoing e-mail is not connected yet, so this page is where sales show up.{% endif %} Refunds and disputes are handled in your Stripe dashboard.</p>
   <form class="adm-filter" method="get" action="/admin/orders/">
     <select name="show" aria-label="Show"><option value="">Paid, clearing and refunded</option><option value="all"{% if show_all %} selected{% endif %}>Everything, including unfinished checkouts</option></select>
@@ -19,7 +17,8 @@
   <article class="adm-card adm-msg">
     <header><b>{{ o.pen }}</b> <span class="muted">#{{ o.id }} · {{ o.when }}</span> <span class="adm-chip{% if o.attention %} adm-warn{% endif %}">{{ o.status }}</span></header>
     <dl>
-      <div><dt>Total</dt><dd>{{ o.total }}{% if !o.shipping.is_empty() %} (includes {{ o.shipping }} shipping){% endif %}</dd></div>
+      <div><dt>Total</dt><dd>{{ o.total }}</dd></div>
+      <div><dt>Shipping</dt><dd>{{ o.ships }}{% if !o.shipping.is_empty() %}: {{ o.shipping }} (included in the total){% else %}{% if o.status == "Paid: ship it" %}: none charged{% endif %}{% endif %}</dd></div>
       {% if !o.sku.is_empty() %}<div><dt>SKU</dt><dd>{{ o.sku }}</dd></div>{% endif %}
       {% if !o.buyer.is_empty() %}<div><dt>Buyer</dt><dd>{{ o.buyer }}</dd></div>{% endif %}
       {% if !o.email.is_empty() %}<div><dt>E-mail</dt><dd>{{ o.email }}</dd></div>{% endif %}
@@ -34,5 +33,33 @@
   </article>
   {% endfor %}
   {% if rows.is_empty() %}<p>No orders yet.</p>{% endif %}
+
+  <h2 id="trading-post">Trading Post listings posted here</h2>
+  <p class="adm-hint">Listings people post on the site. One with an unpaid {{ listing_fee }} fee is saved but never shown to the public; {% if show_all %}they are listed below{% else %}choose “Everything” above to see those too{% endif %}. Every listing is also in your <a href="/admin/inbox/?kind=trading_post">inbox</a>.</p>
+  {% for l in listings %}
+  <article class="adm-card adm-msg">
+    <header><b>{{ l.title }}</b> <span class="muted">#{{ l.id }} · {{ l.when }}</span> <span class="adm-chip{% if l.attention %} adm-warn{% endif %}">{{ l.status }}</span></header>
+    <dl>
+      {% if !l.paid.is_empty() %}<div><dt>Paid</dt><dd>{{ l.paid }}</dd></div>{% endif %}
+      {% if !l.email.is_empty() %}<div><dt>E-mail</dt><dd>{{ l.email }}</dd></div>{% endif %}
+      {% if !l.note.is_empty() %}<div><dt>Note</dt><dd>{{ l.note }}</dd></div>{% endif %}
+    </dl>
+    <footer>
+      {% if !l.url.is_empty() %}<a class="btn btn-outline" href="{{ l.url }}">The listing</a>{% endif %}
+      {% if !l.inbox_url.is_empty() %}<a class="btn btn-outline" href="{{ l.inbox_url }}">In the inbox</a>{% endif %}
+      {% if !l.stripe_url.is_empty() %}<a class="btn btn-ghost" href="{{ l.stripe_url }}" target="_blank" rel="noopener">Open in Stripe</a>{% endif %}
+    </footer>
+  </article>
+  {% endfor %}
+  {% if listings.is_empty() %}<p>None yet.</p>{% endif %}
+
+  <h2 id="members">Unlimited Posts members</h2>
+  <p class="adm-hint">A member's listings go live without the fee when they post with this e-mail address. Memberships renew every year through Stripe; cancel one in your Stripe dashboard.</p>
+  {% if members.is_empty() %}<p>No members yet.</p>{% else %}
+  <table class="adm">
+    <tr><th>E-mail</th><th>Since</th><th>Status</th><th></th></tr>
+    {% for m in members %}<tr><td>{{ m.email }}</td><td>{{ m.since }}</td><td>{{ m.status }} {{ m.paid_through }}</td><td><a href="{{ m.stripe_url }}" target="_blank" rel="noopener">Stripe</a></td></tr>{% endfor %}
+  </table>
+  {% endif %}
 </div>
 {% endblock %}

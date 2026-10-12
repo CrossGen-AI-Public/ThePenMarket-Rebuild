@@ -79,7 +79,7 @@ pub async fn home(AxState(state): AxState<State>, Extension(cookie): Extension<C
         Tile {
             title: "Orders",
             url: "/admin/orders/",
-            line: if state.cfg.checkout_enabled() { "Pens bought online: who bought, what they paid, where to ship.".into() } else { "Online checkout is off until CrossGen adds your Stripe keys. Orders will appear here.".into() },
+            line: if state.cfg.checkout_enabled() { "Pens bought online: who bought, what they paid, where to ship. Also Trading Post listing fees and Unlimited Posts members.".into() } else { "Online checkout is off until CrossGen adds your Stripe keys. Orders will appear here.".into() },
             badge: if n("processing") > 0 { badge(n("processing"), "bank payments clearing") } else { badge(n("sold30"), "sold in 30 days") },
         },
         Tile { title: "Hidden and deleted pens", url: "/admin/pens/", line: "Pens customers can’t see: unfinished, added by accident, taken down or deleted. Restore them or erase them for good.".into(), badge: badge(n("hidden") + n("deleted"), "pens") },
@@ -152,8 +152,29 @@ pub struct SettingsTpl {
     pub reviews_line: String,
     /// "off", "test" (Stripe test keys: no real money) or "live".
     pub checkout_mode: &'static str,
-    /// His flat shipping charge as typed back into the box ("12.00"), empty when none is set.
-    pub shipping: String,
+    /// His shipping options as rows of the form, plus blank rows to add more.
+    pub ship_rows: Vec<ShipRow>,
+    /// False while the site runs on the three rates from his e-mail (he has not saved his own list).
+    pub ship_saved: bool,
+    pub ship_max: usize,
+}
+
+pub struct ShipRow {
+    pub name: String,
+    pub price: String,
+    pub region: &'static str,
+}
+
+/// Blank rows after his options, so he can add some without a script.
+const SHIP_BLANK_ROWS: usize = 3;
+/// Rows the form reads back: five per place is Stripe's limit.
+const SHIP_FORM_ROWS: usize = 2 * thepenmarket::shipping::MAX_PER_REGION + SHIP_BLANK_ROWS;
+
+fn ship_rows(list: &[thepenmarket::shipping::ShippingOption]) -> Vec<ShipRow> {
+    let mut rows: Vec<ShipRow> = list.iter().map(|o| ShipRow { name: o.name.clone(), price: format!("{}.{:02}", o.cents / 100, o.cents % 100), region: o.region.key() }).collect();
+    let blanks = SHIP_BLANK_ROWS.min(SHIP_FORM_ROWS.saturating_sub(rows.len()));
+    rows.extend((0..blanks).map(|_| ShipRow { name: String::new(), price: String::new(), region: "us" }));
+    rows
 }
 
 fn checkout_mode(state: &State) -> &'static str {
@@ -181,6 +202,7 @@ pub async fn settings_page(AxState(state): AxState<State>, Extension(cookie): Ex
         Some(id) => crate::db::products_by_ids(&state.pool, &[id], true).await?.into_iter().next(),
         None => None,
     };
+    let (ship_list, ship_saved) = settings::shipping_options(&state.pool).await?;
     html(&SettingsTpl {
         page: meta(&state, "Homepage and photos", "/admin/settings/", &cookie),
         saved: q.saved == "1",
@@ -198,7 +220,9 @@ pub async fn settings_page(AxState(state): AxState<State>, Extension(cookie): Ex
         places_key_set: !state.cfg.google_places_key.is_empty(),
         reviews_line: crate::reviews::cached(&state.pool).await?.map(|r| format!("Google last returned {} out of 5 from {} reviews ({} with text shown on the homepage).", r.rating_label(), r.count, r.reviews.len())).unwrap_or_default(),
         checkout_mode: checkout_mode(&state),
-        shipping: settings::shipping_flat(&state.pool).await?.map(|c| format!("{}.{:02}", c / 100, c % 100)).unwrap_or_default(),
+        ship_rows: ship_rows(&ship_list),
+        ship_saved,
+        ship_max: thepenmarket::shipping::MAX_PER_REGION,
     })
 }
 
@@ -215,20 +239,30 @@ pub struct SettingsForm {
     pub place_id: String,
     #[serde(default)]
     pub hero: String,
-    pub shipping: String,
+    /// "1": forget his list and go back to the rates from his e-mail of 2026-10-12.
+    #[serde(default)]
+    pub ship_default: String,
+    /// The shipping rows: `ship_name_<n>`, `ship_price_<n>`, `ship_where_<n>`.
+    #[serde(flatten)]
+    pub rest: HashMap<String, String>,
+}
+
+/// The shipping rows of the settings form, checked. Err is the message to show; nothing is saved.
+fn parse_ship_rows(rest: &HashMap<String, String>) -> Result<Vec<thepenmarket::shipping::ShippingOption>, String> {
+    let get = |k: String| rest.get(&k).map(String::as_str).unwrap_or("");
+    let typed: Vec<thepenmarket::shipping::Typed> = (0..SHIP_FORM_ROWS).map(|i| thepenmarket::shipping::Typed { name: get(format!("ship_name_{i}")), price: get(format!("ship_price_{i}")), region: get(format!("ship_where_{i}")) }).collect();
+    thepenmarket::shipping::parse(&typed)
 }
 
 pub async fn settings_save(AxState(state): AxState<State>, Extension(cookie): Extension<CsrfCookie>, Auth(admin): Auth, Form(form): Form<SettingsForm>) -> AppResult {
     check(&state, &cookie, &admin, &form.csrf)?;
     // Shipping first: a typo here must not leave half the form saved.
-    let shipping = match form.shipping.trim() {
-        "" => None,
-        typed => Some(super::auth::parse_dollars(typed).map_err(|e| AppError::BadRequest(format!("Shipping: {e} Go back; nothing was saved.")))?),
-    };
-    match shipping {
-        Some(c) => settings::set(&state.pool, settings::SHIPPING_FLAT, serde_json::json!(c)).await?,
-        None => settings::clear(&state.pool, settings::SHIPPING_FLAT).await?,
+    let shipping = if form.ship_default == "1" { None } else { Some(parse_ship_rows(&form.rest).map_err(|e| AppError::BadRequest(format!("Shipping: {e} Go back; nothing was saved.")))?) };
+    match &shipping {
+        Some(list) => settings::set(&state.pool, settings::SHIPPING_OPTIONS, serde_json::to_value(list)?).await?,
+        None => settings::clear(&state.pool, settings::SHIPPING_OPTIONS).await?,
     }
+    settings::clear(&state.pool, settings::SHIPPING_FLAT_OLD).await?;
     settings::set(&state.pool, settings::POPULAR_SECTION, serde_json::json!(form.popular == "1")).await?;
     settings::set(&state.pool, settings::HERO_MODE, serde_json::json!(if form.hero == "photo" { "photo" } else { "3d" })).await?;
     let shots = settings::parse_shot_list(&form.shots);
@@ -253,7 +287,7 @@ pub async fn settings_save(AxState(state): AxState<State>, Extension(cookie): Ex
         return Err(AppError::BadRequest("That does not look like a Google Place ID (letters, digits, dashes and underscores, usually starting ChIJ). Go back; nothing else was lost.".into()));
     }
     crate::app::refresh_site_cache(&state).await;
-    store::audit(&state.pool, "admin.settings_saved", serde_json::json!({"email": admin.email, "ip": admin.ip, "popular_section": form.popular == "1", "hero": if form.hero == "photo" { "photo" } else { "3d" }, "shots": shots.len(), "shipping_flat_cents": shipping})).await?;
+    store::audit(&state.pool, "admin.settings_saved", serde_json::json!({"email": admin.email, "ip": admin.ip, "popular_section": form.popular == "1", "hero": if form.hero == "photo" { "photo" } else { "3d" }, "shots": shots.len(), "shipping_options": shipping.as_ref().map(|l| serde_json::to_value(l).unwrap_or_default()).unwrap_or_else(|| serde_json::json!("his e-mail of 2026-10-12"))})).await?;
     Ok(Redirect::to("/admin/settings/?saved=1").into_response())
 }
 
@@ -324,6 +358,9 @@ pub struct InboxRow {
     pub photo: String,
     pub mailed: bool,
     pub handled: bool,
+    /// A Trading Post listing posted with checkout on: where its fee stands, and its page once live.
+    pub listing_status: String,
+    pub listing_url: String,
 }
 
 #[derive(Template)]
@@ -350,7 +387,15 @@ fn kind_label(kind: &str) -> &'static str {
 }
 
 pub async fn inbox(AxState(state): AxState<State>, Extension(cookie): Extension<CsrfCookie>, Auth(_admin): Auth, Query(q): Query<SavedQuery>) -> AppResult {
-    let rows = sqlx::query("SELECT id, kind, fields, photo_key, mailed, handled_at, created_at FROM form_submission WHERE ($1 = '' OR kind = $1) AND ($2 = 'all' OR handled_at IS NULL) ORDER BY created_at DESC LIMIT 300").bind(&q.kind).bind(&q.show).fetch_all(&state.pool).await?;
+    let rows = sqlx::query(
+        "SELECT f.id, f.kind, f.fields, f.photo_key, f.mailed, f.handled_at, f.created_at, l.status AS tp_status, l.paid_via AS tp_paid_via, l.slug AS tp_slug, l.note AS tp_note
+         FROM form_submission f LEFT JOIN tp_listing l ON l.form_submission_id = f.id
+         WHERE ($1 = '' OR f.kind = $1) AND ($2 = 'all' OR f.handled_at IS NULL) ORDER BY f.created_at DESC LIMIT 300",
+    )
+    .bind(&q.kind)
+    .bind(&q.show)
+    .fetch_all(&state.pool)
+    .await?;
     let rows: Vec<InboxRow> = rows
         .iter()
         .map(|r| {
@@ -368,6 +413,16 @@ pub async fn inbox(AxState(state): AxState<State>, Extension(cookie): Extension<
                 photo: r.get::<Option<String>, _>("photo_key").unwrap_or_default(),
                 mailed: r.get("mailed"),
                 handled: r.get::<Option<chrono::DateTime<chrono::Utc>>, _>("handled_at").is_some(),
+                listing_status: match (r.get::<Option<String>, _>("tp_status").as_deref(), r.get::<Option<String>, _>("tp_paid_via").as_deref(), r.get::<Option<String>, _>("tp_note").unwrap_or_default()) {
+                    (Some("live"), Some("membership"), _) => "Live on the Trading Post (Unlimited Posts member, no fee)".into(),
+                    (Some("live"), _, _) => "Live on the Trading Post (fee paid)".into(),
+                    (Some("pending_payment"), _, n) if n.starts_with("Bank payment") => "Not published yet: bank payment clearing".into(),
+                    (Some("pending_payment"), _, _) => "Not published: the listing fee has not been paid".into(),
+                    (Some(_), _, n) if n.contains("refunded") => "Taken down; the fee was refunded".into(),
+                    (Some(_), _, _) => "Taken down".into(),
+                    (None, _, _) => String::new(),
+                },
+                listing_url: if r.get::<Option<String>, _>("tp_status").as_deref() == Some("live") { r.get::<Option<String>, _>("tp_slug").map(|s| format!("/trading-post/{s}/")).unwrap_or_default() } else { String::new() },
             }
         })
         .collect();
@@ -409,7 +464,9 @@ pub struct OrderView {
     pub pen_url: String,
     pub sku: String,
     pub total: String,
+    /// "USPS Insured Priority, $15.00", or "" when no shipping was charged.
     pub shipping: String,
+    pub ships: &'static str,
     pub status: &'static str,
     pub attention: bool,
     pub buyer: String,
@@ -426,8 +483,51 @@ pub struct OrdersTpl {
     pub rows: Vec<OrderView>,
     pub show_all: bool,
     pub checkout_mode: &'static str,
-    pub shipping_set: bool,
+    /// "Shipping: Uninsured USPS Ground Advantage $6.00 (US), …", what buyers are offered now.
+    pub shipping_line: String,
+    pub ship_saved: bool,
     pub mail_connected: bool,
+    pub listings: Vec<ListingView>,
+    pub members: Vec<MemberView>,
+    pub listing_fee: String,
+}
+
+pub struct ListingView {
+    pub id: i32,
+    pub when: String,
+    pub title: String,
+    pub url: String,
+    pub status: &'static str,
+    pub attention: bool,
+    pub email: String,
+    pub paid: String,
+    pub inbox_url: String,
+    pub stripe_url: String,
+    pub note: String,
+}
+
+pub struct MemberView {
+    pub email: String,
+    pub since: String,
+    pub paid_through: String,
+    pub status: &'static str,
+    pub stripe_url: String,
+}
+
+fn listing_status(l: &thepenmarket::tp_pay::TpListing) -> (&'static str, bool) {
+    match (l.status.as_str(), l.paid_via.as_str()) {
+        ("live", "membership") => ("Live: Unlimited Posts member", false),
+        ("live", _) => ("Live: $5 fee paid", false),
+        ("pending_payment", _) if l.note.starts_with("Bank payment") => ("Waiting: bank payment clearing", false),
+        ("pending_payment", _) => ("Not published: fee not paid", false),
+        ("removed", _) if l.note.contains("refunded") => ("Taken down; payment refunded", true),
+        ("removed", _) => ("Taken down", false),
+        _ => ("Closed", false),
+    }
+}
+
+pub fn shipping_summary(list: &[thepenmarket::shipping::ShippingOption]) -> String {
+    list.iter().map(|o| format!("{} {} ({})", o.name, thepenmarket::money::fmt_cents(o.cents), if o.region == thepenmarket::shipping::Region::Us { "US" } else { "outside the US" })).collect::<Vec<_>>().join(" · ")
 }
 
 fn order_status(s: &str) -> (&'static str, bool) {
@@ -455,6 +555,7 @@ pub async fn orders(AxState(state): AxState<State>, Extension(cookie): Extension
             let g = |k: &str| a.get(k).and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
             let ship_to = [g("name"), g("line1"), g("line2"), format!("{} {} {}", g("city"), g("state"), g("postal_code")).trim().to_string(), g("country")].into_iter().filter(|s| !s.is_empty()).collect();
             let total = o.amount_total_cents.unwrap_or(o.amount_cents + o.shipping_cents);
+            let shipping = o.shipping_label();
             OrderView {
                 id: o.id,
                 when: super::handlers::fmt_time(o.paid_at.unwrap_or(o.created_at)),
@@ -462,7 +563,8 @@ pub async fn orders(AxState(state): AxState<State>, Extension(cookie): Extension
                 pen: o.product_title,
                 sku: o.product_sku,
                 total: thepenmarket::money::fmt_cents(total),
-                shipping: if o.shipping_cents > 0 { thepenmarket::money::fmt_cents(o.shipping_cents) } else { String::new() },
+                shipping,
+                ships: if o.ship_region == "intl" { "Outside the US" } else { "In the US" },
                 status,
                 attention,
                 buyer: o.buyer_name,
@@ -473,12 +575,51 @@ pub async fn orders(AxState(state): AxState<State>, Extension(cookie): Extension
             }
         })
         .collect();
+    let (ship_list, ship_saved) = settings::shipping_options(&state.pool).await?;
+    let dash = format!("https://dashboard.stripe.com/{}", if live_mode { "" } else { "test/" });
+    let listings = thepenmarket::tp_pay::posted_listings(&state.pool, 100)
+        .await?
+        .into_iter()
+        .filter(|l| show_all || l.status != "pending_payment" || l.note.starts_with("Bank payment"))
+        .map(|l| {
+            let (status, attention) = listing_status(&l);
+            ListingView {
+                id: l.id,
+                when: super::handlers::fmt_time(l.paid_at.unwrap_or(l.created_at)),
+                url: if l.status == "live" { format!("/trading-post/{}/", l.slug) } else { String::new() },
+                title: l.title,
+                status,
+                attention,
+                email: l.poster_email,
+                paid: l.amount_total_cents.filter(|_| l.paid_at.is_some()).map(thepenmarket::money::fmt_cents).unwrap_or_default(),
+                inbox_url: l.form_submission_id.map(|_| "/admin/inbox/?kind=trading_post&show=all".to_string()).unwrap_or_default(),
+                stripe_url: if l.stripe_payment_intent.is_empty() { String::new() } else { format!("{dash}payments/{}", l.stripe_payment_intent) },
+                note: l.note,
+            }
+        })
+        .collect();
+    let now = chrono::Utc::now();
+    let members = thepenmarket::tp_pay::members(&state.pool, 300)
+        .await?
+        .into_iter()
+        .map(|m| MemberView {
+            since: m.created_at.format("%b %-d, %Y").to_string(),
+            paid_through: m.paid_through.format("%b %-d, %Y").to_string(),
+            status: if m.paid_through > now { if m.status == "cancelled" { "Cancelled; paid until" } else { "Member through" } } else { "Ended" },
+            stripe_url: format!("{dash}subscriptions/{}", m.stripe_subscription),
+            email: m.email,
+        })
+        .collect();
     html(&OrdersTpl {
         page: meta(&state, "Orders", "/admin/orders/", &cookie),
         rows,
         show_all,
         checkout_mode: checkout_mode(&state),
-        shipping_set: settings::shipping_flat(&state.pool).await?.is_some(),
+        shipping_line: shipping_summary(&ship_list),
+        ship_saved,
         mail_connected: state.mailer.name() == "smtp",
+        listings,
+        members,
+        listing_fee: thepenmarket::money::fmt_dollars(thepenmarket::engine::TRADING_POST_LISTING_CENTS),
     })
 }

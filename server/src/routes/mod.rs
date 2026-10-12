@@ -51,6 +51,8 @@ pub fn router(state: State) -> Router {
         .route("/blog/", get(blog::index))
         .route("/category/{slug}/", get(blog::category))
         .route("/trading-post/", get(trading_post::index))
+        .route("/trading-post/thanks/", get(trading_post::thanks))
+        .route("/trading-post/membership/", post(trading_post::membership_start))
         .route("/trading-post/{slug}/", get(trading_post::listing))
         .route("/post-your-product/", get(trading_post::post_form).post(trading_post::post_submit).layer(axum::extract::DefaultBodyLimit::max(FORM_LIMIT)))
         .route("/pen-repairs/", get(pages::repairs).post(forms::repair).layer(axum::extract::DefaultBodyLimit::max(FORM_LIMIT)))

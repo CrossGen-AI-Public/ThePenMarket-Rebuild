@@ -26,10 +26,20 @@
     <p>When you add photos to a pen with “Guided photo shoot”, the site asks for these shots in this order, names each photo for you, and puts them in place. One per line, {{ max_photos }} at most (a pen holds {{ max_photos }} photos).</p>
     <textarea name="shots" rows="11" aria-label="Shot list">{{ shots }}</textarea>
     <h2>Shipping on online orders</h2>
-    <p>{% if checkout_mode == "off" %}Online checkout is off until CrossGen adds your Stripe keys; this charge is used once it is on.{% else if checkout_mode == "test" %}Checkout is in Stripe's test mode (test cards only, no real money).{% else %}Checkout is taking real payments through Stripe.{% endif %} One flat charge is added to every pen bought online. Leave it blank until you decide; until then buyers pay the pen's price only. Enter 0 for free shipping.</p>
-    <label for="shipping">Flat shipping charge, in dollars</label>
-    <input id="shipping" name="shipping" value="{{ shipping }}" maxlength="12" inputmode="decimal" placeholder="Not set">
-    {% if shipping.is_empty() %}<p class="adm-hint">Not set: no shipping is charged.</p>{% endif %}
+    <p>{% if checkout_mode == "off" %}Online checkout is off until CrossGen adds your Stripe keys; these rates are used once it is on.{% else if checkout_mode == "test" %}Checkout is in Stripe's test mode (test cards only, no real money).{% else %}Checkout is taking real payments through Stripe.{% endif %} The buyer says first whether the pen ships in the US or outside it, then picks one of your rates for that place on Stripe's page. Enter 0 for free shipping; clear a row's name and price to remove it. At most {{ ship_max }} for each place.</p>
+    {% if !ship_saved %}<p class="adm-hint">These are the rates from your e-mail of October 12. They stay until you change them here.</p>{% endif %}
+    <table class="adm adm-ship">
+      <tr><th>Name buyers see</th><th>Price, in dollars</th><th>Ships</th></tr>
+      {% for r in ship_rows %}
+      <tr>
+        <td><input name="ship_name_{{ loop.index0 }}" value="{{ r.name }}" maxlength="100" aria-label="Shipping name {{ loop.index }}"></td>
+        <td><input name="ship_price_{{ loop.index0 }}" value="{{ r.price }}" maxlength="10" inputmode="decimal" aria-label="Shipping price {{ loop.index }}"></td>
+        <td><select name="ship_where_{{ loop.index0 }}" aria-label="Where shipping {{ loop.index }} applies"><option value="us"{% if r.region == "us" %} selected{% endif %}>In the US</option><option value="intl"{% if r.region == "intl" %} selected{% endif %}>Outside the US</option></select></td>
+      </tr>
+      {% endfor %}
+    </table>
+    <p class="adm-hint">With no rate outside the US, buyers abroad are not offered checkout. With no US rate, US buyers pay the pen's price only.</p>
+    {% if ship_saved %}<label class="adm-check"><input type="checkbox" name="ship_default" value="1"> Go back to the rates from your e-mail of October 12 ($6, $15 and $55 international)</label>{% endif %}
     <h2>Google reviews</h2>
     <p>Reviews live on your Google Business Profile, which is free to set up at business.google.com. Once you have one, paste its Place ID here (find it with Google's “Place ID Finder”). From then on every page carries a “Review us on Google” link that opens the review box for your shop, which is the fastest way to get your first reviews.</p>
     <label for="place_id">Your Google Place ID</label>

@@ -572,8 +572,11 @@ pub struct ProductTpl {
     pub hold: String,
     pub hold_url: String,
     pub hold_minutes: i64,
-    /// "Plus $12.00 shipping" once he sets a flat rate; empty until then.
-    pub shipping_line: String,
+    /// His shipping rates for each place, "Uninsured USPS Ground Advantage $6.00 or …"; empty when none.
+    pub ship_us: String,
+    pub ship_intl: String,
+    /// Stripe keys are set and this is the Unlimited Posts membership.
+    pub membership_on: bool,
 }
 
 pub async fn product(AxState(state): AxState<State>, Extension(cookie): Extension<CsrfCookie>, Path(slug): Path<String>) -> AppResult {
@@ -673,7 +676,11 @@ pub async fn product(AxState(state): AxState<State>, Extension(cookie): Extensio
     let is_membership = p.is_subscription;
     let ask_url = format!("/#ask?sku={}", urlencode(&p.sku));
     let checkout_on = state.cfg.checkout_enabled() && p.status == "live" && !is_membership;
-    let (mut hold, mut hold_url, mut hold_minutes, mut shipping_line) = (String::new(), String::new(), 0, String::new());
+    let membership_on = state.cfg.checkout_enabled() && p.status == "live" && is_membership;
+    let (mut hold, mut hold_url, mut hold_minutes, mut ship_us, mut ship_intl) = (String::new(), String::new(), 0, String::new(), String::new());
+    if membership_on {
+        page.csrf = security::csrf_token(&state.cfg.csrf_secret, &cookie.0);
+    }
     if checkout_on {
         page.csrf = security::csrf_token(&state.cfg.csrf_secret, &cookie.0);
         if let Some(h) = thepenmarket::orders::current_hold(&state.pool, p.id, &super::checkout::visitor_key(&cookie)).await? {
@@ -681,9 +688,10 @@ pub async fn product(AxState(state): AxState<State>, Extension(cookie): Extensio
             hold_url = h.url;
             hold_minutes = if h.status == "open" { h.minutes_left } else { 0 };
         }
-        if let Some(c) = crate::settings::shipping_flat(&state.pool).await?.filter(|c| *c > 0) {
-            shipping_line = format!("Plus {} shipping.", thepenmarket::money::fmt_cents(c));
-        }
+        let (list, _) = crate::settings::shipping_options(&state.pool).await?;
+        let line = |r| thepenmarket::shipping::for_region(&list, r).iter().map(|o| format!("{} {}", o.name, thepenmarket::money::fmt_cents(o.cents))).collect::<Vec<_>>().join(" or ");
+        ship_us = line(thepenmarket::shipping::Region::Us);
+        ship_intl = line(thepenmarket::shipping::Region::Intl);
     }
     html(&ProductTpl {
         page,
@@ -708,7 +716,9 @@ pub async fn product(AxState(state): AxState<State>, Extension(cookie): Extensio
         hold,
         hold_url,
         hold_minutes,
-        shipping_line,
+        ship_us,
+        ship_intl,
+        membership_on,
     })
 }
 

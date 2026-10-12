@@ -15,7 +15,9 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use thepenmarket::money::fmt_cents;
 use thepenmarket::orders::{self, Hold, OrderRow, Outcome};
+use thepenmarket::shipping::{self, Region};
 use thepenmarket::stripe;
+use thepenmarket::tp_pay::{self, ListingOutcome, MemberOutcome};
 
 /// "Is this hold mine?" without storing the buyer's cookie itself.
 pub fn visitor_key(cookie: &CsrfCookie) -> String {
@@ -48,6 +50,9 @@ const MAX_HOLDS: i64 = 2;
 #[derive(Deserialize)]
 pub struct BuyForm {
     pub csrf: String,
+    /// Where the pen ships: "us" (the default) or "intl".
+    #[serde(default)]
+    pub ship: String,
 }
 
 /// `POST /checkout/{slug}/`: hold the pen and open a Stripe Checkout Session for it.
@@ -64,7 +69,13 @@ pub async fn buy(AxState(state): AxState<State>, Extension(cookie): Extension<Cs
         // The product page explains why (sold, not for sale, or checkout not connected).
         return Ok(Redirect::to(&back).into_response());
     }
-    let shipping = crate::settings::shipping_flat(&state.pool).await?.unwrap_or(0);
+    let (ship_list, _) = crate::settings::shipping_options(&state.pool).await?;
+    let region = if form.ship == "intl" { Region::Intl } else { Region::Us };
+    if region == Region::Intl && !shipping::ships_abroad(&ship_list) {
+        // He has no rate for abroad; the page does not offer it.
+        return Ok(Redirect::to(&back).into_response());
+    }
+    let offered = shipping::for_region(&ship_list, region);
     let now = chrono::Utc::now().timestamp();
     let session_expires = now + stripe::SESSION_MINUTES * 60;
     let hold_until = session_expires + stripe::HOLD_GRACE_MINUTES * 60;
@@ -76,7 +87,19 @@ pub async fn buy(AxState(state): AxState<State>, Extension(cookie): Extension<Cs
             contact_line(&pen.sku),
         ], &back, "Back to the pen");
     }
-    let order_id = match orders::place_hold(&state.pool, &pen, &visitor_key(&cookie), shipping, hold_until).await? {
+    let key = visitor_key(&cookie);
+    let mut hold = orders::place_hold(&state.pool, &pen, &key, region, &offered, hold_until).await?;
+    if matches!(&hold, Hold::Yours { region: r, .. } if r != region.key()) {
+        // The same buyer, now shipping somewhere else: close the old checkout (its rates were for
+        // the other place) and open a new one.
+        if let Some(sid) = orders::release(&state.pool, pen.id, &key).await? {
+            if let Err(e) = stripe::expire_session(&state.http, &state.cfg.stripe_secret_key, &sid).await {
+                tracing::warn!("could not close the old checkout session: {e:#}");
+            }
+        }
+        hold = orders::place_hold(&state.pool, &pen, &key, region, &offered, hold_until).await?;
+    }
+    let order_id = match hold {
         Hold::Taken => return Ok(Redirect::to(&back).into_response()),
         Hold::Yours { url, .. } => return Ok(Redirect::to(&url).into_response()),
         Hold::Placed(id) => id,
@@ -91,7 +114,7 @@ pub async fn buy(AxState(state): AxState<State>, Extension(cookie): Extension<Cs
         unit_amount_cents: pen.amount_cents,
         image_url: if pen.image.is_empty() { String::new() } else { state.abs(&format!("/media/{}", pen.image)) },
     };
-    let form = stripe::checkout_form(&item, state.origin(), session_expires, Some(shipping));
+    let form = stripe::checkout_form(&item, state.origin(), session_expires, region, &offered);
     match stripe::create_session(&state.http, &state.cfg.stripe_secret_key, &form, &format!("pm-order-{order_id}")).await {
         Ok(s) if s.url.as_deref().is_some_and(|u| u.starts_with("https://")) => {
             let url = s.url.unwrap_or_default();
@@ -143,8 +166,22 @@ pub struct ThanksQuery {
 fn ship_to(o: &OrderRow) -> String {
     let Some(a) = &o.shipping_address else { return String::new() };
     let g = |k: &str| a.get(k).and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
-    let parts: Vec<String> = [g("name"), g("line1"), g("line2"), format!("{} {} {}", g("city"), g("state"), g("postal_code")).trim().to_string()].into_iter().filter(|s| !s.is_empty()).collect();
+    let country = g("country");
+    let parts: Vec<String> = [g("name"), g("line1"), g("line2"), format!("{} {} {}", g("city"), g("state"), g("postal_code")).trim().to_string(), if country == "US" { String::new() } else { country }].into_iter().filter(|s| !s.is_empty()).collect();
     parts.join(", ")
+}
+
+/// The shipping on an order: from the order once the webhook stored it, else from the session Stripe
+/// returned to the thanks page. "USPS Insured Priority, $15.00", or "" when none was charged.
+fn shipping_text(o: &OrderRow, s: Option<&stripe::Session>) -> String {
+    let label = o.shipping_label();
+    if !label.is_empty() {
+        return label;
+    }
+    let Some(s) = s else { return String::new() };
+    let Some(c) = s.shipping_charged().filter(|c| *c > 0) else { return String::new() };
+    let name = s.shipping_rate_amount().map(|a| shipping::chosen_name(&o.shipping_offered, a)).unwrap_or_default();
+    if name.is_empty() { fmt_cents(c) } else { format!("{name}, {}", fmt_cents(c)) }
 }
 
 /// `GET /checkout/thanks/?session_id=…`: what Stripe says happened to this checkout.
@@ -158,7 +195,8 @@ pub async fn thanks(AxState(state): AxState<State>, Query(q): Query<ThanksQuery>
     let product_url = format!("/product/{}/", order.product_slug);
     let total = session.as_ref().and_then(|s| s.amount_total).or(order.amount_total_cents).unwrap_or(order.amount_cents + order.shipping_cents);
     let what = format!("Order #{}: {}{}.", order.id, order.product_title, if order.product_sku.is_empty() { String::new() } else { format!(" (SKU {})", order.product_sku) });
-    let paid_line = if order.shipping_cents > 0 { format!("Total: {}, including {} shipping.", fmt_cents(total), fmt_cents(order.shipping_cents)) } else { format!("Total: {}.", fmt_cents(total)) };
+    let ship_text = shipping_text(&order, session.as_ref());
+    let paid_line = if ship_text.is_empty() { format!("Total: {}.", fmt_cents(total)) } else { format!("Total: {}, including shipping ({ship_text}).", fmt_cents(total)) };
     let mut ship = ship_to(&order);
     if ship.is_empty() {
         if let Some(s) = session.as_ref().and_then(|s| s.shipping_json()) {
@@ -215,30 +253,124 @@ pub async fn webhook(AxState(state): AxState<State>, headers: HeaderMap, body: B
     }
 }
 
+/// What one webhook event did, by what it was for.
+enum Handled {
+    Pen(Outcome),
+    Listing(ListingOutcome),
+    Member(MemberOutcome),
+}
+
 async fn handle_event(state: &State, event: &stripe::Event) -> anyhow::Result<()> {
     let mut tx = state.pool.begin().await?;
     if !orders::record_event(&mut tx, &event.id, &event.kind).await? {
         return Ok(()); // already handled
     }
-    let session = if event.kind.starts_with("checkout.session.") { stripe::Session::from_value(&event.data.object) } else { None };
-    let out = match (event.kind.as_str(), &session) {
-        ("checkout.session.completed", Some(s)) => orders::on_completed(&mut tx, s).await?,
-        ("checkout.session.async_payment_succeeded", Some(s)) => orders::on_async_succeeded(&mut tx, s).await?,
-        ("checkout.session.async_payment_failed", Some(s)) => orders::on_async_failed(&mut tx, s).await?,
-        ("checkout.session.expired", Some(s)) => orders::on_expired(&mut tx, s).await?,
-        _ => Outcome::Ignored("not an event the shop uses"),
+    let obj = &event.data.object;
+    let session = if event.kind.starts_with("checkout.session.") { stripe::Session::from_value(obj) } else { None };
+    let kind = event.kind.as_str();
+    let out = match &session {
+        Some(s) if s.kind() == stripe::KIND_LISTING => Handled::Listing(match kind {
+            "checkout.session.completed" => tp_pay::on_listing_paid(&mut tx, s, false).await?,
+            "checkout.session.async_payment_succeeded" => tp_pay::on_listing_paid(&mut tx, s, true).await?,
+            "checkout.session.async_payment_failed" => tp_pay::on_listing_unpaid(&mut tx, s, "The bank payment failed; the listing was not published.").await?,
+            "checkout.session.expired" => tp_pay::on_listing_unpaid(&mut tx, s, "Checkout closed without payment; the listing was not published.").await?,
+            _ => ListingOutcome::Ignored("not an event the Trading Post uses"),
+        }),
+        Some(s) if s.kind() == stripe::KIND_MEMBERSHIP => Handled::Member(match kind {
+            "checkout.session.completed" | "checkout.session.async_payment_succeeded" => tp_pay::on_membership_completed(&mut tx, s).await?,
+            _ => MemberOutcome::Ignored("membership checkout not completed"),
+        }),
+        Some(s) => Handled::Pen(match kind {
+            "checkout.session.completed" => orders::on_completed(&mut tx, s).await?,
+            "checkout.session.async_payment_succeeded" => orders::on_async_succeeded(&mut tx, s).await?,
+            "checkout.session.async_payment_failed" => orders::on_async_failed(&mut tx, s).await?,
+            "checkout.session.expired" => orders::on_expired(&mut tx, s).await?,
+            _ => Outcome::Ignored("not an event the shop uses"),
+        }),
+        None => match kind {
+            "invoice.paid" => Handled::Member(tp_pay::on_invoice_paid(&mut tx, &stripe::invoice_paid(obj)).await?),
+            "customer.subscription.deleted" => Handled::Member(tp_pay::on_subscription_ended(&mut tx, &stripe::subscription_ended(obj)).await?),
+            _ => Handled::Pen(Outcome::Ignored("not an event the shop uses")),
+        },
     };
-    if let Outcome::Refund { order, payment_intent } = &out {
-        if payment_intent.is_empty() {
-            sqlx::query("UPDATE shop_order SET status = 'failed', note = note || ' Stripe sent no payment id, so nothing was refunded automatically: refund it by hand in the Stripe dashboard.' WHERE id = $1").bind(order.id).execute(&mut *tx).await?;
-        } else {
-            // Before committing: if the refund fails, the event is not recorded and Stripe retries.
-            stripe::refund(&state.http, &state.cfg.stripe_secret_key, payment_intent, &format!("pm-refund-{}", order.id)).await?;
+    // Refunds go out before committing: if one fails, the event is not recorded and Stripe retries.
+    match &out {
+        Handled::Pen(Outcome::Refund { order, payment_intent }) => {
+            if payment_intent.is_empty() {
+                sqlx::query("UPDATE shop_order SET status = 'failed', note = note || ' Stripe sent no payment id, so nothing was refunded automatically: refund it by hand in the Stripe dashboard.' WHERE id = $1").bind(order.id).execute(&mut *tx).await?;
+            } else {
+                stripe::refund(&state.http, &state.cfg.stripe_secret_key, payment_intent, &format!("pm-refund-{}", order.id)).await?;
+            }
         }
+        Handled::Listing(ListingOutcome::Refund { listing, payment_intent }) => {
+            if payment_intent.is_empty() {
+                sqlx::query("UPDATE tp_listing SET note = note || ' Stripe sent no payment id, so nothing was refunded automatically: refund it by hand in the Stripe dashboard.' WHERE id = $1").bind(listing.id).execute(&mut *tx).await?;
+            } else {
+                stripe::refund(&state.http, &state.cfg.stripe_secret_key, payment_intent, &format!("pm-tp-refund-{}", listing.id)).await?;
+            }
+        }
+        _ => {}
     }
     tx.commit().await?;
-    after(state, event, out).await;
+    match out {
+        Handled::Pen(o) => after(state, event, o).await,
+        Handled::Listing(o) => after_listing(state, event, o).await,
+        Handled::Member(o) => after_member(state, event, o).await,
+    }
     Ok(())
+}
+
+/// A paid listing goes live: its photo is published, the log and his mail hear about it.
+async fn after_listing(state: &State, event: &stripe::Event, out: ListingOutcome) {
+    match out {
+        ListingOutcome::Live(l) => {
+            if let Err(e) = crate::admin::store::audit(&state.pool, "tp.listing_paid", serde_json::json!({"listing_id": l.id, "title": l.title, "amount_total_cents": l.amount_total_cents, "event": event.id, "note": l.note})).await {
+                tracing::warn!("listing #{} audit failed: {e:#}", l.id);
+            }
+            let fee = format!("{} paid through Stripe{}", l.amount_total_cents.map(fmt_cents).unwrap_or_default(), if l.note.is_empty() { String::new() } else { format!(" ({})", l.note.trim()) });
+            super::trading_post::go_live(state, &l, &fee).await;
+        }
+        ListingOutcome::Refund { listing, .. } => {
+            let _ = crate::admin::store::audit(&state.pool, "tp.listing_refunded", serde_json::json!({"listing_id": listing.id, "title": listing.title, "event": event.id, "note": listing.note})).await;
+            let lines = vec![("Listing".to_string(), format!("#{} {}", listing.id, listing.title)), ("Poster e-mail".into(), listing.poster_email.clone()), ("Note".into(), listing.note.clone())];
+            let msg = crate::admin::mail::order_message(&state.cfg.trading_post_to, &format!("Refunded: Trading Post fee for {}", listing.title), &lines, &listing.poster_email, &state.abs("/admin/orders/#trading-post"));
+            let state = Arc::clone(state);
+            tokio::spawn(async move {
+                if let Err(e) = state.mailer.send(msg).await {
+                    tracing::warn!("listing refund notice could not be e-mailed: {e:#}");
+                }
+            });
+        }
+        ListingOutcome::Processing(l) | ListingOutcome::Unpaid(l) => tracing::info!(event = %event.id, listing = l.id, "trading post listing not paid yet: {}", l.note),
+        ListingOutcome::Ignored(why) => tracing::info!(event = %event.id, kind = %event.kind, "stripe event ignored: {why}"),
+    }
+}
+
+/// Memberships: the log always; his mail when someone joins.
+async fn after_member(state: &State, event: &stripe::Event, out: MemberOutcome) {
+    let (kind, m) = match out {
+        MemberOutcome::Joined(m) => ("tp.membership_joined", m),
+        MemberOutcome::Renewed(m) => ("tp.membership_renewed", m),
+        MemberOutcome::Ended(m) => ("tp.membership_ended", m),
+        MemberOutcome::Ignored(why) => {
+            tracing::info!(event = %event.id, kind = %event.kind, "stripe event ignored: {why}");
+            return;
+        }
+    };
+    let through = m.paid_through.format("%B %-d, %Y").to_string();
+    if let Err(e) = crate::admin::store::audit(&state.pool, kind, serde_json::json!({"email": m.email, "paid_through": through, "subscription": m.stripe_subscription, "event": event.id})).await {
+        tracing::warn!("membership audit failed: {e:#}");
+    }
+    if kind == "tp.membership_joined" && event.kind.starts_with("checkout.session.") {
+        let lines = vec![("Member e-mail".to_string(), m.email.clone()), ("Paid through".into(), through), ("Stripe subscription".into(), m.stripe_subscription.clone())];
+        let msg = crate::admin::mail::order_message(&state.cfg.trading_post_to, &format!("New Unlimited Posts member: {}", m.email), &lines, &m.email, &state.abs("/admin/orders/#members"));
+        let state = Arc::clone(state);
+        tokio::spawn(async move {
+            if let Err(e) = state.mailer.send(msg).await {
+                tracing::warn!("membership notice could not be e-mailed: {e:#}");
+            }
+        });
+    }
 }
 
 /// What follows a committed event: the catalog forgets a sold pen, the log and his mail hear about it.
@@ -256,16 +388,18 @@ async fn after(state: &State, event: &stripe::Event, out: Outcome) {
             return;
         }
     };
-    let detail = serde_json::json!({"order_id": o.id, "product_id": o.product_id, "pen": o.product_title, "sku": o.product_sku, "amount_total_cents": o.amount_total_cents, "event": event.id, "note": o.note});
+    let detail = serde_json::json!({"order_id": o.id, "product_id": o.product_id, "pen": o.product_title, "sku": o.product_sku, "amount_total_cents": o.amount_total_cents, "shipping_cents": o.shipping_cents, "shipping_option": o.shipping_option, "ship_region": o.ship_region, "event": event.id, "note": o.note});
     if let Err(e) = crate::admin::store::audit(&state.pool, kind, detail).await {
         tracing::warn!("order #{} audit failed: {e:#}", o.id);
     }
+    let shipping = o.shipping_label();
     let lines = vec![
         ("Order".to_string(), format!("#{}", o.id)),
         ("Pen".into(), o.product_title.clone()),
         ("SKU".into(), o.product_sku.clone()),
         ("Total charged".into(), o.amount_total_cents.map(fmt_cents).unwrap_or_default()),
-        ("Shipping charged".into(), if o.shipping_cents > 0 { fmt_cents(o.shipping_cents) } else { "none".into() }),
+        ("Ships".into(), if o.ship_region == "intl" { "Outside the US".into() } else { "In the US".into() }),
+        ("Shipping charged".into(), if shipping.is_empty() { "none".into() } else { shipping }),
         ("Buyer".into(), o.buyer_name.clone()),
         ("Buyer e-mail".into(), o.buyer_email.clone()),
         ("Ship to".into(), ship_to(&o)),
@@ -310,7 +444,7 @@ async fn buyer_message(state: &State, kind: &str, o: &OrderRow) -> Option<crate:
                 pen: o.product_title.clone(),
                 sku: o.product_sku.clone(),
                 total: o.amount_total_cents.map(fmt_cents).unwrap_or_default(),
-                shipping: if o.shipping_cents > 0 { format!("{} (included)", fmt_cents(o.shipping_cents)) } else { String::new() },
+                shipping: { let l = o.shipping_label(); if l.is_empty() { l } else { format!("{l} (included)") } },
                 ship_to: ship_to(o),
                 description: o.product_description.clone(),
                 image_url: image,

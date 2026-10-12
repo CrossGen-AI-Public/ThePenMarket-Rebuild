@@ -192,3 +192,9 @@ table.adm-report tr.is-same td:last-child{color:var(--muted)}
 .adm-erase form{display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-top:8px}
 .adm-erase label{display:flex;flex-direction:column;gap:4px;font-size:13px}
 .adm-delete{margin-top:10px}
+/* Shipping rates on Homepage and photos: three inputs a row, stacked on a phone. */
+.section-admin table.adm-ship{table-layout:fixed}
+.section-admin table.adm-ship td{padding:6px 8px 6px 0}
+.section-admin table.adm-ship th:nth-child(2),.section-admin table.adm-ship th:nth-child(3){width:24%}
+.section-admin table.adm-ship input,.section-admin table.adm-ship select{width:100%;min-width:0;max-width:100%;box-sizing:border-box}
+@media (max-width:600px){.section-admin table.adm-ship,.section-admin table.adm-ship tbody,.section-admin table.adm-ship tr,.section-admin table.adm-ship td{display:block;width:100%}.section-admin table.adm-ship tr:first-child{display:none}.section-admin table.adm-ship tr{padding:8px 0;border-bottom:1px solid var(--line)}.section-admin table.adm-ship td{border:0;padding:3px 0}}

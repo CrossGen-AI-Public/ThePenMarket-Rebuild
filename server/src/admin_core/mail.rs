@@ -217,6 +217,19 @@ pub fn refund_message(to: &str, order_id: i32, pen: &str, amount: &str, phone: &
     }
 }
 
+/// To an Unlimited Posts member when a listing goes live under their membership with no fee, so a
+/// listing posted by someone else with their address does not go unnoticed.
+pub fn member_listing_message(to: &str, title: &str, url: &str, paid_through: &str, reply_to: &str) -> Message {
+    let title = one_line(title);
+    Message {
+        to: to.to_string(),
+        subject: format!("Your Trading Post listing is live: {title}"),
+        reply_to: Some(reply_to.to_string()).filter(|v| v.contains('@') && !v.contains(['\r', '\n'])),
+        body: format!("Your Trading Post listing “{title}” is live at ThePenMarket.com:\n{url}\n\nIt was posted with this e-mail address, under your Unlimited Posts membership (paid through {paid_through}), so no listing fee was charged.\n\nIf you did not post it, reply to this e-mail.\n"),
+        html: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -229,11 +242,14 @@ mod tests {
         m.send(lockout_message("n@example.com", "n@example.com", "1.2.3.4")).await.unwrap();
         let t = std::fs::read_to_string(dir.join("admin-mail.log")).unwrap();
         assert!(t.contains("123456") && t.contains("/admin/reset/abc/") && t.contains("locked"));
-        let r = Receipt { order_id: 7, pen: "Parker <51>".into(), sku: "6971".into(), total: "$120.00".into(), shipping: "$12.00".into(), ship_to: "1 Main St".into(), description: "Restored.\n\nA small dent near the clip.".into(), image_url: "https://x/media/a-960.jpg".into(), listing_url: "https://x/product/p/".into(), phone: "(847) 708-5062".into(), email: "info@thepenmarket.com".into() };
+        let r = Receipt { order_id: 7, pen: "Parker <51>".into(), sku: "6971".into(), total: "$120.00".into(), shipping: "USPS Insured Priority, $15.00 (included)".into(), ship_to: "1 Main St".into(), description: "Restored.\n\nA small dent near the clip.".into(), image_url: "https://x/media/a-960.jpg".into(), listing_url: "https://x/product/p/".into(), phone: "(847) 708-5062".into(), email: "info@thepenmarket.com".into() };
         let rm = receipt_message("buyer@example.com", &r);
         assert!(rm.body.contains("A small dent near the clip.") && rm.body.contains("https://x/media/a-960.jpg") && rm.subject.contains("#7"));
+        assert!(rm.body.contains("Shipping: USPS Insured Priority, $15.00 (included)\n"), "the receipt names the shipping chosen");
         let h = rm.html.unwrap();
-        assert!(h.contains("Parker &lt;51&gt;") && !h.contains("<51>") && h.contains("<img src=\"https://x/media/a-960.jpg\""));
+        assert!(h.contains("Parker &lt;51&gt;") && !h.contains("<51>") && h.contains("<img src=\"https://x/media/a-960.jpg\"") && h.contains("USPS Insured Priority, $15.00 (included)"));
+        let ml = member_listing_message("m@example.com", "Pelikan\r\nBcc: x", "https://x/trading-post/p-1/", "October 12, 2027", "info@thepenmarket.com");
+        assert!(!ml.subject.contains('\n') && ml.body.contains("October 12, 2027") && ml.body.contains("https://x/trading-post/p-1/"));
         assert_eq!(m.name(), "log");
         let _ = std::fs::remove_dir_all(&dir);
     }

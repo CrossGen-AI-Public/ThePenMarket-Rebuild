@@ -7,6 +7,7 @@
 //! the same pen cannot both get one. No foreign key to `product`: the importer truncates that table
 //! with CASCADE, and orders must survive it.
 
+use crate::shipping::{Region, ShippingOption};
 use crate::stripe::Session;
 use sqlx::{PgPool, Postgres, Row, Transaction};
 
@@ -47,8 +48,8 @@ pub async fn for_sale(pool: &PgPool, slug: &str) -> anyhow::Result<Option<ForSal
 pub enum Hold {
     /// A new order row holds the pen; create its Stripe session next.
     Placed(i32),
-    /// This visitor already holds it: send them back to their open session.
-    Yours { order_id: i32, url: String },
+    /// This visitor already holds it: send them back to their open session (which ships to `region`).
+    Yours { order_id: i32, url: String, region: String },
     /// Someone else is paying for it right now.
     Taken,
 }
@@ -59,18 +60,20 @@ async fn lapse_stale(tx: &mut Transaction<'_, Postgres>, product_id: i32) -> any
     Ok(())
 }
 
-/// Hold `pen` for `visitor_key` until `hold_until` (unix seconds).
-pub async fn place_hold(pool: &PgPool, pen: &ForSale, visitor_key: &str, shipping_cents: i64, hold_until: i64) -> anyhow::Result<Hold> {
+/// Hold `pen` for `visitor_key` until `hold_until` (unix seconds), shipping to `region` with the
+/// shipping options `offered` there (kept on the order to name the one Stripe charged for).
+pub async fn place_hold(pool: &PgPool, pen: &ForSale, visitor_key: &str, region: Region, offered: &[ShippingOption], hold_until: i64) -> anyhow::Result<Hold> {
     let mut tx = pool.begin().await?;
     lapse_stale(&mut tx, pen.id).await?;
-    if let Some(r) = sqlx::query("SELECT id, visitor_key, status, stripe_session_url FROM shop_order WHERE product_id = $1 AND status IN ('open', 'processing')").bind(pen.id).fetch_optional(&mut *tx).await? {
+    if let Some(r) = sqlx::query("SELECT id, visitor_key, status, stripe_session_url, ship_region FROM shop_order WHERE product_id = $1 AND status IN ('open', 'processing')").bind(pen.id).fetch_optional(&mut *tx).await? {
         tx.commit().await?;
         let (key, status, url): (String, String, String) = (r.get("visitor_key"), r.get("status"), r.get("stripe_session_url"));
-        return Ok(if key == visitor_key && status == "open" && !url.is_empty() { Hold::Yours { order_id: r.get("id"), url } } else { Hold::Taken });
+        return Ok(if key == visitor_key && status == "open" && !url.is_empty() { Hold::Yours { order_id: r.get("id"), url, region: r.get("ship_region") } } else { Hold::Taken });
     }
+    let offered: Vec<&ShippingOption> = offered.iter().filter(|o| o.region == region).collect();
     let id: Option<i32> = sqlx::query_scalar(
-        "INSERT INTO shop_order (product_id, product_slug, product_title, product_sku, amount_cents, shipping_cents, visitor_key, expires_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, to_timestamp($8))
+        "INSERT INTO shop_order (product_id, product_slug, product_title, product_sku, amount_cents, ship_region, shipping_offered, visitor_key, expires_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, to_timestamp($9))
          ON CONFLICT (product_id) WHERE status IN ('open', 'processing') DO NOTHING RETURNING id",
     )
     .bind(pen.id)
@@ -78,7 +81,8 @@ pub async fn place_hold(pool: &PgPool, pen: &ForSale, visitor_key: &str, shippin
     .bind(&pen.title)
     .bind(&pen.sku)
     .bind(pen.amount_cents)
-    .bind(shipping_cents)
+    .bind(region.key())
+    .bind(serde_json::to_value(&offered)?)
     .bind(visitor_key)
     .bind(hold_until as f64)
     .fetch_optional(&mut *tx)
@@ -162,9 +166,26 @@ pub struct OrderRow {
     pub paid_at: Option<chrono::DateTime<chrono::Utc>>,
     /// The listing's description as it read when the buyer paid (copied in at that moment).
     pub product_description: String,
+    /// "us" or "intl": where the buyer said it ships, before Checkout opened.
+    pub ship_region: String,
+    /// The shipping options the session offered.
+    pub shipping_offered: Vec<ShippingOption>,
+    /// The one Stripe charged for, by name (empty until paid, or when nothing matched).
+    pub shipping_option: String,
 }
 
-const ORDER_COLS: &str = "id, product_id, product_slug, product_title, product_sku, amount_cents, shipping_cents, amount_total_cents, status, COALESCE(stripe_session_id, '') AS stripe_session_id, stripe_payment_intent, buyer_email, buyer_name, shipping_address, note, created_at, paid_at, product_description";
+impl OrderRow {
+    /// "USPS Insured Priority, $15.00" / "$15.00" / "" (no shipping charged).
+    pub fn shipping_label(&self) -> String {
+        if self.shipping_cents <= 0 && self.shipping_option.is_empty() {
+            return String::new();
+        }
+        let amount = crate::money::fmt_cents(self.shipping_cents);
+        if self.shipping_option.is_empty() { amount } else { format!("{}, {amount}", self.shipping_option) }
+    }
+}
+
+const ORDER_COLS: &str = "id, product_id, product_slug, product_title, product_sku, amount_cents, shipping_cents, amount_total_cents, status, COALESCE(stripe_session_id, '') AS stripe_session_id, stripe_payment_intent, buyer_email, buyer_name, shipping_address, note, created_at, paid_at, product_description, ship_region, shipping_offered, shipping_option";
 
 fn order_from(r: &sqlx::postgres::PgRow) -> OrderRow {
     OrderRow {
@@ -186,6 +207,9 @@ fn order_from(r: &sqlx::postgres::PgRow) -> OrderRow {
         created_at: r.get("created_at"),
         paid_at: r.get("paid_at"),
         product_description: r.get("product_description"),
+        ship_region: r.get("ship_region"),
+        shipping_offered: serde_json::from_value(r.get("shipping_offered")).unwrap_or_default(),
+        shipping_option: r.get("shipping_option"),
     }
 }
 
@@ -230,14 +254,17 @@ async fn reload(tx: &mut Transaction<'_, Postgres>, id: i32) -> anyhow::Result<O
     Ok(order_from(&r))
 }
 
-/// Store what Stripe collected (e-mail, name, address, totals) on the order.
-async fn store_buyer(tx: &mut Transaction<'_, Postgres>, id: i32, s: &Session) -> anyhow::Result<()> {
+/// Store what Stripe collected (e-mail, name, address, totals, the shipping charged) on the order.
+async fn store_buyer(tx: &mut Transaction<'_, Postgres>, order: &OrderRow, s: &Session) -> anyhow::Result<()> {
+    let option = s.shipping_rate_amount().map(|c| crate::shipping::chosen_name(&order.shipping_offered, c)).unwrap_or_default();
     sqlx::query(
         "UPDATE shop_order SET stripe_session_id = $2, buyer_email = $3, buyer_name = $4, shipping_address = COALESCE($5, shipping_address),
                 amount_total_cents = COALESCE($6, amount_total_cents), currency = COALESCE($7, currency),
-                stripe_payment_intent = CASE WHEN $8 = '' THEN stripe_payment_intent ELSE $8 END, updated_at = now() WHERE id = $1",
+                stripe_payment_intent = CASE WHEN $8 = '' THEN stripe_payment_intent ELSE $8 END,
+                shipping_cents = COALESCE($9, shipping_cents), shipping_option = CASE WHEN $10 = '' THEN shipping_option ELSE $10 END,
+                stripe_shipping_rate = CASE WHEN $11 = '' THEN stripe_shipping_rate ELSE $11 END, updated_at = now() WHERE id = $1",
     )
-    .bind(id)
+    .bind(order.id)
     .bind(&s.id)
     .bind(s.email())
     .bind(s.buyer_name())
@@ -245,9 +272,29 @@ async fn store_buyer(tx: &mut Transaction<'_, Postgres>, id: i32, s: &Session) -
     .bind(s.amount_total)
     .bind(s.currency.as_deref())
     .bind(s.payment_intent_id())
+    .bind(s.shipping_charged())
+    .bind(option)
+    .bind(s.shipping_rate_id())
     .execute(&mut **tx)
     .await?;
     Ok(())
+}
+
+/// A note when what Stripe charged is not the pen's price plus one of the shipping options offered
+/// (the pen still sells; he sees the note on the order). Empty when it adds up.
+pub fn amount_check(order: &OrderRow, s: &Session) -> String {
+    let Some(total) = s.amount_total else { return String::new() };
+    let shipping = s.shipping_charged().unwrap_or(0);
+    let rate = s.shipping_rate_amount().unwrap_or(shipping);
+    let offered_ok = if order.shipping_offered.is_empty() { rate == 0 } else { order.shipping_offered.iter().any(|o| o.cents == rate) };
+    let mut note = String::new();
+    if total != order.amount_cents + shipping {
+        note.push_str(&format!("Stripe charged {total} cents; the pen is {} and shipping {shipping}. ", order.amount_cents));
+    }
+    if !offered_ok {
+        note.push_str(&format!("Shipping of {rate} cents was not one of the options offered. "));
+    }
+    note
 }
 
 /// The money arrived: mark the pen sold to this order, unless it is already sold or held by someone
@@ -255,10 +302,7 @@ async fn store_buyer(tx: &mut Transaction<'_, Postgres>, id: i32, s: &Session) -
 async fn settle(tx: &mut Transaction<'_, Postgres>, order: &OrderRow, s: &Session) -> anyhow::Result<Outcome> {
     let product: Option<String> = sqlx::query_scalar("SELECT status FROM product WHERE id = $1 FOR UPDATE").bind(order.product_id).fetch_optional(&mut **tx).await?;
     let other_hold: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM shop_order WHERE product_id = $1 AND id <> $2 AND (status = 'paid' OR status = 'processing' OR (status = 'open' AND expires_at > now())))").bind(order.product_id).bind(order.id).fetch_one(&mut **tx).await?;
-    let mismatch = match s.amount_total {
-        Some(t) if t != order.amount_cents + order.shipping_cents => format!("Stripe charged {t} cents; the order expected {}. ", order.amount_cents + order.shipping_cents),
-        _ => String::new(),
-    };
+    let mismatch = amount_check(order, s);
     if product.as_deref() != Some("live") || other_hold {
         let why = match product.as_deref() {
             None => "the pen is no longer in the catalog",
@@ -280,7 +324,7 @@ pub async fn on_completed(tx: &mut Transaction<'_, Postgres>, s: &Session) -> an
     if matches!(order.status.as_str(), "paid" | "refunded") {
         return Ok(Outcome::Ignored("order already settled"));
     }
-    store_buyer(tx, order.id, s).await?;
+    store_buyer(tx, &order, s).await?;
     if s.paid() {
         return settle(tx, &order, s).await;
     }
@@ -299,7 +343,7 @@ pub async fn on_async_succeeded(tx: &mut Transaction<'_, Postgres>, s: &Session)
     if matches!(order.status.as_str(), "paid" | "refunded") {
         return Ok(Outcome::Ignored("order already settled"));
     }
-    store_buyer(tx, order.id, s).await?;
+    store_buyer(tx, &order, s).await?;
     settle(tx, &order, s).await
 }
 
@@ -366,19 +410,19 @@ mod tests {
     async fn one_buyer_holds_a_pen_at_a_time() {
         let Some(pool) = pool().await else { eprintln!("skipped: TEST_DATABASE_URL not set"); return };
         let p = pen(&pool, "hold", 10000, None).await;
-        let Hold::Placed(id) = place_hold(&pool, &p, "visitor-a", 0, later(36)).await.unwrap() else { panic!("first buyer should get the hold") };
+        let Hold::Placed(id) = place_hold(&pool, &p, "visitor-a", Region::Us, &[], later(36)).await.unwrap() else { panic!("first buyer should get the hold") };
         attach_session(&pool, id, &format!("cs_test_hold{id}"), "https://checkout.stripe.com/c/pay/x").await.unwrap();
-        assert_eq!(place_hold(&pool, &p, "visitor-b", 0, later(36)).await.unwrap(), Hold::Taken);
-        assert_eq!(place_hold(&pool, &p, "visitor-a", 0, later(36)).await.unwrap(), Hold::Yours { order_id: id, url: "https://checkout.stripe.com/c/pay/x".into() });
+        assert_eq!(place_hold(&pool, &p, "visitor-b", Region::Us, &[], later(36)).await.unwrap(), Hold::Taken);
+        assert_eq!(place_hold(&pool, &p, "visitor-a", Region::Us, &[], later(36)).await.unwrap(), Hold::Yours { order_id: id, url: "https://checkout.stripe.com/c/pay/x".into(), region: "us".into() });
         let h = current_hold(&pool, p.id, "visitor-b").await.unwrap().unwrap();
         assert!(!h.mine && h.minutes_left > 30);
         // A hold past its time lets the next buyer in.
         sqlx::query("UPDATE shop_order SET expires_at = now() - interval '1 minute' WHERE id = $1").bind(id).execute(&pool).await.unwrap();
         assert!(current_hold(&pool, p.id, "visitor-b").await.unwrap().is_none());
-        assert!(matches!(place_hold(&pool, &p, "visitor-b", 0, later(36)).await.unwrap(), Hold::Placed(_)));
+        assert!(matches!(place_hold(&pool, &p, "visitor-b", Region::Us, &[], later(36)).await.unwrap(), Hold::Placed(_)));
         // Letting go frees it.
         assert!(release(&pool, p.id, "visitor-b").await.unwrap().is_none());
-        assert!(matches!(place_hold(&pool, &p, "visitor-c", 0, later(36)).await.unwrap(), Hold::Placed(_)));
+        assert!(matches!(place_hold(&pool, &p, "visitor-c", Region::Us, &[], later(36)).await.unwrap(), Hold::Placed(_)));
         cleanup(&pool, &p).await;
     }
 
@@ -386,7 +430,7 @@ mod tests {
     async fn racing_buyers_get_one_hold() {
         let Some(pool) = pool().await else { eprintln!("skipped: TEST_DATABASE_URL not set"); return };
         let p = pen(&pool, "race", 10000, None).await;
-        let tasks: Vec<_> = (0..8).map(|i| { let (pool, p) = (pool.clone(), p.clone()); tokio::spawn(async move { place_hold(&pool, &p, &format!("v{i}"), 0, later(36)).await.unwrap() }) }).collect();
+        let tasks: Vec<_> = (0..8).map(|i| { let (pool, p) = (pool.clone(), p.clone()); tokio::spawn(async move { place_hold(&pool, &p, &format!("v{i}"), Region::Us, &[], later(36)).await.unwrap() }) }).collect();
         let mut placed = 0;
         for t in tasks {
             if matches!(t.await.unwrap(), Hold::Placed(_)) {
@@ -397,14 +441,20 @@ mod tests {
         cleanup(&pool, &p).await;
     }
 
+    fn with_shipping(id: &str, order_id: i32, product_id: i32, total: i64, shipping: i64) -> Session {
+        Session::from_value(&serde_json::json!({"id": id, "payment_status": "paid", "amount_total": total, "currency": "usd", "payment_intent": format!("pi_{id}"),
+            "shipping_cost": {"amount_subtotal": shipping, "amount_total": shipping, "shipping_rate": "shr_test"}, "total_details": {"amount_shipping": shipping},
+            "metadata": {"order_id": order_id.to_string(), "product_id": product_id.to_string()}, "customer_details": {"email": "buyer@example.com", "name": "B"}})).unwrap()
+    }
+
     #[tokio::test]
     async fn paid_session_sells_the_pen_once() {
         let Some(pool) = pool().await else { eprintln!("skipped: TEST_DATABASE_URL not set"); return };
         let p = pen(&pool, "sell", 10000, None).await;
-        let Hold::Placed(id) = place_hold(&pool, &p, "va", 900, later(36)).await.unwrap() else { panic!() };
+        let Hold::Placed(id) = place_hold(&pool, &p, "va", Region::Us, &crate::shipping::default_list(), later(36)).await.unwrap() else { panic!() };
         let sid = format!("cs_test_sell{id}");
         attach_session(&pool, id, &sid, "u").await.unwrap();
-        let s = session(&sid, id, p.id, true, 10900);
+        let s = with_shipping(&sid, id, p.id, 11500, 1500);
         let evt = format!("evt_test_sell{id}");
 
         let mut tx = pool.begin().await.unwrap();
@@ -412,7 +462,10 @@ mod tests {
         let out = on_completed(&mut tx, &s).await.unwrap();
         tx.commit().await.unwrap();
         let Outcome::Sold(o) = out else { panic!("expected Sold, got {out:?}") };
-        assert_eq!((o.status.as_str(), o.buyer_email.as_str(), o.amount_total_cents, o.note.as_str()), ("paid", "buyer@example.com", Some(10900), ""));
+        assert_eq!((o.status.as_str(), o.buyer_email.as_str(), o.amount_total_cents, o.note.as_str()), ("paid", "buyer@example.com", Some(11500), ""));
+        assert_eq!((o.shipping_cents, o.shipping_option.as_str(), o.ship_region.as_str()), (1500, "USPS Insured Priority", "us"));
+        assert_eq!(o.shipping_offered.len(), 2, "only the US options were offered");
+        assert_eq!(o.shipping_label(), "USPS Insured Priority, $15.00");
         assert_eq!(for_sale(&pool, &p.slug).await.unwrap().unwrap().status, "sold");
 
         // Stripe delivers the same event again: recorded once, nothing happens.
@@ -428,10 +481,55 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn settle_checks_price_plus_the_shipping_stripe_reports() {
+        let Some(pool) = pool().await else { eprintln!("skipped: TEST_DATABASE_URL not set"); return };
+        // Abroad: the one international rate, and every US-only total would be wrong.
+        let p = pen(&pool, "intl", 20000, None).await;
+        let Hold::Placed(id) = place_hold(&pool, &p, "va", Region::Intl, &crate::shipping::default_list(), later(36)).await.unwrap() else { panic!() };
+        let sid = format!("cs_test_intl{id}");
+        attach_session(&pool, id, &sid, "u").await.unwrap();
+        let mut tx = pool.begin().await.unwrap();
+        let out = on_completed(&mut tx, &with_shipping(&sid, id, p.id, 25500, 5500)).await.unwrap();
+        tx.commit().await.unwrap();
+        let Outcome::Sold(o) = out else { panic!("expected Sold, got {out:?}") };
+        assert_eq!((o.note.as_str(), o.shipping_cents, o.shipping_option.as_str(), o.ship_region.as_str()), ("", 5500, "International Insured Priority", "intl"));
+        cleanup(&pool, &p).await;
+
+        // A charge that does not add up still sells (the money is in), with a note for him.
+        let p = pen(&pool, "odd", 20000, None).await;
+        let Hold::Placed(id) = place_hold(&pool, &p, "va", Region::Us, &crate::shipping::default_list(), later(36)).await.unwrap() else { panic!() };
+        let sid = format!("cs_test_odd{id}");
+        attach_session(&pool, id, &sid, "u").await.unwrap();
+        let mut tx = pool.begin().await.unwrap();
+        let out = on_completed(&mut tx, &with_shipping(&sid, id, p.id, 20700, 700)).await.unwrap();
+        tx.commit().await.unwrap();
+        let Outcome::Sold(o) = out else { panic!("expected Sold, got {out:?}") };
+        assert!(o.note.contains("not one of the options offered"), "{}", o.note);
+        assert!(!o.note.contains("Stripe charged"), "price + reported shipping adds up: {}", o.note);
+        cleanup(&pool, &p).await;
+    }
+
+    #[test]
+    fn amount_check_without_a_database() {
+        let order = OrderRow {
+            id: 1, product_id: 1, product_slug: String::new(), product_title: String::new(), product_sku: String::new(), amount_cents: 10000, shipping_cents: 0, amount_total_cents: None,
+            status: "open".into(), stripe_session_id: String::new(), stripe_payment_intent: String::new(), buyer_email: String::new(), buyer_name: String::new(), shipping_address: None,
+            note: String::new(), created_at: chrono::Utc::now(), paid_at: None, product_description: String::new(), ship_region: "us".into(),
+            shipping_offered: crate::shipping::for_region(&crate::shipping::default_list(), Region::Us), shipping_option: String::new(),
+        };
+        assert_eq!(amount_check(&order, &with_shipping("cs_test_a", 1, 1, 10600, 600)), "");
+        assert_eq!(amount_check(&order, &with_shipping("cs_test_b", 1, 1, 11500, 1500)), "");
+        assert!(amount_check(&order, &with_shipping("cs_test_c", 1, 1, 10000, 600)).contains("Stripe charged 10000"));
+        assert!(amount_check(&order, &with_shipping("cs_test_d", 1, 1, 15500, 5500)).contains("not one of the options"));
+        let none = OrderRow { shipping_offered: vec![], ..order };
+        assert_eq!(amount_check(&none, &session("cs_test_e", 1, 1, true, 10000)), "", "no options offered, no shipping charged");
+    }
+
+    #[tokio::test]
     async fn payment_for_a_pen_already_sold_is_refunded() {
         let Some(pool) = pool().await else { eprintln!("skipped: TEST_DATABASE_URL not set"); return };
         let p = pen(&pool, "gone", 10000, None).await;
-        let Hold::Placed(id) = place_hold(&pool, &p, "va", 0, later(36)).await.unwrap() else { panic!() };
+        let Hold::Placed(id) = place_hold(&pool, &p, "va", Region::Us, &[], later(36)).await.unwrap() else { panic!() };
         let sid = format!("cs_test_gone{id}");
         attach_session(&pool, id, &sid, "u").await.unwrap();
         // He sold it by phone in the meantime.
@@ -449,7 +547,7 @@ mod tests {
     async fn bank_payment_holds_until_it_clears_or_fails() {
         let Some(pool) = pool().await else { eprintln!("skipped: TEST_DATABASE_URL not set"); return };
         let p = pen(&pool, "bank", 10000, None).await;
-        let Hold::Placed(id) = place_hold(&pool, &p, "va", 0, later(36)).await.unwrap() else { panic!() };
+        let Hold::Placed(id) = place_hold(&pool, &p, "va", Region::Us, &[], later(36)).await.unwrap() else { panic!() };
         let sid = format!("cs_test_bank{id}");
         attach_session(&pool, id, &sid, "u").await.unwrap();
         let mut tx = pool.begin().await.unwrap();
@@ -457,11 +555,11 @@ mod tests {
         tx.commit().await.unwrap();
         // Still held even after the card window would have closed.
         sqlx::query("UPDATE shop_order SET expires_at = now() - interval '1 hour' WHERE id = $1").bind(id).execute(&pool).await.unwrap();
-        assert_eq!(place_hold(&pool, &p, "vb", 0, later(36)).await.unwrap(), Hold::Taken);
+        assert_eq!(place_hold(&pool, &p, "vb", Region::Us, &[], later(36)).await.unwrap(), Hold::Taken);
         let mut tx = pool.begin().await.unwrap();
         assert!(matches!(on_async_failed(&mut tx, &session(&sid, id, p.id, false, 10000)).await.unwrap(), Outcome::Released));
         tx.commit().await.unwrap();
-        assert!(matches!(place_hold(&pool, &p, "vb", 0, later(36)).await.unwrap(), Hold::Placed(_)));
+        assert!(matches!(place_hold(&pool, &p, "vb", Region::Us, &[], later(36)).await.unwrap(), Hold::Placed(_)));
         cleanup(&pool, &p).await;
     }
 }

@@ -18,6 +18,7 @@
   {% for r in rows %}
   <article class="adm-card adm-msg{% if r.handled %} is-done{% endif %}">
     <header><b>{{ r.kind_label }}</b> <span class="muted">#{{ r.id }} · {{ r.when }}</span>{% if r.mailed %} <span class="adm-chip">E-mailed to you</span>{% endif %}{% if r.handled %} <span class="adm-chip">Done</span>{% endif %}</header>
+    {% if !r.listing_status.is_empty() %}<p class="adm-hint">{{ r.listing_status }}{% if !r.listing_url.is_empty() %}: <a href="{{ r.listing_url }}">see the listing</a>{% endif %}.</p>{% endif %}
     <dl>{% for f in r.fields %}<div><dt>{{ f.0 }}</dt><dd>{{ f.1 }}</dd></div>{% endfor %}</dl>
     {% if !r.photo.is_empty() %}<a class="adm-msg-photo" href="/admin/inbox/photo/{{ r.photo }}" target="_blank" rel="noopener"><img src="/admin/inbox/photo/{{ r.photo }}" alt="Photo the visitor attached" loading="lazy"></a>{% endif %}
     <footer>

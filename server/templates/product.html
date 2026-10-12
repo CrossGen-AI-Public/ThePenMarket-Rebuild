@@ -52,10 +52,27 @@
     {% else %}
     <form class="buy-form" method="post" action="/checkout/{{ p.slug }}/">
       <input type="hidden" name="csrf" value="{{ page.csrf }}">
+      {% if !ship_intl.is_empty() %}
+      <fieldset class="buy-ship">
+        <legend>Where does it ship?</legend>
+        <label><input type="radio" name="ship" value="us" checked> In the US</label>
+        <label><input type="radio" name="ship" value="intl"> Outside the US</label>
+      </fieldset>
+      {% else %}<input type="hidden" name="ship" value="us">{% endif %}
       <button type="submit" class="btn btn-navy btn-wide">Buy this pen</button>
     </form>
-    <p class="buy-note muted">{% if !shipping_line.is_empty() %}{{ shipping_line }} {% endif %}Payment is handled by Stripe on its own secure page.</p>
+    <div class="buy-note muted">
+      {% if !ship_us.is_empty() %}<p>Shipping in the US: {{ ship_us }}.</p>{% endif %}
+      {% if !ship_intl.is_empty() %}<p>Outside the US: {{ ship_intl }}.</p>{% endif %}
+      <p>{% if !ship_us.is_empty() || !ship_intl.is_empty() %}You choose on the next page. {% endif %}Payment is handled by Stripe on its own secure page.</p>
+    </div>
     {% endif %}
+    {% else if membership_on %}
+    <form class="buy-form" method="post" action="/trading-post/membership/">
+      <input type="hidden" name="csrf" value="{{ page.csrf }}">
+      <button type="submit" class="btn btn-navy btn-wide">Start membership</button>
+    </form>
+    <div class="buy-note muted"><p>Renews every year until cancelled. Use the same e-mail address when you post a listing. Payment is handled by Stripe on its own secure page.</p></div>
     {% else if !p.sold %}
     <details class="demo-buy">
       <summary class="btn btn-navy btn-wide">{% if is_membership %}Start membership{% else %}Buy this pen{% endif %} <span class="demo-tag">Demo — checkout not connected</span></summary>

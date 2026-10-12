@@ -6,6 +6,7 @@
 use hmac::{Hmac, Mac};
 use serde::Deserialize;
 use sha2::Sha256;
+use crate::shipping::{Region, ShippingOption};
 
 pub const API: &str = "https://api.stripe.com/v1";
 /// How old a signed webhook may be. Stripe's own libraries use five minutes.
@@ -98,8 +99,9 @@ pub struct CheckoutItem {
     pub image_url: String,
 }
 
-/// The form body for `POST /v1/checkout/sessions`.
-pub fn checkout_form(item: &CheckoutItem, origin: &str, expires_at: i64, shipping_cents: Option<i64>) -> Vec<(String, String)> {
+/// The form body for `POST /v1/checkout/sessions` for one pen shipping to `region`, offering the
+/// shipping `options` for that place (his list, already filtered; at most five reach Stripe).
+pub fn checkout_form(item: &CheckoutItem, origin: &str, expires_at: i64, region: Region, options: &[ShippingOption]) -> Vec<(String, String)> {
     let mut f: Vec<(String, String)> = vec![];
     let mut add = |k: &str, v: String| f.push((k.to_string(), v));
     add("mode", "payment".into());
@@ -120,17 +122,71 @@ pub fn checkout_form(item: &CheckoutItem, origin: &str, expires_at: i64, shippin
         if !item.sku.is_empty() {
             add(&format!("{prefix}[sku]"), item.sku.clone());
         }
+        add(&format!("{prefix}[ship_to]"), region.key().into());
     }
     add("success_url", format!("{origin}/checkout/thanks/?session_id={{CHECKOUT_SESSION_ID}}"));
     add("cancel_url", format!("{origin}/product/{}/", item.slug));
     add("expires_at", expires_at.to_string());
-    add("shipping_address_collection[allowed_countries][0]", "US".into());
-    if let Some(c) = shipping_cents.filter(|c| *c > 0) {
-        add("shipping_options[0][shipping_rate_data][type]", "fixed_amount".into());
-        add("shipping_options[0][shipping_rate_data][display_name]", "Shipping".into());
-        add("shipping_options[0][shipping_rate_data][fixed_amount][amount]", c.to_string());
-        add("shipping_options[0][shipping_rate_data][fixed_amount][currency]", "usd".into());
+    for (i, c) in crate::shipping::allowed_countries(region).iter().enumerate() {
+        add(&format!("shipping_address_collection[allowed_countries][{i}]"), (*c).to_string());
     }
+    for (i, o) in options.iter().filter(|o| o.region == region).take(crate::shipping::MAX_PER_REGION).enumerate() {
+        let p = format!("shipping_options[{i}][shipping_rate_data]");
+        add(&format!("{p}[type]"), "fixed_amount".into());
+        add(&format!("{p}[display_name]"), o.name.chars().take(crate::shipping::MAX_NAME_CHARS).collect());
+        add(&format!("{p}[fixed_amount][amount]"), o.cents.max(0).to_string());
+        add(&format!("{p}[fixed_amount][currency]"), "usd".into());
+    }
+    f
+}
+
+/// What a Trading Post checkout is for, carried in the session's `metadata[kind]` so the webhook can
+/// tell it from a pen (pens carry no kind).
+pub const KIND_LISTING: &str = "tp_listing";
+pub const KIND_MEMBERSHIP: &str = "unlimited_posts";
+
+/// The form for the $5 Trading Post listing fee. `email` is the address the poster typed (prefilled
+/// at Stripe so the receipt reaches them).
+pub fn listing_form(listing_id: i32, item: &str, email: &str, fee_cents: i64, origin: &str) -> Vec<(String, String)> {
+    let mut f: Vec<(String, String)> = vec![];
+    let mut add = |k: &str, v: String| f.push((k.to_string(), v));
+    add("mode", "payment".into());
+    add("line_items[0][quantity]", "1".into());
+    add("line_items[0][price_data][currency]", "usd".into());
+    add("line_items[0][price_data][unit_amount]", fee_cents.to_string());
+    add("line_items[0][price_data][product_data][name]", "Trading Post listing".into());
+    let item: String = item.replace(['\r', '\n'], " ").chars().take(200).collect();
+    if !item.trim().is_empty() {
+        add("line_items[0][price_data][product_data][description]", item.trim().to_string());
+    }
+    add("client_reference_id", format!("tp-{listing_id}"));
+    for prefix in ["metadata", "payment_intent_data[metadata]"] {
+        add(&format!("{prefix}[kind]"), KIND_LISTING.into());
+        add(&format!("{prefix}[listing_id]"), listing_id.to_string());
+    }
+    if email.contains('@') && email.len() <= 254 {
+        add("customer_email", email.to_string());
+    }
+    add("success_url", format!("{origin}/trading-post/thanks/?session_id={{CHECKOUT_SESSION_ID}}"));
+    add("cancel_url", format!("{origin}/post-your-product/"));
+    f
+}
+
+/// The form for the Unlimited Posts membership: a subscription renewed every year at `year_cents`.
+pub fn membership_form(year_cents: i64, origin: &str) -> Vec<(String, String)> {
+    let mut f: Vec<(String, String)> = vec![];
+    let mut add = |k: &str, v: String| f.push((k.to_string(), v));
+    add("mode", "subscription".into());
+    add("line_items[0][quantity]", "1".into());
+    add("line_items[0][price_data][currency]", "usd".into());
+    add("line_items[0][price_data][unit_amount]", year_cents.to_string());
+    add("line_items[0][price_data][product_data][name]", "Unlimited Posts".into());
+    add("line_items[0][price_data][recurring][interval]", "year".into());
+    add("line_items[0][price_data][recurring][interval_count]", "1".into());
+    add("metadata[kind]", KIND_MEMBERSHIP.into());
+    add("subscription_data[metadata][kind]", KIND_MEMBERSHIP.into());
+    add("success_url", format!("{origin}/trading-post/thanks/?session_id={{CHECKOUT_SESSION_ID}}"));
+    add("cancel_url", format!("{origin}/product/unlimited-posts/"));
     f
 }
 
@@ -213,6 +269,43 @@ pub struct Session {
     /// Where later API versions put it.
     #[serde(default)]
     pub collected_information: Option<Collected>,
+    /// The shipping the buyer chose and was charged (`amount_total`, and the `shipping_rate` id).
+    #[serde(default)]
+    pub shipping_cost: Option<ShippingCost>,
+    #[serde(default)]
+    pub total_details: Option<TotalDetails>,
+    #[serde(default)]
+    pub mode: Option<String>,
+    /// Subscription mode: the subscription and customer Checkout created.
+    #[serde(default)]
+    pub subscription: Option<serde_json::Value>,
+    #[serde(default)]
+    pub customer: Option<serde_json::Value>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct ShippingCost {
+    #[serde(default)]
+    pub amount_subtotal: Option<i64>,
+    #[serde(default)]
+    pub amount_total: Option<i64>,
+    #[serde(default)]
+    pub shipping_rate: Option<serde_json::Value>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct TotalDetails {
+    #[serde(default)]
+    pub amount_shipping: Option<i64>,
+}
+
+/// An id field that Stripe may also send expanded into an object.
+fn id_of(v: &Option<serde_json::Value>) -> String {
+    match v {
+        Some(serde_json::Value::String(s)) => s.clone(),
+        Some(serde_json::Value::Object(o)) => o.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+        _ => String::new(),
+    }
 }
 
 impl Session {
@@ -230,11 +323,32 @@ impl Session {
     }
     /// `payment_intent` is an id, or an object when expanded.
     pub fn payment_intent_id(&self) -> String {
-        match &self.payment_intent {
-            Some(serde_json::Value::String(s)) => s.clone(),
-            Some(serde_json::Value::Object(o)) => o.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-            _ => String::new(),
-        }
+        id_of(&self.payment_intent)
+    }
+    pub fn subscription_id(&self) -> String {
+        id_of(&self.subscription)
+    }
+    pub fn customer_id(&self) -> String {
+        id_of(&self.customer)
+    }
+    /// `metadata[kind]`: a Trading Post fee or membership; empty for a pen.
+    pub fn kind(&self) -> &str {
+        self.metadata.get("kind").map(String::as_str).unwrap_or("")
+    }
+    pub fn listing_id(&self) -> Option<i32> {
+        self.metadata.get("listing_id").and_then(|v| v.parse().ok())
+    }
+    /// What Stripe charged for shipping: `shipping_cost.amount_total`, else
+    /// `total_details.amount_shipping`; None when the session reports neither.
+    pub fn shipping_charged(&self) -> Option<i64> {
+        self.shipping_cost.as_ref().and_then(|c| c.amount_total).or_else(|| self.total_details.as_ref().and_then(|t| t.amount_shipping))
+    }
+    /// The shipping rate's own price before any tax, to match against the options offered.
+    pub fn shipping_rate_amount(&self) -> Option<i64> {
+        self.shipping_cost.as_ref().and_then(|c| c.amount_subtotal.or(c.amount_total)).or_else(|| self.total_details.as_ref().and_then(|t| t.amount_shipping))
+    }
+    pub fn shipping_rate_id(&self) -> String {
+        self.shipping_cost.as_ref().map(|c| id_of(&c.shipping_rate)).unwrap_or_default()
     }
     pub fn email(&self) -> String {
         self.customer_details.as_ref().and_then(|c| c.email.clone()).unwrap_or_default()
@@ -257,6 +371,52 @@ impl Session {
             "postal_code": a.postal_code.unwrap_or_default(),
             "country": a.country.unwrap_or_default(),
         }))
+    }
+}
+
+/// The parts of an Invoice (`invoice.paid`) that keep a membership's paid-through date. API versions
+/// from 2025-03-31 put the subscription under `parent.subscription_details`; older ones at the top.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct InvoicePaid {
+    pub subscription: String,
+    /// `metadata[kind]` copied from the subscription (set through `subscription_data[metadata]`).
+    pub kind: String,
+    pub email: String,
+    pub customer: String,
+    /// The end of the period this invoice paid for: the latest `lines.data[].period.end`.
+    pub period_end: Option<i64>,
+}
+
+fn str_or_id(v: Option<&serde_json::Value>) -> String {
+    id_of(&v.cloned())
+}
+
+pub fn invoice_paid(v: &serde_json::Value) -> InvoicePaid {
+    let sub = v.pointer("/parent/subscription_details/subscription").or_else(|| v.get("subscription"));
+    let kind = v.pointer("/parent/subscription_details/metadata/kind").or_else(|| v.pointer("/subscription_details/metadata/kind")).and_then(|k| k.as_str()).unwrap_or("");
+    let period_end = v.pointer("/lines/data").and_then(|d| d.as_array()).and_then(|lines| lines.iter().filter_map(|l| l.pointer("/period/end").and_then(|e| e.as_i64())).max());
+    InvoicePaid {
+        subscription: str_or_id(sub),
+        kind: kind.to_string(),
+        email: v.get("customer_email").and_then(|e| e.as_str()).unwrap_or("").to_string(),
+        customer: str_or_id(v.get("customer")),
+        period_end,
+    }
+}
+
+/// `customer.subscription.deleted`: which subscription ended, and when.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct SubscriptionEnded {
+    pub subscription: String,
+    pub kind: String,
+    pub ended_at: Option<i64>,
+}
+
+pub fn subscription_ended(v: &serde_json::Value) -> SubscriptionEnded {
+    SubscriptionEnded {
+        subscription: v.get("id").and_then(|i| i.as_str()).unwrap_or("").to_string(),
+        kind: v.pointer("/metadata/kind").and_then(|k| k.as_str()).unwrap_or("").to_string(),
+        ended_at: v.get("ended_at").and_then(|e| e.as_i64()).or_else(|| v.get("canceled_at").and_then(|e| e.as_i64())),
     }
 }
 
@@ -370,31 +530,103 @@ mod tests {
         f.iter().find(|(key, _)| key == k).map(|(_, v)| v.as_str())
     }
 
+    fn all<'a>(f: &'a [(String, String)], prefix: &str) -> Vec<&'a str> {
+        f.iter().filter(|(k, _)| k.starts_with(prefix)).map(|(_, v)| v.as_str()).collect()
+    }
+
     #[test]
     fn checkout_form_carries_the_database_price_and_ids() {
-        let f = checkout_form(&item(), "https://penmarket.example", 1_700_001_860, None);
+        let f = checkout_form(&item(), "https://penmarket.example", 1_700_001_860, Region::Us, &crate::shipping::default_list());
         assert_eq!(get(&f, "mode"), Some("payment"));
         assert_eq!(get(&f, "line_items[0][price_data][unit_amount]"), Some("18999"));
         assert_eq!(get(&f, "line_items[0][price_data][product_data][name]"), Some("Vintage Pens: Parker Vacumatic"));
         assert_eq!(get(&f, "client_reference_id"), Some("7"));
         assert_eq!(get(&f, "metadata[order_id]"), Some("42"));
+        assert_eq!(get(&f, "metadata[ship_to]"), Some("us"));
         assert_eq!(get(&f, "payment_intent_data[metadata][product_id]"), Some("7"));
         assert_eq!(get(&f, "success_url"), Some("https://penmarket.example/checkout/thanks/?session_id={CHECKOUT_SESSION_ID}"));
         assert_eq!(get(&f, "cancel_url"), Some("https://penmarket.example/product/parker-vacumatic/"));
-        assert_eq!(get(&f, "shipping_address_collection[allowed_countries][0]"), Some("US"));
         assert_eq!(get(&f, "line_items[0][price_data][product_data][images][0]"), Some("https://example.com/a.jpg"));
-        assert!(get(&f, "shipping_options[0][shipping_rate_data][type]").is_none(), "no shipping line until he sets one");
     }
 
     #[test]
-    fn checkout_form_adds_his_flat_shipping_and_skips_http_images() {
+    fn us_buyers_get_the_us_rates_and_us_addresses_only() {
+        let f = checkout_form(&item(), "https://x", 1, Region::Us, &crate::shipping::default_list());
+        assert_eq!(all(&f, "shipping_address_collection[allowed_countries]"), vec!["US"]);
+        assert_eq!(get(&f, "shipping_address_collection[allowed_countries][0]"), Some("US"));
+        assert_eq!(all(&f, "shipping_options["), vec!["fixed_amount", "Uninsured USPS Ground Advantage", "600", "usd", "fixed_amount", "USPS Insured Priority", "1500", "usd"]);
+        assert_eq!(get(&f, "shipping_options[1][shipping_rate_data][display_name]"), Some("USPS Insured Priority"));
+        assert_eq!(get(&f, "shipping_options[1][shipping_rate_data][fixed_amount][amount]"), Some("1500"));
+        assert_eq!(get(&f, "shipping_options[1][shipping_rate_data][fixed_amount][currency]"), Some("usd"));
+        assert!(get(&f, "shipping_options[2][shipping_rate_data][type]").is_none());
+    }
+
+    #[test]
+    fn buyers_abroad_get_every_other_country_and_the_international_rate() {
+        let f = checkout_form(&item(), "https://x", 1, Region::Intl, &crate::shipping::default_list());
+        let countries = all(&f, "shipping_address_collection[allowed_countries]");
+        assert_eq!(countries.len(), crate::shipping::OUTSIDE_US.len());
+        assert!(!countries.contains(&"US") && countries.contains(&"CA") && countries.contains(&"GB"));
+        assert_eq!(get(&f, "shipping_address_collection[allowed_countries][235]"), Some("ZW"));
+        assert_eq!(get(&f, "shipping_options[0][shipping_rate_data][type]"), Some("fixed_amount"));
+        assert_eq!(get(&f, "shipping_options[0][shipping_rate_data][display_name]"), Some("International Insured Priority"));
+        assert_eq!(get(&f, "shipping_options[0][shipping_rate_data][fixed_amount][amount]"), Some("5500"));
+        assert!(get(&f, "shipping_options[1][shipping_rate_data][type]").is_none());
+        assert_eq!(get(&f, "metadata[ship_to]"), Some("intl"));
+    }
+
+    #[test]
+    fn at_most_five_options_and_none_when_his_list_is_empty() {
         let mut it = item();
         it.image_url = "http://127.0.0.1:8140/media/a.jpg".into();
-        let f = checkout_form(&it, "http://127.0.0.1:8140", 1, Some(1200));
-        assert_eq!(get(&f, "shipping_options[0][shipping_rate_data][fixed_amount][amount]"), Some("1200"));
+        let many: Vec<ShippingOption> = (0..7).map(|i| ShippingOption { name: format!("R{i}"), cents: 100 * i, region: Region::Us }).collect();
+        let f = checkout_form(&it, "http://127.0.0.1:8140", 1, Region::Us, &many);
+        assert!(get(&f, "shipping_options[4][shipping_rate_data][type]").is_some());
+        assert!(get(&f, "shipping_options[5][shipping_rate_data][type]").is_none());
         assert!(get(&f, "line_items[0][price_data][product_data][images][0]").is_none());
-        let f = checkout_form(&it, "http://127.0.0.1:8140", 1, Some(0));
+        let f = checkout_form(&it, "http://127.0.0.1:8140", 1, Region::Us, &[]);
         assert!(get(&f, "shipping_options[0][shipping_rate_data][type]").is_none());
+        assert_eq!(get(&f, "shipping_address_collection[allowed_countries][0]"), Some("US"));
+    }
+
+    #[test]
+    fn listing_and_membership_forms() {
+        let f = listing_form(12, "Pelikan M800\r\nBcc: x", "seller@example.com", 500, "https://x");
+        assert_eq!((get(&f, "mode"), get(&f, "line_items[0][price_data][unit_amount]"), get(&f, "metadata[kind]"), get(&f, "metadata[listing_id]")), (Some("payment"), Some("500"), Some("tp_listing"), Some("12")));
+        assert_eq!(get(&f, "line_items[0][price_data][product_data][description]"), Some("Pelikan M800  Bcc: x"));
+        assert_eq!(get(&f, "customer_email"), Some("seller@example.com"));
+        assert_eq!(get(&f, "payment_intent_data[metadata][kind]"), Some("tp_listing"));
+        assert_eq!(get(&f, "success_url"), Some("https://x/trading-post/thanks/?session_id={CHECKOUT_SESSION_ID}"));
+        assert!(all(&f, "shipping_").is_empty());
+        let m = membership_form(12500, "https://x");
+        assert_eq!(get(&m, "mode"), Some("subscription"));
+        assert_eq!(get(&m, "line_items[0][price_data][unit_amount]"), Some("12500"));
+        assert_eq!(get(&m, "line_items[0][price_data][recurring][interval]"), Some("year"));
+        assert_eq!(get(&m, "subscription_data[metadata][kind]"), Some("unlimited_posts"));
+        assert_eq!(get(&m, "metadata[kind]"), Some("unlimited_posts"));
+        assert!(get(&m, "payment_intent_data[metadata][kind]").is_none(), "not allowed in subscription mode");
+    }
+
+    #[test]
+    fn session_reports_the_shipping_charged() {
+        let s = Session::from_value(&serde_json::json!({"id": "cs_test_s", "amount_total": 20499, "shipping_cost": {"amount_subtotal": 1500, "amount_total": 1500, "shipping_rate": "shr_1"}, "total_details": {"amount_shipping": 1500}})).unwrap();
+        assert_eq!((s.shipping_charged(), s.shipping_rate_amount(), s.shipping_rate_id().as_str()), (Some(1500), Some(1500), "shr_1"));
+        let s = Session::from_value(&serde_json::json!({"id": "cs_test_t", "total_details": {"amount_shipping": 600}})).unwrap();
+        assert_eq!(s.shipping_charged(), Some(600));
+        let s = Session::from_value(&serde_json::json!({"id": "cs_test_u", "shipping_cost": null, "metadata": {"kind": "tp_listing", "listing_id": "4"}})).unwrap();
+        assert_eq!((s.shipping_charged(), s.kind(), s.listing_id()), (None, "tp_listing", Some(4)));
+    }
+
+    #[test]
+    fn invoice_and_subscription_shapes() {
+        let new = serde_json::json!({"customer_email": "m@example.com", "customer": "cus_1", "parent": {"subscription_details": {"subscription": "sub_1", "metadata": {"kind": "unlimited_posts"}}},
+            "lines": {"data": [{"period": {"start": 1, "end": 1_800_000_000}}, {"period": {"start": 1, "end": 1_700_000_000}}]}});
+        assert_eq!(invoice_paid(&new), InvoicePaid { subscription: "sub_1".into(), kind: "unlimited_posts".into(), email: "m@example.com".into(), customer: "cus_1".into(), period_end: Some(1_800_000_000) });
+        let old = serde_json::json!({"subscription": "sub_2", "subscription_details": {"metadata": {"kind": "unlimited_posts"}}, "lines": {"data": []}});
+        let i = invoice_paid(&old);
+        assert_eq!((i.subscription.as_str(), i.kind.as_str(), i.period_end), ("sub_2", "unlimited_posts", None));
+        let e = subscription_ended(&serde_json::json!({"id": "sub_1", "metadata": {"kind": "unlimited_posts"}, "ended_at": 1_750_000_000}));
+        assert_eq!(e, SubscriptionEnded { subscription: "sub_1".into(), kind: "unlimited_posts".into(), ended_at: Some(1_750_000_000) });
     }
 
     #[test]

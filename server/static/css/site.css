@@ -530,3 +530,7 @@ html.classic .hero-stage .hero-fallback{display:flex}
 .gl-pop p{color:var(--ink-2);margin-bottom:8px}
 .gl-pop a{color:var(--red);text-decoration:underline;text-underline-offset:3px}
 @media (max-width:600px){.gloss-search{flex-wrap:wrap}.gloss-search .btn{width:100%}}
+.buy-ship{border:0;margin:0 0 var(--s2);padding:0;display:flex;flex-wrap:wrap;gap:6px 18px;font-size:15px}
+.buy-ship legend{font-weight:600;margin-bottom:6px;padding:0}
+.buy-ship label{display:flex;gap:8px;align-items:center;cursor:pointer}
+.buy-note p{margin:0 0 4px}

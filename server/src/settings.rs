@@ -18,9 +18,11 @@ pub const SEARCH_SPELLINGS: &str = "search_spellings";
 /// What the homepage hero shows when no experiment decides: "3d" (the model) or "photo" (his real
 /// photograph of the featured pen).
 pub const HERO_MODE: &str = "hero_mode";
-/// Flat shipping charge on every pen bought online, in cents. No default: until he names one,
-/// checkout charges the pen's price only, and the admin says so.
-pub const SHIPPING_FLAT: &str = "shipping_flat_cents";
+/// His shipping rates for pens bought online (`shipping::ShippingOption` list). Absent = the three rates
+/// from his e-mail of 2026-10-12 (`shipping::default_list`); once saved, his list rules, even empty.
+pub const SHIPPING_OPTIONS: &str = "shipping_options";
+/// The single flat rate this replaced (before 2026-10-12). Cleared when he saves the new list.
+pub const SHIPPING_FLAT_OLD: &str = "shipping_flat_cents";
 
 /// He said 14 photos a pen is more than enough; the uploader and the API both stop there.
 pub const MAX_PHOTOS: i64 = 14;
@@ -77,8 +79,12 @@ pub async fn hero_photo(pool: &PgPool) -> anyhow::Result<bool> {
     Ok(get(pool, HERO_MODE).await?.and_then(|v| v.as_str().map(|s| s == "photo")).unwrap_or(false))
 }
 
-pub async fn shipping_flat(pool: &PgPool) -> anyhow::Result<Option<i64>> {
-    Ok(get(pool, SHIPPING_FLAT).await?.and_then(|v| v.as_i64()).filter(|c| *c >= 0))
+/// His shipping options, and whether he has saved his own list (false = the defaults from his e-mail).
+pub async fn shipping_options(pool: &PgPool) -> anyhow::Result<(Vec<thepenmarket::shipping::ShippingOption>, bool)> {
+    Ok(match get(pool, SHIPPING_OPTIONS).await? {
+        Some(v) => (serde_json::from_value(v).unwrap_or_default(), true),
+        None => (thepenmarket::shipping::default_list(), false),
+    })
 }
 
 pub async fn shot_list(pool: &PgPool) -> anyhow::Result<Vec<String>> {

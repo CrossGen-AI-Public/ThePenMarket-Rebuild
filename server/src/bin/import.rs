@@ -166,6 +166,11 @@ async fn main() -> Result<()> {
     if sales > 0 && std::env::var("FORCE_IMPORT").ok().as_deref() != Some("1") {
         anyhow::bail!("refusing to re-import: {sales} pen(s) were sold or are being paid for online, and a re-import would put them back on sale. Set FORCE_IMPORT=1 to do it anyway.");
     }
+    // Trading Post listings people posted (and paid for) here are not in any backup; a re-import would delete them.
+    let posted: i64 = sqlx::query_scalar("SELECT count(*) FROM tp_listing WHERE form_submission_id IS NOT NULL").fetch_one(&pool).await.unwrap_or(0);
+    if posted > 0 && std::env::var("FORCE_IMPORT").ok().as_deref() != Some("1") {
+        anyhow::bail!("refusing to re-import: {posted} Trading Post listing(s) were posted on this site, and a re-import would delete them. Set FORCE_IMPORT=1 to do it anyway.");
+    }
     // The old addresses he added himself survive a forced re-import; his destination wins over the import's.
     let his_redirects: Vec<(String, String, String)> = sqlx::query_as("SELECT old_path, new_path, reason FROM redirect WHERE added_by = 'admin'").fetch_all(&pool).await?;
     sqlx::query("TRUNCATE product_image, product, tp_listing, post, page, redirect, category, brand, era, nib, filling_mechanism, price_range, blog_category RESTART IDENTITY CASCADE").execute(&pool).await?;

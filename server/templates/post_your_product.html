@@ -16,13 +16,23 @@
     <input id="price" name="price" required maxlength="60" placeholder="e.g. $450.00">
     <label for="contact">Contact <span class="req">(Required)</span></label>
     <input id="contact" name="contact" required maxlength="200" placeholder="Name and e-mail, shown on the listing">
+    {% if checkout_on %}
+    <label for="email">E-mail <span class="req">(Required)</span></label>
+    <input id="email" name="email" type="email" required maxlength="200" autocomplete="email">
+    <p class="muted small">For your receipt; not shown on the listing. Unlimited Posts members: use your membership's e-mail and there is no fee.</p>
+    {% endif %}
     <label for="description">Description</label>
     <textarea id="description" name="description" rows="6" maxlength="4000"></textarea>
     <label for="photo">File <span class="muted">(one photo, JPEG, PNG or WebP, up to 10 MB)</span></label>
     <input id="photo" name="photo" type="file" accept="image/*">
     <div class="price-line"><span>Price</span><span class="mono">{{ listing_price }}.00</span></div>
+    {% if checkout_on %}
+    <button class="btn btn-navy" type="submit">Submit listing and pay</button>
+    <p class="muted small">Payment is handled by Stripe on its own secure page. The listing is published once the fee is paid.</p>
+    {% else %}
     <button class="btn btn-navy" type="submit">Submit listing <span class="demo-tag">Demo</span></button>
     <p class="demo-note">Demo: this build stores the listing on the server, takes no payment and publishes nothing. On the live site the {{ listing_price }} fee is charged at submission and the listing goes to review.</p>
+    {% endif %}
   </form>
 </div>
 {% endblock %}

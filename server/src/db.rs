@@ -763,7 +763,7 @@ pub async fn listings(pool: &PgPool, page: i64, per_page: i64) -> anyhow::Result
 }
 
 pub async fn listing(pool: &PgPool, slug: &str) -> anyhow::Result<Option<Listing>> {
-    let row: Option<ListingRow> = sqlx::query_as("SELECT slug, title, era_text, price_text, price_cents, contact_text, description_html, image_path, image_alt, published_at, modified_at FROM tp_listing WHERE slug = $1").bind(slug).fetch_optional(pool).await?;
+    let row: Option<ListingRow> = sqlx::query_as("SELECT slug, title, era_text, price_text, price_cents, contact_text, description_html, image_path, image_alt, published_at, modified_at FROM tp_listing WHERE slug = $1 AND status = 'live'").bind(slug).fetch_optional(pool).await?;
     Ok(row.map(Listing::from))
 }
 

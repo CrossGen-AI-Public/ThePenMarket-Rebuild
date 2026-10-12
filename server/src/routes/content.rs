@@ -48,7 +48,7 @@ pub async fn seed_faqs(pool: &sqlx::PgPool) -> anyhow::Result<()> {
         ("Selling your pens", "What pens is ThePenMarket.com not looking for?", engine::SELL_EXCLUSION_LINE.into()),
         ("Selling your pens", "Can I sell a pen myself instead?", "Yes. Sell your pens directly to our customers on our classified ads section, the Trading Post. It only costs $5 per listing, and you keep your pen until someone pays you.".into()),
         ("Trading Post", "How much does a Trading Post listing cost?", "It only costs $5 per listing, and you keep your pen until someone pays you. An Unlimited Posts membership is $125 for one calendar year of unlimited listings.".into()),
-        ("Trading Post", "Does ThePenMarket.com guarantee Trading Post items?", "No. The merchandise is not guaranteed by ThePenMarket.com, nor does the transaction pass through our hands. We do our best to vet out the bad dealers, and ask that you report any problems immediately to tradingpost@thepenmarket.com.".into()),
+        ("Trading Post", "Does ThePenMarket.com guarantee Trading Post items?", "No. The merchandise is not guaranteed by ThePenMarket.com, nor does the transaction pass through our hands. We do our best to vet out the bad dealers, and ask that you report any problems immediately to info@thepenmarket.com.".into()),
     ];
     for (i, (topic, q, a)) in seed.iter().enumerate() {
         sqlx::query("INSERT INTO faq (topic, question, answer, sort_order) VALUES ($1, $2, $3, $4)").bind(topic).bind(q).bind(a).bind(i as i32).execute(pool).await?;

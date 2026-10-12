@@ -107,7 +107,7 @@ pub fn load() -> anyhow::Result<Config> {
         guide_rate_per_min: env("GUIDE_RATE_PER_MIN").parse().unwrap_or(10),
         admin_alert_email: env("ADMIN_ALERT_EMAIL"),
         forms_to: if env("FORMS_TO").is_empty() { "info@thepenmarket.com".to_string() } else { env("FORMS_TO") },
-        trading_post_to: if env("TRADING_POST_TO").is_empty() { "tradingpost@thepenmarket.com".to_string() } else { env("TRADING_POST_TO") },
+        trading_post_to: if env("TRADING_POST_TO").is_empty() { "info@thepenmarket.com".to_string() } else { env("TRADING_POST_TO") },
         ebay_app_id: env("EBAY_APP_ID"),
         ebay_cert_id: env("EBAY_CERT_ID"),
         google_places_key: env("GOOGLE_PLACES_KEY"),

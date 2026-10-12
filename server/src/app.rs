@@ -24,7 +24,8 @@ impl Entity {
     pub const EMAIL: &'static str = "info@thepenmarket.com";
     pub const PHONE: &'static str = "(847) 708-5062";
     pub const PHONE_TEL: &'static str = "+18477085062";
-    pub const TP_EMAIL: &'static str = "tradingpost@thepenmarket.com";
+    /// Trading Post questions go to info@: tradingpost@ no longer exists (Nathaniel, 2026-10-12).
+    pub const TP_EMAIL: &'static str = "info@thepenmarket.com";
     pub const FACEBOOK: &'static str = "https://www.facebook.com/pages/Thepenmarketcom/427549874033020";
     pub const INSTAGRAM: &'static str = "https://www.instagram.com/thepenmarketdotcom";
     pub const TAGLINE: &'static str = "Sell, trade and buy pens the way you want.";

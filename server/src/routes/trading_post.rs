@@ -62,7 +62,7 @@ pub async fn index(AxState(state): AxState<State>, Query(q): Query<TpQuery>) -> 
         serde_json::json!({"@type": "CollectionPage", "@id": state.abs("/trading-post/#collection"), "url": state.abs("/trading-post/"), "name": "Trading Post", "description": description, "isPartOf": {"@id": state.abs("/#website")}, "mainEntity": {"@type": "ItemList", "numberOfItems": total, "itemListElement": list}}),
         serde_json::json!({"@type": "FAQPage", "mainEntity": [
             {"@type": "Question", "name": "How much does a Trading Post listing cost?", "acceptedAnswer": {"@type": "Answer", "text": "It only costs $5 per listing, and you keep your pen until someone pays you. An Unlimited Posts membership is $125 for one calendar year of unlimited listings."}},
-            {"@type": "Question", "name": "Does ThePenMarket.com guarantee Trading Post items?", "acceptedAnswer": {"@type": "Answer", "text": "No. The merchandise is not guaranteed by ThePenMarket.com, nor does the transaction pass through our hands. We do our best to vet out the bad dealers, and ask that you report any problems immediately to tradingpost@thepenmarket.com."}}
+            {"@type": "Question", "name": "Does ThePenMarket.com guarantee Trading Post items?", "acceptedAnswer": {"@type": "Answer", "text": "No. The merchandise is not guaranteed by ThePenMarket.com, nor does the transaction pass through our hands. We do our best to vet out the bad dealers, and ask that you report any problems immediately to info@thepenmarket.com."}}
         ]}),
         breadcrumb_node(&state, &[("Home", "/"), ("Trading Post", "/trading-post/")]),
     ]);

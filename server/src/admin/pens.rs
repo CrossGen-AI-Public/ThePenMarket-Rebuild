@@ -24,7 +24,6 @@ pub struct PenRow {
     pub short_title: String,
     pub sku: String,
     pub price_cents: i64,
-    pub status: String,
     pub updated_at: DateTime<Utc>,
     pub deleted_at: Option<DateTime<Utc>>,
     pub sold_at: Option<DateTime<Utc>>,
@@ -63,7 +62,7 @@ pub struct PensQuery {
     pub done: String,
 }
 
-const SELECT: &str = "SELECT p.id, p.slug, p.short_title, p.sku, p.price_cents, p.status, p.updated_at, p.deleted_at, p.sold_at,
+const SELECT: &str = "SELECT p.id, p.slug, p.short_title, p.sku, p.price_cents, p.updated_at, p.deleted_at, p.sold_at,
     (SELECT count(*) FROM product_image i WHERE i.product_id = p.id AND i.archived_at IS NULL) AS photos FROM product p";
 
 async fn render(state: &State, cookie: &CsrfCookie, notice: &str, error: &str) -> AppResult {

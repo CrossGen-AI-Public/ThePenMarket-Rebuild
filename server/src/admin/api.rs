@@ -135,6 +135,9 @@ pub async fn edit_product(AxState(state): AxState<State>, Extension(cookie): Ext
             if !matches!(value, "live" | "draft" | "sold") {
                 return Ok(api_err(StatusCode::BAD_REQUEST, "Status must be live, hidden or sold."));
             }
+            if before.status == "archived" {
+                return Ok(api_err(StatusCode::CONFLICT, "This pen is deleted. Restore it from Hidden and deleted pens first."));
+            }
             store::update_product_field(&state.pool, id, "status", ProductValue::Text(value.to_string())).await?;
             ("Status", before.status.clone(), value.to_string())
         }

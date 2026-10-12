@@ -42,10 +42,17 @@
       {% if g.options.len() > 8 %}<button type="button" class="facet-more" data-more>See all {{ g.options.len() }}</button>{% endif %}
     </details>
     {% endfor %}
+    {% if archive %}
+    <div class="facet">
+      <p class="eyebrow">For sale</p>
+      <a class="rail-link" href="/shop/">Pens for sale now</a>
+    </div>
+    {% else if sold_n > 0 %}
     <div class="facet">
       <p class="eyebrow">Sold pens</p>
-      <a class="rail-link" href="{{ base_path }}?sold=1" rel="nofollow">Include sold pens</a>
+      <a class="rail-link" href="{{ sold_url }}">{{ sold_n }} sold in the Sold Pen Archive</a>
     </div>
+    {% endif %}
   </aside>
 
   <section class="results">
@@ -74,7 +81,9 @@
 
     {% if items.is_empty() %}
     <div class="empty">
-      <p>Nothing in the case matches that. Loosen a filter, or <a href="/#ask">ask the guide</a> what comes closest.</p>
+      {% if archive %}<p>No sold pen matches that. Loosen a filter, or <a href="/shop/?q={{ q|urlencode }}">search the pens for sale</a>.</p>
+      {% else %}<p>Nothing in the case matches that. Loosen a filter, or <a href="/#ask">ask the guide</a> what comes closest.</p>
+      {% if sold_n > 0 %}<p><a href="{{ sold_url }}">{{ sold_n }} sold {% if sold_n == 1 %}pen matches{% else %}pens match{% endif %} in the Sold Pen Archive.</a></p>{% endif %}{% endif %}
     </div>
     {% else %}
     <div class="grid grid-3 results-grid" id="resultsGrid">

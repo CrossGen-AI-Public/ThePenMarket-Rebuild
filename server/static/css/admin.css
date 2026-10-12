@@ -187,3 +187,8 @@ table.adm-rank td{padding:8px 0 10px;border-top:1px solid var(--line);vertical-a
 table.adm-report tr.is-ok td:last-child{color:#2E6B47}
 table.adm-report tr.is-todo td:last-child{color:var(--red-dark)}
 table.adm-report tr.is-same td:last-child{color:var(--muted)}
+.adm-erase summary{list-style:none;display:inline}
+.adm-erase summary::-webkit-details-marker{display:none}
+.adm-erase form{display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-top:8px}
+.adm-erase label{display:flex;flex-direction:column;gap:4px;font-size:13px}
+.adm-delete{margin-top:10px}

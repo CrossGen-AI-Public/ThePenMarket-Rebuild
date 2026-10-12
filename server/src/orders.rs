@@ -149,9 +149,11 @@ pub struct OrderRow {
     pub note: String,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub paid_at: Option<chrono::DateTime<chrono::Utc>>,
+    /// The listing's description as it read when the buyer paid (copied in at that moment).
+    pub product_description: String,
 }
 
-const ORDER_COLS: &str = "id, product_id, product_slug, product_title, product_sku, amount_cents, shipping_cents, amount_total_cents, status, COALESCE(stripe_session_id, '') AS stripe_session_id, stripe_payment_intent, buyer_email, buyer_name, shipping_address, note, created_at, paid_at";
+const ORDER_COLS: &str = "id, product_id, product_slug, product_title, product_sku, amount_cents, shipping_cents, amount_total_cents, status, COALESCE(stripe_session_id, '') AS stripe_session_id, stripe_payment_intent, buyer_email, buyer_name, shipping_address, note, created_at, paid_at, product_description";
 
 fn order_from(r: &sqlx::postgres::PgRow) -> OrderRow {
     OrderRow {
@@ -172,6 +174,7 @@ fn order_from(r: &sqlx::postgres::PgRow) -> OrderRow {
         note: r.get("note"),
         created_at: r.get("created_at"),
         paid_at: r.get("paid_at"),
+        product_description: r.get("product_description"),
     }
 }
 
@@ -256,7 +259,7 @@ async fn settle(tx: &mut Transaction<'_, Postgres>, order: &OrderRow, s: &Sessio
         return Ok(Outcome::Refund { order: reload(tx, order.id).await?, payment_intent: s.payment_intent_id() });
     }
     sqlx::query("UPDATE product SET status = 'sold', updated_at = now() WHERE id = $1").bind(order.product_id).execute(&mut **tx).await?;
-    sqlx::query("UPDATE shop_order SET status = 'paid', paid_at = now(), note = $2, updated_at = now() WHERE id = $1").bind(order.id).bind(mismatch).execute(&mut **tx).await?;
+    sqlx::query("UPDATE shop_order SET status = 'paid', paid_at = now(), note = $2, product_description = (SELECT description_text FROM product WHERE id = $3), updated_at = now() WHERE id = $1").bind(order.id).bind(mismatch).bind(order.product_id).execute(&mut **tx).await?;
     Ok(Outcome::Sold(reload(tx, order.id).await?))
 }
 

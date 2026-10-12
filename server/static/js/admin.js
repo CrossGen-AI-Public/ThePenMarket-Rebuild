@@ -120,9 +120,32 @@
     var st = art.getAttribute("data-product-status") || "live";
     var wrap = document.createElement("div"); wrap.className = "adm-status";
     wrap.innerHTML = '<label>Status <select><option value="live">Live (customers can see it)</option><option value="draft">Hidden</option><option value="sold">Sold</option></select></label>';
-    var sel = wrap.querySelector("select"); sel.value = st === "archived" ? "draft" : st;
+    var sel = wrap.querySelector("select"); sel.value = st;
     var buy = $(".buybox .eyebrow"); if (buy) buy.insertAdjacentElement("afterend", wrap);
-    sel.addEventListener("change", function () { var v = sel.value; save("status", v, function () { location.reload(); }); });
+    if (st === "archived") {
+      wrap.innerHTML = '<p><b>Deleted.</b> Customers can’t see this pen. Restore or erase it in <a href="/admin/pens/">Hidden and deleted pens</a>.</p>';
+    } else {
+      sel.addEventListener("change", function () { var v = sel.value; save("status", v, function () { location.reload(); }); });
+      // Delete: off the website, the record kept in Hidden and deleted pens until he erases it.
+      var del = document.createElement("button"); del.type = "button"; del.className = "adm-link-btn adm-delete"; del.textContent = "Delete this pen…";
+      wrap.appendChild(del);
+      var pidDel = art.getAttribute("data-product-id");
+      var doDelete = function () {
+        api("POST", "/admin/api/product/" + pidDel + "/delete/").then(function (j) {
+          if (j._status === 428) { return stepUp().then(function (ok) { if (ok) doDelete(); }); }
+          if (!j.ok) { toast(j.error || "That didn't work.", true); return; }
+          location.href = j.url;
+        }).catch(function () { toast("The connection dropped. Try again.", true); });
+      };
+      del.addEventListener("click", function () {
+        var m = document.createElement("div"); m.className = "adm-modal";
+        m.innerHTML = '<form><h2>Delete this pen?</h2><p>It comes off the website at once: shop, search, the Sold Pen Archive and the guide. Its record stays in <b>Hidden and deleted pens</b>, where you can restore it or erase it for good.</p><div class="row"><button type="button" class="adm-editor cancel" data-x>Keep it</button><button type="submit" class="adm-btn adm-red">Delete</button></div></form>';
+        document.body.appendChild(m);
+        var f = m.querySelector("form");
+        f.querySelector("[data-x]").addEventListener("click", function () { m.remove(); });
+        f.addEventListener("submit", function (e) { e.preventDefault(); m.remove(); doDelete(); });
+      });
+    }
   }
 
   // ---- photos: reorder by drag, add, remove -------------------------------------------------------

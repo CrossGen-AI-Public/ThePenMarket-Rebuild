@@ -23,6 +23,7 @@ pub async fn load(pool: &PgPool) -> anyhow::Result<Catalog> {
          LEFT JOIN era e ON e.id = p.era_id
          LEFT JOIN nib n ON n.id = p.nib_id
          LEFT JOIN filling_mechanism f ON f.id = p.filling_mechanism_id
+         WHERE p.status <> 'archived'
          ORDER BY p.listed_year DESC NULLS LAST, p.listed_month DESC NULLS LAST, p.wp_id DESC",
     )
     .fetch_all(pool)

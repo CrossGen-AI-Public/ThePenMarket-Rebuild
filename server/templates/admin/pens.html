@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="admin-page">
+  <div class="adm-top"><div><h1>Hidden and deleted pens</h1><p class="lead"><a href="/admin/">Admin home</a></p></div></div>
+  {% if !notice.is_empty() %}<div class="adm-ok">{{ notice }}</div>{% endif %}
+  {% if !error.is_empty() %}<div class="adm-ok adm-warn">{{ error }}</div>{% endif %}
+
+  <h2>Hidden ({{ hidden.len() }})</h2>
+  <p>Pens customers cannot see: ones you are still writing, ones you added by accident, and ones you took down. Open one to finish it and set it to Live, or to delete it.</p>
+  {% if hidden.is_empty() %}<p class="adm-hint">None.</p>{% else %}
+  <table class="adm">
+    <tr><th>Pen</th><th>SKU</th><th>Price</th><th>Photos</th><th>Last changed</th></tr>
+    {% for p in hidden %}
+    <tr><td><a href="/product/{{ p.slug }}/">{{ p.short_title }}</a></td><td>{{ p.sku }}</td><td>{{ p.price() }}</td><td>{{ p.photos }}</td><td>{{ p.when() }}</td></tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+
+  <h2>Deleted ({{ deleted.len() }})</h2>
+  <p>Off the website and out of every list, search and the Sold Pen Archive. Each one stays here for your records until you erase it. Restoring brings a pen back hidden, so nothing goes on sale by accident. Erasing removes it for good; its old address then sends visitors to its category. Orders keep their own copy of the pen’s name, SKU and price.</p>
+  {% if deleted.is_empty() %}<p class="adm-hint">None.</p>{% else %}
+  <table class="adm">
+    <tr><th>Pen</th><th>SKU</th><th>Price</th><th>Deleted</th><th></th><th></th></tr>
+    {% for p in deleted %}
+    <tr>
+      <td><a href="/product/{{ p.slug }}/">{{ p.short_title }}</a>{% if p.was_sold() %} <span class="adm-chip">was sold</span>{% endif %}</td>
+      <td>{{ p.sku }}</td><td>{{ p.price() }}</td><td>{{ p.when() }}</td>
+      <td><form method="post" action="/admin/pens/{{ p.id }}/restore/"><input type="hidden" name="csrf" value="{{ page.csrf }}"><button type="submit" class="adm-link-btn" aria-label="Restore {{ p.short_title }}">Restore</button></form></td>
+      <td>
+        <details class="adm-erase"><summary class="adm-link-btn">Erase for good…</summary>
+          <form method="post" action="/admin/pens/{{ p.id }}/erase/">
+            <input type="hidden" name="csrf" value="{{ page.csrf }}">
+            <label>Your password, to erase {{ p.short_title }} <input type="password" name="password" autocomplete="current-password" required></label>
+            <button type="submit" class="btn btn-sm adm-red">Erase</button>
+          </form>
+        </details>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+</div>
+{% endblock %}

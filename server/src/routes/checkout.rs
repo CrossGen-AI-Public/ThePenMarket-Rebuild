@@ -262,12 +262,56 @@ async fn after(state: &State, event: &stripe::Event, out: Outcome) {
         ("Note".into(), o.note.trim().to_string()),
     ];
     let msg = crate::admin::mail::order_message(&state.cfg.forms_to, &subject, &lines, &o.buyer_email, &state.abs("/admin/orders/"));
+    let buyer = buyer_message(state, kind, &o).await;
     let state = Arc::clone(state);
     tokio::spawn(async move {
         if let Err(e) = state.mailer.send(msg).await {
             tracing::warn!("order #{} could not be e-mailed: {e:#}", o.id);
         }
+        if let Some(b) = buyer {
+            match state.mailer.send(b).await {
+                Ok(()) => tracing::info!("order #{}: buyer e-mailed", o.id),
+                Err(e) => tracing::warn!("order #{}: buyer could not be e-mailed: {e:#}", o.id),
+            }
+        }
     });
+}
+
+/// The buyer's own e-mail: the receipt with the pen's photo and description once it is sold to them, or
+/// word that their payment went back when the pen had already sold. Nothing for a bank payment still
+/// clearing (Stripe tells them about that).
+async fn buyer_message(state: &State, kind: &str, o: &OrderRow) -> Option<crate::admin::mail::Message> {
+    let to = o.buyer_email.trim();
+    if !to.contains('@') || to.contains(['\r', '\n', ',', ' ']) {
+        return None;
+    }
+    match kind {
+        "shop.sold" => {
+            let image = match crate::db::product_images(&state.pool, o.product_id).await {
+                Ok(imgs) => imgs.first().map(|i| state.abs(&i.large)).unwrap_or_default(),
+                Err(_) => String::new(),
+            };
+            if !image.is_empty() {
+                let _ = sqlx::query("UPDATE shop_order SET product_image = $2 WHERE id = $1").bind(o.id).bind(&image).execute(&state.pool).await;
+            }
+            let r = crate::admin::mail::Receipt {
+                order_id: o.id,
+                pen: o.product_title.clone(),
+                sku: o.product_sku.clone(),
+                total: o.amount_total_cents.map(fmt_cents).unwrap_or_default(),
+                shipping: if o.shipping_cents > 0 { format!("{} (included)", fmt_cents(o.shipping_cents)) } else { String::new() },
+                ship_to: ship_to(o),
+                description: o.product_description.clone(),
+                image_url: image,
+                listing_url: state.abs(&format!("/product/{}/", o.product_slug)),
+                phone: Entity::PHONE.into(),
+                email: Entity::EMAIL.into(),
+            };
+            Some(crate::admin::mail::receipt_message(to, &r))
+        }
+        "shop.refunded" if o.status == "refunded" => Some(crate::admin::mail::refund_message(to, o.id, &o.product_title, &o.amount_total_cents.map(fmt_cents).unwrap_or_default(), Entity::PHONE, Entity::EMAIL)),
+        _ => None,
+    }
 }
 
 async fn refresh_catalog(state: &State) {

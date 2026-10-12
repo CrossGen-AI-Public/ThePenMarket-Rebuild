@@ -192,6 +192,8 @@ pub struct ShopFilter {
     pub tag: Option<String>,
     pub on_sale: bool,
     pub include_sold: bool,
+    /// The Sold Pen Archive: sold pens only, most recently sold first.
+    pub sold_only: bool,
     pub sort: String,
     pub page: i64,
     pub per_page: i64,
@@ -200,7 +202,9 @@ pub struct ShopFilter {
 impl ShopFilter {
     fn push_where(&self, qb: &mut QueryBuilder<'_, Postgres>, skip: &str) {
         qb.push(" WHERE c.slug <> 'memberships' ");
-        if !self.include_sold {
+        if self.sold_only {
+            qb.push(" AND p.status = 'sold' ");
+        } else if !self.include_sold {
             qb.push(" AND p.status = 'live' ");
         }
         if skip != "category" {
@@ -296,6 +300,14 @@ pub struct ShopPage {
     pub facets: Facets,
 }
 
+/// How many sold pens match the same filter: the "N sold in the archive" link under a list.
+pub async fn sold_count(pool: &PgPool, f: &ShopFilter) -> anyhow::Result<i64> {
+    let f = ShopFilter { sold_only: true, ..f.clone() };
+    let mut qb = QueryBuilder::new("SELECT count(*) AS n FROM product p JOIN category c ON c.id = p.category_id LEFT JOIN brand b ON b.id = p.brand_id LEFT JOIN era e ON e.id = p.era_id LEFT JOIN nib n ON n.id = p.nib_id LEFT JOIN filling_mechanism f ON f.id = p.filling_mechanism_id");
+    f.push_where(&mut qb, "");
+    Ok(qb.build().fetch_one(pool).await?.get("n"))
+}
+
 pub async fn shop(pool: &PgPool, f: &ShopFilter, ranges: &[PriceRange]) -> anyhow::Result<ShopPage> {
     // count
     let mut qb = QueryBuilder::new("SELECT count(*) AS n FROM product p JOIN category c ON c.id = p.category_id LEFT JOIN brand b ON b.id = p.brand_id LEFT JOIN era e ON e.id = p.era_id LEFT JOIN nib n ON n.id = p.nib_id LEFT JOIN filling_mechanism f ON f.id = p.filling_mechanism_id");
@@ -325,6 +337,9 @@ pub async fn shop(pool: &PgPool, f: &ShopFilter, ranges: &[PriceRange]) -> anyho
             qb.push(" ORDER BY p.status ASC, ts_rank(p.search_tsv, ");
             push_rank_query(&mut qb, &variants);
             qb.push(format!(") DESC, {VIEWS_90D} DESC, p.listed_year DESC NULLS LAST, p.wp_id DESC "));
+        }
+        _ if f.sold_only => {
+            qb.push(" ORDER BY p.sold_at DESC NULLS LAST, p.listed_year DESC NULLS LAST, p.listed_month DESC NULLS LAST, p.wp_id DESC ");
         }
         _ => {
             qb.push(" ORDER BY p.status ASC, p.listed_year DESC NULLS LAST, p.listed_month DESC NULLS LAST, p.wp_id DESC ");

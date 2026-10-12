@@ -34,7 +34,7 @@
       <span class="mono muted">SKU <span data-edit="sku">{{ p.sku }}</span></span>
     </div>
     <dl class="buy-facts">
-      <div><dt>Availability</dt><dd>{% if p.sold %}Sold. One of a kind, so it will not be restocked; the page stays for reference.{% else %}One in stock, one of a kind.{% endif %}</dd></div>
+      <div><dt>Availability</dt><dd>{% if p.sold %}Sold. One of a kind, so it will not be restocked; the page stays for reference. <a href="/sold-pens/{% if !p.brand_slug.is_empty() %}?brand={{ p.brand_slug }}{% endif %}">More sold {% if !p.brand.is_empty() %}{{ p.brand }} {% endif %}pens in the Sold Pen Archive</a>.{% else %}One in stock, one of a kind.{% endif %}</dd></div>
       <div><dt>Returns</dt><dd>{{ return_days }} days for a full refund of the item price, via insured U.S. Mail. Problems found within {{ fix_days }} days get fixed.</dd></div>
       {% if !is_membership %}<div><dt>Condition</dt><dd>{% if p.category_slug == "vintage-pens" %}Restored, tested and guaranteed.{% else %}Pre-owned, tested and guaranteed.{% endif %} Flaws are stated in the description.</dd></div>{% endif %}
     </dl>

@@ -38,6 +38,7 @@ pub fn router(state: State) -> Router {
         .route("/", get(home::home))
         .route("/shop/", get(shop::shop))
         .route("/on-sale-pens/", get(shop::on_sale))
+        .route("/sold-pens/", get(shop::sold_pens))
         .route("/product-category/{slug}/", get(shop::category))
         .route("/brand/{slug}/", get(shop::brand))
         .route("/era/{slug}/", get(shop::era))

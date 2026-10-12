@@ -73,7 +73,7 @@ pub async fn sitemap_products(AxState(state): AxState<State>) -> AppResult {
 
 pub async fn sitemap_categories(AxState(state): AxState<State>) -> AppResult {
     let t = today();
-    let mut entries = vec![("/shop/".to_string(), t.clone()), ("/on-sale-pens/".to_string(), t.clone())];
+    let mut entries = vec![("/shop/".to_string(), t.clone()), ("/on-sale-pens/".to_string(), t.clone()), (super::shop::SOLD_ARCHIVE.to_string(), t.clone())];
     for c in db::categories(&state.pool).await? {
         entries.push((format!("/product-category/{}/", c.slug), t.clone()));
     }

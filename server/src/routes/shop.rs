@@ -690,7 +690,7 @@ pub async fn product(AxState(state): AxState<State>, Extension(cookie): Extensio
         p,
         images,
         // A visitor gets tap-to-define links on the glossary's words; the editor gets his text untouched.
-        description_html: if editing { body.description_html } else { crate::gloss::link_terms(&body.description_html, &state.site().glossary.link_terms, crate::glossary::MAX_LINKS_PER_LISTING) },
+        description_html: if editing { body.description_html } else { crate::links::unlink(&crate::gloss::link_terms(&body.description_html, &state.site().glossary.link_terms, crate::glossary::MAX_LINKS_PER_LISTING), &state.site().dead_links) },
         description_text: body.description_text,
         specs,
         related,

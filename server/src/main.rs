@@ -9,6 +9,7 @@ mod db;
 mod glossary;
 mod guide;
 mod insights;
+mod links;
 mod reviews;
 mod routes;
 mod security;
@@ -70,6 +71,24 @@ async fn main() -> anyhow::Result<()> {
             }
         }
     });
+
+    // Outside links in his content, once a day (ADR-0001). LINK_CHECK=0 turns it off (e.g. offline).
+    if std::env::var("LINK_CHECK").map(|v| v != "0").unwrap_or(true) {
+        let links_state = state.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_secs(300)).await;
+            loop {
+                match links::check_all(&links_state).await {
+                    Ok((n, dead)) => {
+                        tracing::info!(checked = n, dead, "outside links checked");
+                        app::refresh_site_cache(&links_state).await;
+                    }
+                    Err(e) => tracing::warn!("outside link check failed: {e:#}"),
+                }
+                tokio::time::sleep(Duration::from_secs(24 * 3600)).await;
+            }
+        });
+    }
 
     // With a Places key and his Place ID saved, refresh his Google rating and reviews once a day.
     let reviews_state = state.clone();

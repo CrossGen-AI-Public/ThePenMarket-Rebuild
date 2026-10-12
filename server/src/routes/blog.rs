@@ -186,5 +186,5 @@ pub async fn post(AxState(state): AxState<State>, Path(slug): Path<String>, Orig
         }),
         breadcrumb_node(&state, &crumbs.iter().map(|(a, b)| (a.as_str(), b.as_str())).collect::<Vec<_>>()),
     ]);
-    html(&PostTpl { page, post: card, body_html: body, modified: row.modified_at.format("%B %-d, %Y").to_string(), author: row.author_name, more, related_pens })
+    html(&PostTpl { page, post: card, body_html: crate::links::unlink(&body, &state.site().dead_links), modified: row.modified_at.format("%B %-d, %Y").to_string(), author: row.author_name, more, related_pens })
 }

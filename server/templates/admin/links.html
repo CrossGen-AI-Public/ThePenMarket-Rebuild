@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="admin-page">
+  <div class="adm-top"><div><h1>Links to other websites</h1><p class="lead"><a href="/admin/">Admin home</a></p></div></div>
+  <p>Your posts, pages and listings link to {{ total }} pages on other websites. Every day the site checks that each one still opens. A page that is gone (it answers “not found”, or its whole website no longer exists) on two checks a day apart stops being a link: visitors see your words, not a dead end. Nothing you wrote is changed, and if the page comes back it becomes a link again by itself.</p>
+  {% if started %}<div class="adm-ok">Checking now. It takes a few minutes; reload this page afterwards.</div>{% endif %}
+  <form method="post" action="/admin/links/check/"><input type="hidden" name="csrf" value="{{ page.csrf }}"><button type="submit" class="btn btn-sm">Check every link now</button></form>
+
+  <h2>No longer linked ({{ dead.len() }})</h2>
+  {% if dead.is_empty() %}<p class="adm-hint">None.</p>{% else %}
+  <p>To point one of these somewhere new, edit the post or page it is on.</p>
+  <table class="adm">
+    <tr><th>Address</th><th>Was on</th><th>What it answered</th><th>Gone since</th></tr>
+    {% for r in dead %}<tr><td><code>{{ r.url }}</code></td><td><a href="{{ r.found_on }}">{{ r.found_on }}</a></td><td>{{ r.last_result }}</td><td>{{ r.since() }}</td></tr>{% endfor %}
+  </table>
+  {% endif %}
+
+  {% if !watching.is_empty() %}
+  <h2>Gone once, checking again tomorrow ({{ watching.len() }})</h2>
+  <table class="adm">
+    <tr><th>Address</th><th>On</th><th>What it answered</th></tr>
+    {% for r in watching %}<tr><td><code>{{ r.url }}</code></td><td><a href="{{ r.found_on }}">{{ r.found_on }}</a></td><td>{{ r.last_result }}</td></tr>{% endfor %}
+  </table>
+  {% endif %}
+
+  {% if !unsure.is_empty() %}
+  <h2>Still linked, but would not answer the check ({{ unsure.len() }})</h2>
+  <p>Some websites turn away anything that is not a person’s browser, or ask for a subscription. These stay linked. Open one to see for yourself.</p>
+  <table class="adm">
+    <tr><th>Address</th><th>On</th><th>What it answered</th><th>Checked</th></tr>
+    {% for r in unsure %}<tr><td><a href="{{ r.url }}" rel="noopener noreferrer" target="_blank"><code>{{ r.url }}</code></a></td><td><a href="{{ r.found_on }}">{{ r.found_on }}</a></td><td>{{ r.last_result }}</td><td>{{ r.checked() }}</td></tr>{% endfor %}
+  </table>
+  {% endif %}
+</div>
+{% endblock %}

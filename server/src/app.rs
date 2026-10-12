@@ -91,6 +91,8 @@ pub struct SiteCache {
     pub glossary: Arc<crate::glossary::Glossary>,
     /// His list of search misspellings and the way he spells each word.
     pub spellings: Vec<crate::spelling::Spelling>,
+    /// Outside links confirmed gone (ADR-0001): shown as plain words, never as links.
+    pub dead_links: Arc<std::collections::HashSet<String>>,
 }
 
 pub async fn load_site_cache(pool: &PgPool) -> anyhow::Result<SiteCache> {
@@ -103,6 +105,7 @@ pub async fn load_site_cache(pool: &PgPool) -> anyhow::Result<SiteCache> {
         google_reviews: crate::reviews::cached(pool).await?.filter(|r| !r.reviews.is_empty()),
         glossary: Arc::new(crate::glossary::load(pool).await?),
         spellings: crate::settings::search_spellings(pool).await?,
+        dead_links: Arc::new(crate::links::dead_set(pool).await?),
     })
 }
 

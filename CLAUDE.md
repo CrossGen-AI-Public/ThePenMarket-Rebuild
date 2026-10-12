@@ -15,6 +15,7 @@ Work on a branch, `bash scripts/gate.sh` green, then `/cg:ship`. Production is t
 - The brand / era / nib / filling-mechanism definitions from `data/terms.json` were drafted by the build, not by him. The glossary, the tap-to-define links and the guide use one only after he ticks it as his (`glossary_approved_def`). Their own pages still show them; that is an open question for him, not something to settle for him.
 - Glossary tables have no foreign keys to brand / post / product on purpose: the importer truncates those with CASCADE.
 - FAQ answers, custom pages and posts are his words. Seed or draft nothing on his behalf.
+- The site never links to a page that no longer exists (docs/adr/0001): a dead outside link is shown as its words at render time; never fix it by editing his stored post.
 - Analytics are first party (`insights.rs`, `track.js`). Never add a third-party tracker; `/privacy/` describes exactly what is recorded.
 - `backup/`, `scrape/`, `research/docs/crawl-*`, `server/media/` and `*.env` are never committed.
 - Secrets live in `~/.config/thepenmarket.env` on the box. Never print them.

@@ -110,6 +110,9 @@ Everything is reached from **/admin/** (where sign-in now lands). All of it is a
 - **Classic view** (footer switch): larger text, photograph instead of the 3D pen, no motion; remembered per browser. The 3D pen's "+" markers are buttons that move the camera in.
 - `import` also refuses after post, page, brand or media edits (same `FORCE_IMPORT=1` override).
 
+## Links to other websites (ADR-0001, migration 0008)
+A daily check (`links.rs`, five minutes after start, then every 24 h) requests every outside link in published posts, pages, products and Trading Post ads. Gone (404, 410, no such host, nothing listening) on two checks at least 20 hours apart: the link is shown as plain words (`<span class="link-gone">`) until it answers again; the stored HTML is never changed. 401/402/403/429/5xx/timeouts stay linked. `/admin/links/` lists what was unlinked and why and has a "Check every link now" button. `LINK_CHECK=0` turns the daily check off. First run on 2026-10-12: 50 outside links, 3 gone (Dallas and Arkansas pen show pages, nancybach.com).
+
 ## Old addresses from before WordPress
 `routes/legacy.rs` answers the shapes his ASP.NET shop and WordPress's dated permalinks used, which were never in a sitemap and still appear in his posts: `productList.aspx/...` (category, brand, filler), `product-detail.aspx/<id>-<sku>-<name>` (that pen if its slug survives, else a search), `new-pens.aspx/...` (brand or search), `TradingPostList.aspx` (the Trading Post), `/YYYY/MM/slug/` (the post, or a blog search), `/on-sale/`. It runs after the redirect table, so his own entries in `/admin/redirects/` win.
 

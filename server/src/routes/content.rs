@@ -178,5 +178,5 @@ pub async fn custom_page(state: &State, slug: &str) -> Result<Option<axum::respo
         serde_json::json!({"@type": "WebPage", "@id": state.abs(&format!("{path}#webpage")), "url": state.abs(&path), "name": p.title, "description": description, "dateModified": p.modified_at.to_rfc3339(), "isPartOf": {"@id": state.abs("/#website")}, "author": {"@id": state.abs("/about-us/#nathaniel-cerf")}}),
         breadcrumb_node(state, &[("Home", "/"), (p.title.as_str(), path.as_str())]),
     ]);
-    Ok(Some(html(&CustomPageTpl { page, heading: p.title, modified: p.modified_at.format("%B %-d, %Y").to_string(), body_html: p.body_html })?))
+    Ok(Some(html(&CustomPageTpl { page, heading: p.title, modified: p.modified_at.format("%B %-d, %Y").to_string(), body_html: crate::links::unlink(&p.body_html, &state.site().dead_links) })?))
 }

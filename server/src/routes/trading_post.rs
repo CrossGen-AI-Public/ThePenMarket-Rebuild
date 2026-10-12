@@ -79,7 +79,8 @@ pub struct TpListingTpl {
 }
 
 pub async fn listing(AxState(state): AxState<State>, Path(slug): Path<String>) -> AppResult {
-    let l = db::listing(&state.pool, &slug).await?.ok_or(AppError::NotFound)?;
+    let mut l = db::listing(&state.pool, &slug).await?.ok_or(AppError::NotFound)?;
+    l.description_html = crate::links::unlink(&l.description_html, &state.site().dead_links);
     let (more, _) = db::listings(&state.pool, 1, 5).await?;
     let more: Vec<Listing> = more.into_iter().filter(|m| m.slug != slug).take(4).collect();
     let desc_text = crate::text::strip_tags(&l.description_html);

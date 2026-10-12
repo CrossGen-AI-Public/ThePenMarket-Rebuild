@@ -6,6 +6,7 @@ pub mod api;
 pub mod content;
 pub mod glossary;
 pub mod insight_pages;
+pub mod links_page;
 pub mod manage;
 pub mod pens;
 pub mod redirects;
@@ -175,6 +176,8 @@ pub fn router() -> Router<State> {
         .route("/admin/api/product/{id}/", axum::routing::patch(api::edit_product))
         .route("/admin/api/product/{id}/delete/", post(pens::delete))
         .route("/admin/pens/", get(pens::page))
+        .route("/admin/links/", get(links_page::page))
+        .route("/admin/links/check/", post(links_page::check_now))
         .route("/admin/pens/{id}/restore/", post(pens::restore))
         .route("/admin/pens/{id}/erase/", post(pens::erase))
         .route("/admin/api/product/{id}/photo/", post(api::upload_photo).layer(axum::extract::DefaultBodyLimit::max(12 * 1024 * 1024)))

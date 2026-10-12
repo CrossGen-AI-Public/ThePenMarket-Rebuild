@@ -76,6 +76,7 @@
   document.addEventListener("submit", function (e) {
     var f = e.target, a = (f.getAttribute && f.getAttribute("action")) || "";
     if (/(pen-repairs|sell-my-pens|contact|post-your-product|mailing-list)/.test(a) && (f.method || "").toLowerCase() === "post") { push("conversion", { type: "form:" + a.replace(/\//g, "") }); flush(true); }
+    else if (/^\/checkout\/[^/]+\/$/.test(a)) { push("conversion", { type: "buy" }); flush(true); }
   }, true);
 
   // ---- scroll depth, sent once when the page is left ----------------------------------------------

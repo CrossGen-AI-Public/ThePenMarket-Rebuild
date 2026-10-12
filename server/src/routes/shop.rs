@@ -5,8 +5,10 @@ use crate::app::{breadcrumb_node, html, org_node, AppError, AppResult, Entity, P
 use crate::db::{self, FacetOption, Image, PostCard, ProductCard, ShopFilter};
 use crate::engine;
 use crate::money::fmt_dollars;
+use crate::security::{self, CsrfCookie};
 use askama::Template;
 use axum::extract::{Path, Query, State as AxState};
+use axum::Extension;
 use serde::Deserialize;
 
 const PER_PAGE: i64 = 24;
@@ -505,9 +507,17 @@ pub struct ProductTpl {
     /// The tags as he types them in the editor: "gift, Parker 51".
     pub tags_text: String,
     pub show_tags: bool,
+    /// Stripe keys are set and this is a pen (not the membership) that is for sale.
+    pub checkout_on: bool,
+    /// "" (free), "yours" (this visitor is checking out) or "other" (someone else is).
+    pub hold: String,
+    pub hold_url: String,
+    pub hold_minutes: i64,
+    /// "Plus $12.00 shipping" once he sets a flat rate; empty until then.
+    pub shipping_line: String,
 }
 
-pub async fn product(AxState(state): AxState<State>, Path(slug): Path<String>) -> AppResult {
+pub async fn product(AxState(state): AxState<State>, Extension(cookie): Extension<CsrfCookie>, Path(slug): Path<String>) -> AppResult {
     let p = db::product_by_slug(&state.pool, &slug).await?.ok_or(AppError::NotFound)?;
     let editing = crate::admin::editing();
     if matches!(p.status.as_str(), "draft" | "archived") && crate::admin::current().is_none() {
@@ -596,6 +606,19 @@ pub async fn product(AxState(state): AxState<State>, Path(slug): Path<String>) -
     ]);
     let is_membership = p.is_subscription;
     let ask_url = format!("/#ask?sku={}", urlencode(&p.sku));
+    let checkout_on = state.cfg.checkout_enabled() && p.status == "live" && !is_membership;
+    let (mut hold, mut hold_url, mut hold_minutes, mut shipping_line) = (String::new(), String::new(), 0, String::new());
+    if checkout_on {
+        page.csrf = security::csrf_token(&state.cfg.csrf_secret, &cookie.0);
+        if let Some(h) = thepenmarket::orders::current_hold(&state.pool, p.id, &super::checkout::visitor_key(&cookie)).await? {
+            hold = if h.mine && h.status == "open" { "yours".into() } else { "other".into() };
+            hold_url = h.url;
+            hold_minutes = if h.status == "open" { h.minutes_left } else { 0 };
+        }
+        if let Some(c) = crate::settings::shipping_flat(&state.pool).await?.filter(|c| *c > 0) {
+            shipping_line = format!("Plus {} shipping.", thepenmarket::money::fmt_cents(c));
+        }
+    }
     html(&ProductTpl {
         page,
         p,
@@ -615,6 +638,11 @@ pub async fn product(AxState(state): AxState<State>, Path(slug): Path<String>) -
         tags_text: tags.iter().map(|t| t.name.clone()).collect::<Vec<_>>().join(", "),
         show_tags: !tags.is_empty() || editing,
         tags,
+        checkout_on,
+        hold,
+        hold_url,
+        hold_minutes,
+        shipping_line,
     })
 }
 

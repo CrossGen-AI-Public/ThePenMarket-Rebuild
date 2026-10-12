@@ -124,6 +124,17 @@ pub fn form_message(to: &str, what: &str, id: i32, fields: &[(String, String)], 
     }
 }
 
+/// A pen sold (or refunded) through Stripe Checkout. `lines` are (label, value) pairs.
+pub fn order_message(to: &str, subject: &str, lines: &[(String, String)], reply_to: &str, orders_url: &str) -> Message {
+    let body: String = lines.iter().filter(|(_, v)| !v.is_empty()).map(|(k, v)| format!("{k}: {v}\n")).collect();
+    Message {
+        to: to.to_string(),
+        subject: subject.replace(['\r', '\n'], " "),
+        reply_to: Some(reply_to.to_string()).filter(|v| v.contains('@') && !v.contains(['\r', '\n'])),
+        body: format!("{subject}\n\n{body}\nEvery order is in the admin: {orders_url}\n\nReplying to this e-mail answers the buyer.\n"),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

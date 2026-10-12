@@ -345,6 +345,11 @@ code{font-family:Menlo,Consolas,monospace;font-size:.9em;background:var(--grey);
 .demo-buy summary::-webkit-details-marker{display:none}
 .demo-buy .demo-tag{background:rgba(255,255,255,.18);color:#fff;border-color:rgba(255,255,255,.5)}
 .demo-explain{margin-top:var(--s3);padding:var(--s4);background:var(--grey);font-size:13.5px;display:grid;gap:8px}
+.buy-form{margin:0}
+.buy-form button{cursor:pointer}
+.buy-note{margin-top:var(--s2);font-size:13px}
+.buy-hold{padding:var(--s4);background:var(--grey);font-size:14px;display:grid;gap:10px}
+.buy-hold p{margin:0}
 .buy-links{margin-top:var(--s4);font-size:13px}
 .buy-links a{color:var(--red)}
 .product-body{grid-column:1/-1;display:grid;grid-template-columns:5fr 7fr;gap:var(--s7);align-items:start}

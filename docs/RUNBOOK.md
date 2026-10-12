@@ -83,7 +83,7 @@ Everything is reached from **/admin/** (where sign-in now lands). All of it is a
 - **Classic view** (footer switch): larger text, photograph instead of the 3D pen, no motion; remembered per browser. The 3D pen's "+" markers are buttons that move the camera in.
 - `import` also refuses after post, page, brand or media edits (same `FORCE_IMPORT=1` override).
 
-## Nathaniel's 2026-10-07 questions (migration 0005)
+## Nathaniel's 2026-10-07 questions (migration 0006)
 - **Tags (his q1).** "Tags" row in Item specifics on any product page while signed in: comma separated, his earlier tags offered as he types, 20 at most (`admin/api.rs` field `tags`, `store::set_product_tags`). Each tag has a page at the old WooCommerce shape `/product-tag/{slug}/` (`shop::tag`), `noindex` and out of `sitemap-categories.xml` until it holds `db::TAG_INDEX_MIN` (3) live items. A tag nothing uses is deleted, and an old tag address with no new tag of that name still 301s through the redirect table. Shop search matches tag names. A forced re-import empties the tag links (FK cascade) but keeps the tag names; tag edits are `admin.edit`, so the importer's guard already refuses.
 - **Old addresses (q2, q3).** `/admin/redirects/` lists the redirect table (his own first), searches it, downloads it as CSV (`/admin/redirects.csv`), and takes pasted lists: one address per line, optionally followed by its destination. Each line is checked against the running site first (`Probe`, loopback to `HOST:PORT`, no redirects followed): already a page or already redirected = left alone; no destination = matched by the last path segment to a product / post / custom page / brand / category / published glossary entry / Trading Post listing; no match = listed back with a shop-search suggestion to paste again. A destination must be on this site and answer 200. Old URLs with a query string (`/index.php?main_page=…`, `/?page_id=12`) match on path + query first (`db::redirect_for`). His rows carry `redirect.added_by = 'admin'`, only those can be removed, and a forced re-import puts them back.
 - **URL audit (q2).** `python3 scripts/url_audit.py <new-base> research/url-audit/<date>.csv` reads the live site's sitemaps today and checks every address on the new site. 2026-10-07 against a local copy: 3,134 addresses, 675 same page, 2,397 redirect, **62 missing: 19 products listed after the 2026-08-24 backup and their 43 tag pages**. Those are fixed by the cutover re-import from a fresh backup and crawl, not by redirects. Re-run the audit after cutover; expect 0 missing.
@@ -91,6 +91,45 @@ Everything is reached from **/admin/** (where sign-in now lands). All of it is a
 - **His pages and nib glossary (q5).** The copy he e-mailed on 2026-09-18 lives in `$BACKUP_DIR/client-copy/` and is never committed (the repo is public). `set -a; . ~/.config/thepenmarket.env; set +a; python3 scripts/load-his-copy.py` fills Pen Grading, Defining Nibs and Buyer's Guide only while empty and publishes them, and puts his 34 nib-glossary definitions into glossary drafts (fills empty ones, adds missing words; never publishes). Safe to run again. `--dry-run` prints the SQL.
 - **Hero photo (q6).** `/admin/settings/` "Spinning 3D pen or your photograph" (setting `hero_mode`). The photo is the featured pen's first photo. A running or decided `hero-stage` experiment overrides it.
 - **Whole pen in frame (q7).** Product photos in cards, category tiles, hero thumbnails, product thumbnails and guide cards use `object-fit: contain` on the grey ground (was `cover`, which cut the ends off long pens).
+
+## Online checkout (Stripe, migration 0005)
+Decided 2026-10-05: Nathaniel goes with Stripe, on **his own Stripe account** (he invites Brittany as a Developer; keys are never e-mailed). Built so far: **pens only**. The Trading Post $5 listing fee and the $125/yr Unlimited Posts membership are **not built**; the membership page keeps its demo notice whatever the keys say.
+
+**Turning it on.** Both values go in the env file (`~/.config/thepenmarket.env`, or `/srv/apps/thepenmarket/.env` on a droplet), never in git, then restart:
+```
+STRIPE_SECRET_KEY=sk_test_…        # Stripe dashboard → Developers → API keys (test mode first; a restricted key with Checkout Sessions write + Refunds write also works)
+STRIPE_WEBHOOK_SECRET=whsec_…      # from the webhook endpoint below
+```
+With either missing, nothing changes: every pen page shows "Demo — checkout not connected" and `/api/stripe/webhook` answers 503.
+
+**The webhook.** Stripe dashboard → Developers → Webhooks → Add endpoint: `https://<host>/api/stripe/webhook` (e.g. `https://thepenmarket.com/api/stripe/webhook` once the domain points at his droplet). Events:
+`checkout.session.completed`, `checkout.session.expired`, `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed`. Copy the endpoint's signing secret into `STRIPE_WEBHOOK_SECRET`. Test mode and live mode each have their own keys **and their own endpoint and secret**.
+
+**How it works** (`routes/checkout.rs`, `orders.rs`, `stripe.rs`):
+- "Buy this pen" (`POST /checkout/{slug}/`, CSRF + the form rate limit) reads the price (sale price first) and name **from the database**, holds the pen with a `shop_order` row (status `open`), and sends the buyer to a Stripe-hosted Checkout Session (31 minutes; the hold lasts 5 minutes longer). A second buyer sees "Someone is checking out this pen right now". A partial unique index allows one open/processing order per pen, so racing buyers cannot both get it. The holder can "Let it go" (`/checkout/{slug}/release/`, which also expires the session at Stripe).
+- `checkout.session.completed` with `payment_status=paid` marks the pen `sold` and the order `paid` in one transaction, refreshes the catalog (so the guide stops offering it), writes `event_log` `shop.sold`, and mails `FORMS_TO` (to the mail log without SMTP). If the pen was already sold or held by someone else, the payment is **refunded in full via the API** (idempotency key `pm-refund-<order>`) and the order is `refunded`.
+- Bank payments (if he enables ACH): `completed` with `unpaid` → order `processing`, pen stays held; `async_payment_succeeded` sells it, `async_payment_failed` frees it.
+- Webhooks are verified (`Stripe-Signature`, HMAC-SHA256, 5-minute tolerance, constant time) and recorded in `stripe_event`; a repeated delivery does nothing. A failure rolls back and returns 500 so Stripe retries.
+- `/checkout/thanks/?session_id=…` asks Stripe for the session server-side and shows what was bought, the total and the shipping address; it promises nothing else.
+- `/admin/orders/` lists paid, clearing and refunded orders (buyer, e-mail, ship-to, link to the payment in Stripe). Refunds and disputes are done in his Stripe dashboard.
+- CSP `form-action` now allows `https://checkout.stripe.com` (the Buy form redirects there). No Stripe.js on our pages.
+- `import` refuses while any order is `paid`/`processing` (a re-import would put sold pens back on sale).
+
+**Open decisions for Nathaniel** (nothing invented in the meantime):
+- **Shipping**: one flat charge per pen, set at `/admin/settings/` ("Shipping on online orders"). No default; until he sets one, buyers pay the pen's price only and the admin says so. Per-pen or insured-value rates are not built.
+- **Sales tax**: nothing is collected. Whether he must charge Connecticut (or other states') sales tax is a question for him and his accountant; Stripe Tax can be added to the session once he decides.
+- **Payment methods**: whatever he enables in his Stripe dashboard (cards, Apple/Google Pay, Link, ACH, Klarna/Afterpay) appears on the checkout page with no code change.
+- **Receipts**: Stripe sends its own e-mail receipts only if he turns them on (Settings → Customer emails).
+- Orders ship to the US only (`allowed_countries = US`).
+
+**Testing once his test keys exist** (never done yet; no Stripe account existed when this was written):
+1. Set the two test-mode values, restart, open any live pen: the button reads "Buy this pen".
+2. Pay with card `4242 4242 4242 4242`, any future date, any CVC, any ZIP. Expect: thanks page, pen shows Sold, `/admin/orders/` shows it, a mail-log entry.
+3. Card `4000 0000 0000 0002` (declined): the pen stays held until the session expires or the buyer lets it go.
+4. Two browsers on the same pen: the second sees the hold message.
+5. Mark the pen sold in the admin, then pay in a session opened before that: the order shows Refunded and Stripe shows the refund.
+6. `stripe listen --forward-to localhost:8140/api/stripe/webhook` (Stripe CLI) drives webhooks to a local build; `stripe trigger checkout.session.completed` alone will be ignored (no matching order), which is correct.
+7. Set the test-mode pens back to For sale on their pages, then switch to live keys and the live endpoint.
 
 ## The public copy (droplet): https://penmarket.crossgen-ai.com/
 Deployed 2026-09-14 by `scripts/push-droplet.sh` (from sparky) + `scripts/deploy-droplet.sh` (on the droplet, as root):

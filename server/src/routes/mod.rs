@@ -1,6 +1,7 @@
 //! The router: every public path, explicitly. Nothing else is reachable.
 
 pub mod blog;
+pub mod checkout;
 pub mod content;
 pub mod forms;
 pub mod glossary;
@@ -61,6 +62,10 @@ pub fn router(state: State) -> Router {
         .route("/site-map/", get(content::site_map))
         .route("/glossary/", get(glossary::hub))
         .route("/glossary/{slug}/", get(glossary::term))
+        .route("/checkout/thanks/", get(checkout::thanks))
+        .route("/checkout/{slug}/", post(checkout::buy))
+        .route("/checkout/{slug}/release/", post(checkout::release))
+        .route("/api/stripe/webhook", post(checkout::webhook).layer(axum::extract::DefaultBodyLimit::max(256 * 1024)))
         .route("/api/t", post(crate::insights::ingest))
         .route("/api/guide", post(crate::guide::chat))
         .route("/api/guide/health", get(crate::guide::health))

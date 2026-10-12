@@ -25,6 +25,11 @@
     <h2>Guided photo shoot</h2>
     <p>When you add photos to a pen with “Guided photo shoot”, the site asks for these shots in this order, names each photo for you, and puts them in place. One per line, {{ max_photos }} at most (a pen holds {{ max_photos }} photos).</p>
     <textarea name="shots" rows="11" aria-label="Shot list">{{ shots }}</textarea>
+    <h2>Shipping on online orders</h2>
+    <p>{% if checkout_mode == "off" %}Online checkout is off until CrossGen adds your Stripe keys; this charge is used once it is on.{% else if checkout_mode == "test" %}Checkout is in Stripe's test mode (test cards only, no real money).{% else %}Checkout is taking real payments through Stripe.{% endif %} One flat charge is added to every pen bought online. Leave it blank until you decide; until then buyers pay the pen's price only. Enter 0 for free shipping.</p>
+    <label for="shipping">Flat shipping charge, in dollars</label>
+    <input id="shipping" name="shipping" value="{{ shipping }}" maxlength="12" inputmode="decimal" placeholder="Not set">
+    {% if shipping.is_empty() %}<p class="adm-hint">Not set: no shipping is charged.</p>{% endif %}
     <h2>Google reviews</h2>
     <p>Reviews live on your Google Business Profile, which is free to set up at business.google.com. Once you have one, paste its Place ID here (find it with Google's “Place ID Finder”). From then on every page carries a “Review us on Google” link that opens the review box for your shop, which is the fastest way to get your first reviews.</p>
     <label for="place_id">Your Google Place ID</label>

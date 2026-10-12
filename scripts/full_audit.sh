@@ -58,7 +58,8 @@ redirects_all() {
   local bad=0 n=0
   while IFS='|' read -r old new; do
     n=$((n+1))
-    read -r code loc < <(curl -s -o /dev/null -w '%{http_code} %{redirect_url}\n' "$BASE$old")
+    # Plain command substitution: macOS's bash 3.2 leaks a descriptor per "read < <(...)" in a loop.
+    out=$(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' "$BASE$old"); code=${out%% *}; loc=${out#* }
     [ "$code" = 301 ] || { echo "FAIL $old -> $code (want 301 $new)"; bad=$((bad+1)); continue; }
     fin=$(curl -s -o /dev/null -L --max-redirs 5 -w '%{http_code}' "$BASE$old")
     [ "$fin" = 200 ] || { echo "FAIL $old -> $loc ends $fin"; bad=$((bad+1)); }

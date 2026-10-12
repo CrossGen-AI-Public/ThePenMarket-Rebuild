@@ -11,7 +11,9 @@ P="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="${2:-$P/research/audit/$(date +%F)}"; mkdir -p "$OUT"
 PY="${PYTHON:-python3}"
 RES="$OUT/results.txt"; : > "$RES"
-run() { local name="$1"; shift; echo "===== $name"; if "$@" > "$OUT/$name.log" 2>&1; then echo "$name PASS" >> "$RES"; else echo "$name FAIL" >> "$RES"; fi; tail -n 6 "$OUT/$name.log"; }
+# ONLY=admin,redirects,headers runs just those steps.
+want() { [ -z "${ONLY:-}" ] || [[ ",$ONLY," == *",$1,"* ]]; }
+run() { local name="$1"; shift; want "$name" || return 0; echo "===== $name"; if "$@" > "$OUT/$name.log" 2>&1; then echo "$name PASS" >> "$RES"; else echo "$name FAIL" >> "$RES"; fi; tail -n 6 "$OUT/$name.log"; }
 
 # Every URL the site lists, as routes relative to the base ("" is the home page).
 : > "$OUT/routes.txt"
@@ -68,7 +70,7 @@ redirects_all() {
 admin_sweep() {
   [ -n "${ADMIN_TEST_EMAIL:-}" ] || { echo "skipped: ADMIN_TEST_EMAIL not set"; return 0; }
   rm -f "$OUT/.cookies"
-  local tok; tok=$(curl -s -c "$OUT/.cookies" "$BASE/admin/login/" | grep -oE 'name="csrf" value="[^"]+"' | sed -E 's/.*value="([^"]+)"/\1/')
+  local tok; tok=$(curl -s -c "$OUT/.cookies" "$BASE/admin/login/" | grep -oE 'name="csrf" value="[^"]+"' | head -1 | sed -E 's/.*value="([^"]+)"/\1/')
   curl -s -o /dev/null -b "$OUT/.cookies" -c "$OUT/.cookies" --data-urlencode "csrf=$tok" --data-urlencode "email=$ADMIN_TEST_EMAIL" --data-urlencode "password=$ADMIN_TEST_PASSWORD" "$BASE/admin/login/"
   local bad=0
   for p in admin/ admin/settings/ admin/brands/ admin/orders/ admin/inbox/ admin/posts/ admin/posts/new/ admin/pages/ admin/pages/new/ admin/faqs/ admin/redirects/ admin/search/ admin/glossary/ admin/insights/ admin/experiments/ admin/sourcing/ admin/devices/ admin/password/ admin/history/ admin/pens/ admin/redirects.csv admin/history.csv; do

@@ -91,7 +91,8 @@ code{font-family:Menlo,Consolas,monospace;font-size:.9em;background:var(--grey);
 .hero-copy > *{max-width:100%}
 .hero .kicker{display:inline-flex;align-items:center;gap:8px;margin:0;font-size:15px;font-weight:500;letter-spacing:.12em;color:var(--ink)}
 .kicker-nib{color:var(--red)}
-.hero h1{font-family:var(--sans);font-weight:700;font-size:clamp(64px,3rem + 6vw,136px);line-height:.92;letter-spacing:-.02em;color:var(--red);margin:0 0 6px;text-wrap:balance}
+/* The pen's name never breaks inside a word; site.js [data-fit-words] shrinks it until the longest word fits. */
+.hero h1{font-family:var(--sans);font-weight:700;font-size:clamp(64px,3rem + 6vw,136px);line-height:.92;letter-spacing:-.02em;color:var(--red);margin:0 0 6px;text-wrap:balance;overflow-wrap:normal;word-break:normal;hyphens:manual}
 .hero-text{font-size:19px;line-height:1.55;color:var(--ink-2);max-width:min(44ch,100%)}
 .hero-specs{display:flex;flex-wrap:wrap;gap:var(--s3) 52px;margin:6px 0 10px;max-width:100%}
 .hero-specs div{display:flex;flex-direction:column;gap:6px}

@@ -101,6 +101,36 @@
   });
   document.addEventListener("keydown", function (e) { if (e.key === "Escape") glClose(); });
 
+  // [data-fit-words]: a heading that must never split a word across lines (the homepage pen name).
+  // Starts from its CSS size and steps down until its longest word fits the column; re-run on resize
+  // and once the web font has loaded, since both change the word's width.
+  $$("[data-fit-words]").forEach(function (el) {
+    // A hyphenated name ("Wahl-Eversharp") stays whole too: each such word goes in a no-wrap span.
+    if (el.children.length === 0 && el.textContent.indexOf("-") !== -1) {
+      var parts = el.textContent.split(/(\s+)/);
+      el.textContent = "";
+      parts.forEach(function (t) {
+        if (t.indexOf("-") !== -1 && !/\s/.test(t)) { var sp = document.createElement("span"); sp.style.whiteSpace = "nowrap"; sp.textContent = t; el.appendChild(sp); }
+        else el.appendChild(document.createTextNode(t));
+      });
+    }
+    var fit = function () {
+      el.style.fontSize = "";
+      if (el.scrollWidth <= el.clientWidth + 1) return;
+      var lo = 16, hi = parseFloat(getComputedStyle(el).fontSize);
+      for (var i = 0; i < 10; i++) {
+        var mid = (lo + hi) / 2;
+        el.style.fontSize = mid + "px";
+        if (el.scrollWidth <= el.clientWidth + 1) lo = mid; else hi = mid;
+      }
+      el.style.fontSize = Math.floor(lo) + "px";
+    };
+    fit();
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(fit);
+    if (window.ResizeObserver) { var last = 0; new ResizeObserver(function (e) { var w = Math.round(e[0].contentRect.width); if (w !== last) { last = w; fit(); } }).observe(el.parentNode); }
+    else window.addEventListener("resize", fit);
+  });
+
   // "Ask the guide about this pen" links land on the home page with a sku hint the guide reads
   if (location.hash.indexOf("#ask") === 0) { var a = $("#ask"); if (a) setTimeout(function () { a.scrollIntoView({ block: "start" }); }, 50); }
 })();

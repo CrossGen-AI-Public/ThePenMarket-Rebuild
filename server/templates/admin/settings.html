@@ -31,6 +31,19 @@
     </form>
   </section>
   {% endif %}
+  <section class="adm-form adm-hero-photo">
+    <h2>Automatic cut-outs from your Mac</h2>
+    {% if helper_on %}
+    <p><b>On.</b> {% if helper_seen.is_empty() %}Your Mac has not checked in yet (it does every 15 minutes while it is on).{% else %}Your Mac last checked in on {{ helper_seen }}.{% endif %} {% if helper_waiting == 0 %}Every pen for sale has its cut-out.{% else %}{{ helper_waiting }} {% if helper_waiting == 1 %}pen is{% else %}pens are{% endif %} waiting for one.{% endif %}</p>
+    {% else %}
+    <p>Your Mac can take the background out of each new pen's first photo by itself, with the same Remove Background as Finder, and send it here. {% if helper_waiting > 0 %}{{ helper_waiting }} {% if helper_waiting == 1 %}pen is{% else %}pens are{% endif %} waiting for a cut-out now.{% endif %}</p>
+    {% endif %}
+    <form method="post" action="/admin/settings/cutout-helper/">
+      <input type="hidden" name="csrf" value="{{ page.csrf }}">
+      <button type="submit" class="btn btn-outline" name="action" value="on">{% if helper_on %}Set up a Mac again (new key){% else %}Set up a Mac{% endif %}</button>
+      {% if helper_on %}<button type="submit" class="btn btn-ghost" name="action" value="off">Turn off</button>{% endif %}
+    </form>
+  </section>
   <form class="adm-form" method="post" action="/admin/settings/">
     <input type="hidden" name="csrf" value="{{ page.csrf }}">
     <h2>The pen at the top of the homepage</h2>

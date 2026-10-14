@@ -150,6 +150,10 @@ pub struct SettingsTpl {
     /// The pen leading the homepage (chosen or newest) and its own photo, for the cut-out upload.
     pub hero_title: String,
     pub hero_plain: String,
+    /// The helper on his Mac that makes cut-outs by itself: set up, when it last asked, pens waiting.
+    pub helper_on: bool,
+    pub helper_seen: String,
+    pub helper_waiting: usize,
     pub popular_on: bool,
     pub hero_photo: bool,
     pub hero_experiment: bool,
@@ -228,6 +232,13 @@ pub async fn settings_page(AxState(state): AxState<State>, Extension(cookie): Ex
         hero_title = crate::db::products_by_ids(&state.pool, &[id], true).await?.into_iter().next().map(|p| p.short_title).unwrap_or_default();
     }
     let hero_flipped = match leading { Some(id) => crate::hero_photo::flipped(&state, id).await, None => false };
+    let helper_on = settings::get(&state.pool, crate::cutout_helper::KEY_HASH).await?.is_some();
+    let helper_seen = settings::get(&state.pool, crate::cutout_helper::LAST_SEEN)
+        .await?
+        .and_then(|v| v.as_str().and_then(|t| chrono::DateTime::parse_from_rfc3339(t).ok()))
+        .map(|t| t.with_timezone(&chrono::Utc).format("%B %-d at %H:%M UTC").to_string())
+        .unwrap_or_default();
+    let helper_waiting = crate::cutout_helper::waiting(&state).await.map(|w| w.len()).unwrap_or(0);
     html(&SettingsTpl {
         page: meta(&state, "Homepage and photos", "/admin/settings/", &cookie),
         saved: q.saved == "1",
@@ -238,6 +249,9 @@ pub async fn settings_page(AxState(state): AxState<State>, Extension(cookie): Ex
         hero_flipped,
         hero_title,
         hero_plain,
+        helper_on,
+        helper_seen,
+        helper_waiting,
         popular_on: settings::popular_section(&state.pool).await?,
         hero_photo: settings::hero_photo(&state.pool).await?,
         hero_experiment: crate::insights::variant(&state, "hero-stage").is_some(),
@@ -367,22 +381,49 @@ pub async fn hero_cutout(AxState(state): AxState<State>, Extension(cookie): Exte
     let Some(bytes) = bytes else {
         return Err(AppError::BadRequest("No photo was attached. Go back and choose the cut-out file.".into()));
     };
-    let Some(rel) = crate::hero_photo::lead_photo(&state, product_id).await? else {
-        return Err(AppError::BadRequest("That pen has no photo yet. Add one on its page first.".into()));
-    };
-    let dest = state.cfg.media_dir.join(crate::media::cutout_rel(&rel));
-    match crate::media::save_cutout_upload_async(bytes, dest).await {
-        Ok(crate::media::CutoutUpload::Saved { .. }) => {}
-        Ok(crate::media::CutoutUpload::StillHasBackground) => {
+    match crate::hero_photo::store_cutout(&state, product_id, bytes).await? {
+        crate::hero_photo::Stored::Done => {}
+        crate::hero_photo::Stored::NoPhoto => return Err(AppError::BadRequest("That pen has no photo yet. Add one on its page first.".into())),
+        crate::hero_photo::Stored::StillHasBackground => {
             return Err(AppError::BadRequest("That photo still has its background. On your Mac, right-click the photo in Finder and choose Quick Actions, then Remove Background (or open it in Preview: Tools, Remove Background). Then upload the new file it makes.".into()));
         }
-        Err(_) => return Err(AppError::BadRequest("That file could not be read as a photo (PNG, JPEG or WebP). Go back and try again.".into())),
-    }
-    if let Err(e) = crate::hero_photo::remake(&state, product_id, &rel).await {
-        tracing::warn!("homepage photo remake failed: {e:#}");
+        crate::hero_photo::Stored::Unreadable => return Err(AppError::BadRequest("That file could not be read as a photo (PNG, JPEG or WebP). Go back and try again.".into())),
     }
     store::audit(&state.pool, "admin.hero_cutout", serde_json::json!({"email": admin.email, "ip": admin.ip, "product_id": product_id})).await?;
     Ok(Redirect::to("/admin/settings/?saved=1").into_response())
+}
+
+#[derive(Template)]
+#[template(path = "admin/cutout_helper.html")]
+pub struct HelperTpl {
+    pub page: PageMeta,
+    pub command: String,
+}
+
+#[derive(Deserialize)]
+pub struct HelperForm {
+    pub csrf: String,
+    pub action: String,
+}
+
+/// Set up (a new key, shown once as the line to paste into Terminal) or turn off the cut-out helper.
+pub async fn cutout_helper(AxState(state): AxState<State>, Extension(cookie): Extension<CsrfCookie>, Auth(admin): Auth, Form(form): Form<HelperForm>) -> AppResult {
+    check(&state, &cookie, &admin, &form.csrf)?;
+    if form.action == "off" {
+        settings::clear(&state.pool, crate::cutout_helper::KEY_HASH).await?;
+        settings::clear(&state.pool, crate::cutout_helper::LAST_SEEN).await?;
+        store::audit(&state.pool, "admin.cutout_helper_off", serde_json::json!({"email": admin.email, "ip": admin.ip})).await?;
+        return Ok(Redirect::to("/admin/settings/?saved=1").into_response());
+    }
+    let key = super::auth::random_token(32);
+    settings::set(&state.pool, crate::cutout_helper::KEY_HASH, serde_json::json!(crate::cutout_helper::hash(&key))).await?;
+    settings::clear(&state.pool, crate::cutout_helper::LAST_SEEN).await?;
+    store::audit(&state.pool, "admin.cutout_helper_key", serde_json::json!({"email": admin.email, "ip": admin.ip})).await?;
+    let origin = state.cfg.site_origin.trim_end_matches('/');
+    html(&HelperTpl {
+        page: meta(&state, "Automatic cut-outs on your Mac", "/admin/settings/", &cookie),
+        command: format!("curl -fsSL '{origin}/static/helper/install.sh' | bash -s -- '{origin}' '{key}'"),
+    })
 }
 
 // ---- brands ------------------------------------------------------------------------------------------

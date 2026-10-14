@@ -124,3 +124,30 @@ pub async fn flipped(state: &State, product_id: i32) -> bool {
         .and_then(|v| v.as_array().map(|a| a.iter().any(|x| x.as_i64() == Some(product_id as i64))))
         .unwrap_or(false)
 }
+
+pub enum Stored {
+    Done,
+    StillHasBackground,
+    NoPhoto,
+    Unreadable,
+}
+
+/// Store a cut-out of a pen's lead photo (his upload, or the helper on his Mac) and stand it up again.
+pub async fn store_cutout(state: &State, product_id: i32, bytes: Vec<u8>) -> anyhow::Result<Stored> {
+    let Some(rel) = lead_photo(state, product_id).await? else {
+        return Ok(Stored::NoPhoto);
+    };
+    let media = state.cfg.media_dir.clone();
+    let dest = media.join(cutout_rel(&rel));
+    match thepenmarket::media::save_cutout_upload_async(bytes, dest.clone()).await {
+        Ok(thepenmarket::media::CutoutUpload::Saved { .. }) => {}
+        Ok(thepenmarket::media::CutoutUpload::StillHasBackground) => return Ok(Stored::StillHasBackground),
+        Err(_) => return Ok(Stored::Unreadable),
+    }
+    let _ = std::fs::remove_file(media.join(format!("{}.none", cutout_rel(&rel))));
+    let _ = std::fs::remove_file(media.join(format!("{}.none", upright_rel(&rel))));
+    if let Err(e) = remake(state, product_id, &rel).await {
+        tracing::warn!("homepage photo remake failed: {e:#}");
+    }
+    Ok(Stored::Done)
+}

@@ -5,6 +5,7 @@
 mod admin;
 mod app;
 mod catalog;
+mod cutout_helper;
 mod db;
 mod glossary;
 mod guide;

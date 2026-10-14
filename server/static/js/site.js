@@ -101,6 +101,23 @@
   });
   document.addEventListener("keydown", function (e) { if (e.key === "Escape") glClose(); });
 
+  // Nav bar safety net: whatever the window width, zoom or font, if a nav link would come within 16px of
+  // the logo or the icons, hand over to the Menu button (html.nav-collapsed) instead of overlapping.
+  var nav = $(".mainnav"), logo = $(".logo"), tools = $(".masthead-tools");
+  if (nav && logo && tools) {
+    var navFit = function () {
+      var root = document.documentElement;
+      root.classList.remove("nav-collapsed");
+      if (getComputedStyle(nav).display === "none") return;
+      var links = $$("a", nav); if (!links.length) return;
+      var first = links[0].getBoundingClientRect(), last = links[links.length - 1].getBoundingClientRect();
+      if (first.left < logo.getBoundingClientRect().right + 16 || last.right > tools.getBoundingClientRect().left - 16) root.classList.add("nav-collapsed");
+    };
+    navFit();
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(navFit);
+    window.addEventListener("resize", navFit);
+  }
+
   // [data-fit-words]: a heading that must never split a word across lines (the homepage pen name).
   // Starts from its CSS size and steps down until its longest word fits the column; re-run on resize
   // and once the web font has loaded, since both change the word's width.

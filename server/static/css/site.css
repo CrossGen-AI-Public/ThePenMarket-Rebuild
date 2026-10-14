@@ -75,6 +75,7 @@ code{font-family:Menlo,Consolas,monospace;font-size:.9em;background:var(--grey);
 /* eight links: they tighten on narrower screens, then hand over to the Menu button (it lists every page) */
 @media (max-width:1440px){.mainnav{gap:clamp(16px,1.9vw,28px)}}
 @media (max-width:1240px){.mainnav{gap:16px;font-size:15px}}
+html.nav-collapsed .mainnav{display:none}html.nav-collapsed .menu-btn{display:inline-block}html.nav-collapsed .masthead-row{grid-template-columns:250px minmax(0,1fr)}html.nav-collapsed .masthead-tools{justify-content:flex-end}
 @media (max-width:1180px){.mainnav{display:none}.menu-btn{display:inline-block}.masthead-row{grid-template-columns:250px minmax(0,1fr)}.masthead-tools{justify-content:flex-end}}
 @media (max-width:820px){
   .masthead-row{grid-template-columns:190px minmax(0,1fr);gap:var(--s4);padding-top:20px}

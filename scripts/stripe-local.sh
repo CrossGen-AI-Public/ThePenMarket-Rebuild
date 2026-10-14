@@ -8,7 +8,7 @@
 # Live keys (sk_live_/rk_live_) are refused: they belong only on the production server.
 set -euo pipefail
 ENV_FILE="${ENV_FILE:-$HOME/.config/thepenmarket.env}"
-EVENTS="checkout.session.completed,checkout.session.expired,checkout.session.async_payment_succeeded,checkout.session.async_payment_failed"
+EVENTS="checkout.session.completed,checkout.session.expired,checkout.session.async_payment_succeeded,checkout.session.async_payment_failed,invoice.paid,customer.subscription.deleted"
 
 put() { # put NAME VALUE: replace or append NAME=VALUE in the env file, mode 600, value never printed
   local name="$1" value="$2" tmp

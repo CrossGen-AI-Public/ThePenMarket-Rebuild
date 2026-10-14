@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
-# Deploy the public copy to the crossgen-ai.com droplet. Run ON the droplet (root):
+# Deploy the site to a droplet. Run ON the droplet (root), normally through scripts/push-droplet.sh:
 #   ssh crossgen-droplet 'bash -s' < scripts/deploy-droplet.sh
+#   ssh penmarket-do 'SITE_HOST=new.thepenmarket.com bash -s' < scripts/deploy-droplet.sh
+# On CrossGen's droplet it adds a block to the shared Caddy in /root/proxy. On a droplet with no shared
+# Caddy (Nathaniel's own) it runs its own Caddy container on ports 80/443 for SITE_HOST.
 # Expects, already on the box (put there by scripts/push-droplet.sh from sparky):
 #   /srv/apps/thepenmarket/build/   the server/ directory (Dockerfile, src, templates, static, data)
 #   /srv/apps/thepenmarket/media/   the product photos (read-write: the admin adds photos under uploads/admin/)
@@ -11,12 +14,22 @@
 set -euo pipefail
 NAME=thepenmarket
 DIR=/srv/apps/$NAME
-HOST=penmarket.crossgen-ai.com
+HOST="${SITE_HOST:-penmarket.crossgen-ai.com}"
+case "$HOST" in *[!A-Za-z0-9.-]*|"") echo "SITE_HOST must be a bare host name" >&2; exit 1 ;; esac
 CADDYFILE=/root/proxy/Caddyfile
+SHARED_CADDY=0; [ -f "$CADDYFILE" ] && docker ps --format '{{.Names}}' | grep -qx proxy-caddy-1 && SHARED_CADDY=1
 DB=thepenmarket-db
 
-[ -f "$DIR/.env" ] && grep -q '^DATABASE_URL=.\+' "$DIR/.env" && grep -q '^GUIDE_AI_KEY=.\+' "$DIR/.env" || { echo "missing $DIR/.env with DATABASE_URL and GUIDE_AI_*" >&2; exit 1; }
+[ -f "$DIR/.env" ] && grep -q '^DATABASE_URL=.\+' "$DIR/.env" || { echo "missing $DIR/.env with DATABASE_URL" >&2; exit 1; }
+grep -q '^GUIDE_AI_KEY=.\+' "$DIR/.env" || echo "note: GUIDE_AI_KEY is empty in $DIR/.env; the assistant shows its offline notice until it is set"
 [ -d "$DIR/build" ] || { echo "missing $DIR/build (rsync server/ there first)" >&2; exit 1; }
+docker network inspect web >/dev/null 2>&1 || docker network create web >/dev/null
+# A 1-2 GB droplet runs out of memory compiling the release build; give it swap once.
+if [ "$(awk '/MemTotal/ {print int($2/1024)}' /proc/meminfo)" -lt 3500 ] && [ "$(awk 'NR>1' /proc/swaps | wc -l)" = 0 ]; then
+  fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile >/dev/null && swapon /swapfile
+  grep -q '^/swapfile ' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
+  echo "swap: 2G added for the build"
+fi
 
 # 1. Postgres on a private network only the app joins (data in a named volume). Nothing else on the
 #    shared `web` network can reach the database.
@@ -58,10 +71,25 @@ docker network connect "$INTERNAL" "$NAME"
 docker start "$NAME" >/dev/null
 
 # 4. Caddy route (idempotent)
-if ! grep -q "^$HOST {" "$CADDYFILE"; then
-  printf '\n%s {\n    request_body {\n        max_size 13MB\n    }\n    header -Server\n    reverse_proxy %s:8140\n}\n' "$HOST" "$NAME" >> "$CADDYFILE"
-  docker exec proxy-caddy-1 caddy reload --config /etc/caddy/Caddyfile >/dev/null 2>&1 || docker restart proxy-caddy-1 >/dev/null
-  echo "caddy: added $HOST"
+if [ "$SHARED_CADDY" = 1 ]; then
+  if ! grep -q "^$HOST {" "$CADDYFILE"; then
+    printf '\n%s {\n    request_body {\n        max_size 13MB\n    }\n    header -Server\n    reverse_proxy %s:8140\n}\n' "$HOST" "$NAME" >> "$CADDYFILE"
+    docker exec proxy-caddy-1 caddy reload --config /etc/caddy/Caddyfile >/dev/null 2>&1 || docker restart proxy-caddy-1 >/dev/null
+    echo "caddy: added $HOST"
+  fi
+else
+  # His own droplet: one Caddy container for this site only, certificates kept in a named volume.
+  mkdir -p "$DIR/caddy"
+  printf '%s {\n    request_body {\n        max_size 13MB\n    }\n    header -Server\n    reverse_proxy %s:8140\n}\n' "$HOST" "$NAME" > "$DIR/caddy/Caddyfile.new"
+  if ! cmp -s "$DIR/caddy/Caddyfile.new" "$DIR/caddy/Caddyfile" || ! docker ps --format '{{.Names}}' | grep -qx "$NAME-caddy"; then
+    mv "$DIR/caddy/Caddyfile.new" "$DIR/caddy/Caddyfile"
+    docker rm -f "$NAME-caddy" >/dev/null 2>&1 || true
+    docker run -d --name "$NAME-caddy" --restart unless-stopped --network web -p 80:80 -p 443:443 -p 443:443/udp \
+      -v "$DIR/caddy/Caddyfile:/etc/caddy/Caddyfile:ro" -v "${NAME}_caddy_data:/data" -v "${NAME}_caddy_config:/config" caddy:2-alpine >/dev/null
+    echo "caddy: own container serving $HOST"
+  else
+    rm -f "$DIR/caddy/Caddyfile.new"
+  fi
 fi
 
 # 5. health, in-container then through Caddy

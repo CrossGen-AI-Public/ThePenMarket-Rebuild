@@ -3,6 +3,34 @@
 <div class="admin-page">
   <div class="adm-top"><div><h1>Homepage and photos</h1><p class="lead"><a href="/admin/">Admin home</a></p></div></div>
   {% if saved %}<div class="adm-ok">Saved.</div>{% endif %}
+  {% if hero_product_id > 0 %}
+  <section class="adm-form adm-hero-photo">
+    <h2>The homepage photo of {{ hero_title }}</h2>
+    {% if !hero_image.is_empty() %}
+    <img src="{{ hero_image }}" alt="The homepage photo of {{ hero_title }}" style="max-height:260px;width:auto;display:block;margin:8px 0 12px">
+    <p class="adm-hint">Your photo with the background taken out and the pen stood up beside its cap. If the nib ended up at the bottom, turn it around.</p>
+    <form method="post" action="/admin/settings/hero-flip/">
+      <input type="hidden" name="csrf" value="{{ page.csrf }}">
+      <button type="submit" class="btn btn-outline" name="product_id" value="{{ hero_product_id }}">{% if hero_flipped %}Turn it back the way it was{% else %}Turn the pen the other way up{% endif %}</button>
+    </form>
+    {% else %}
+    <img src="{{ hero_plain }}" alt="Your photo of {{ hero_title }}" style="max-height:200px;width:auto;display:block;margin:8px 0 12px">
+    <p>The homepage shows this photo as it is, background and all, because it has no cut-out yet.</p>
+    {% endif %}
+    <h3>{% if hero_image.is_empty() %}Add the cut-out{% else %}Use a different cut-out{% endif %}</h3>
+    <ol class="adm-hint">
+      <li>On your Mac, find this photo in Finder (the same file you added to the pen).</li>
+      <li>Right-click it and choose <b>Quick Actions</b>, then <b>Remove Background</b>. Your Mac saves a new copy with only the pen and cap. (Or open it in Preview: <b>Tools</b>, then <b>Remove Background</b>, and save.)</li>
+      <li>Choose that new file below. The site stands the pen up beside its cap by itself.</li>
+    </ol>
+    <form method="post" action="/admin/settings/hero-cutout/" enctype="multipart/form-data">
+      <input type="hidden" name="csrf" value="{{ page.csrf }}">
+      <input type="hidden" name="product_id" value="{{ hero_product_id }}">
+      <label class="btn btn-outline adm-file">Choose the cut-out<input type="file" name="photo" accept="image/png,image/webp,image/jpeg" required></label>
+      <button type="submit" class="btn">Upload</button>
+    </form>
+  </section>
+  {% endif %}
   <form class="adm-form" method="post" action="/admin/settings/">
     <input type="hidden" name="csrf" value="{{ page.csrf }}">
     <h2>The pen at the top of the homepage</h2>
@@ -11,13 +39,6 @@
     {% else %}
     <p>You chose <a href="{{ featured_url }}"><b>{{ featured_title }}</b></a>. When it sells, the homepage goes back to the newest pen by itself.</p>
     <label class="adm-check"><input type="checkbox" name="clear_featured" value="1"> Go back to showing the newest pen</label>
-    {% endif %}
-    {% if !hero_image.is_empty() %}
-    <div class="adm-hero-preview">
-      <img src="{{ hero_image }}" alt="The homepage photo of this pen" style="max-height:260px;width:auto;display:block;margin:8px 0 12px">
-      <p class="adm-hint">This is your photo with the background taken out and the pen stood up beside its cap. If the nib ended up at the bottom, turn it around.</p>
-      <button type="submit" class="btn btn-outline" formaction="/admin/settings/hero-flip/" formmethod="post" name="product_id" value="{{ hero_product_id }}">{% if hero_flipped %}Turn it back the way it was{% else %}Turn the pen the other way up{% endif %}</button>
-    </div>
     {% endif %}
     <h2>Your photograph or the spinning 3D pen</h2>
     <fieldset class="adm-radio">

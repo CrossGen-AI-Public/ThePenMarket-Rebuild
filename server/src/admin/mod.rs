@@ -128,6 +128,7 @@ pub fn router() -> Router<State> {
         .route("/admin/", get(manage::home))
         .route("/admin/settings/", get(manage::settings_page).post(manage::settings_save))
         .route("/admin/settings/hero-flip/", post(manage::hero_flip))
+        .route("/admin/settings/hero-cutout/", post(manage::hero_cutout).layer(axum::extract::DefaultBodyLimit::max(12 * 1024 * 1024)))
         .route("/admin/brands/", get(manage::brands).post(manage::brands_save))
         .route("/admin/orders/", get(manage::orders))
         .route("/admin/inbox/", get(manage::inbox))

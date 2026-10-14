@@ -198,3 +198,9 @@ table.adm-report tr.is-same td:last-child{color:var(--muted)}
 .section-admin table.adm-ship th:nth-child(2),.section-admin table.adm-ship th:nth-child(3){width:24%}
 .section-admin table.adm-ship input,.section-admin table.adm-ship select{width:100%;min-width:0;max-width:100%;box-sizing:border-box}
 @media (max-width:600px){.section-admin table.adm-ship,.section-admin table.adm-ship tbody,.section-admin table.adm-ship tr,.section-admin table.adm-ship td{display:block;width:100%}.section-admin table.adm-ship tr:first-child{display:none}.section-admin table.adm-ship tr{padding:8px 0;border-bottom:1px solid var(--line)}.section-admin table.adm-ship td{border:0;padding:3px 0}}
+/* settings: the homepage photo of the leading pen (cut-out, stand-up, turn around, upload) */
+.adm-hero-photo{margin-bottom:var(--s6)}
+.adm-hero-photo h3{margin:28px 0 8px}
+.adm-hero-photo ol{list-style:decimal;padding-left:1.4em;margin:0 0 14px}
+.adm-hero-photo ol li{margin:4px 0}
+.adm-hero-photo form{display:flex;flex-wrap:wrap;gap:10px;align-items:center}

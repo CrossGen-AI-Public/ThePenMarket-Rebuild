@@ -7,7 +7,7 @@ use crate::app::{html, AppError, AppResult, PageMeta, State};
 use crate::security::{self, CsrfCookie};
 use crate::settings;
 use askama::Template;
-use axum::extract::{Form, Path, Query, State as AxState};
+use axum::extract::{Form, Multipart, Path, Query, State as AxState};
 use axum::http::{header, HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Redirect};
 use axum::{Extension, Json};
@@ -147,6 +147,9 @@ pub struct SettingsTpl {
     pub hero_image: String,
     pub hero_product_id: i32,
     pub hero_flipped: bool,
+    /// The pen leading the homepage (chosen or newest) and its own photo, for the cut-out upload.
+    pub hero_title: String,
+    pub hero_plain: String,
     pub popular_on: bool,
     pub hero_photo: bool,
     pub hero_experiment: bool,
@@ -216,11 +219,13 @@ pub async fn settings_page(AxState(state): AxState<State>, Extension(cookie): Ex
         Some(p) => Some(p.id),
         None => crate::db::products_by_slugs_or_recent(&state.pool, 1, &[], true, true).await?.first().map(|p| p.id),
     };
-    let mut hero_image = String::new();
+    let (mut hero_image, mut hero_plain, mut hero_title) = (String::new(), String::new(), String::new());
     if let Some(id) = leading {
         if let Some(rel) = crate::hero_photo::lead_photo(&state, id).await? {
             hero_image = crate::hero_photo::best(&state, id, &rel).await.unwrap_or_default();
+            hero_plain = format!("/media/{}", crate::media::variant_rel(&rel, 480));
         }
+        hero_title = crate::db::products_by_ids(&state.pool, &[id], true).await?.into_iter().next().map(|p| p.short_title).unwrap_or_default();
     }
     let hero_flipped = match leading { Some(id) => crate::hero_photo::flipped(&state, id).await, None => false };
     html(&SettingsTpl {
@@ -231,6 +236,8 @@ pub async fn settings_page(AxState(state): AxState<State>, Extension(cookie): Ex
         hero_image,
         hero_product_id: leading.unwrap_or(0),
         hero_flipped,
+        hero_title,
+        hero_plain,
         popular_on: settings::popular_section(&state.pool).await?,
         hero_photo: settings::hero_photo(&state.pool).await?,
         hero_experiment: crate::insights::variant(&state, "hero-stage").is_some(),
@@ -333,6 +340,48 @@ pub async fn hero_flip(AxState(state): AxState<State>, Extension(cookie): Extens
         }
     }
     store::audit(&state.pool, "admin.hero_flip", serde_json::json!({"email": admin.email, "ip": admin.ip, "product_id": form.product_id, "flipped": now_flipped})).await?;
+    Ok(Redirect::to("/admin/settings/?saved=1").into_response())
+}
+
+/// His cut-out of the homepage pen's photo (made on his Mac: Finder, Quick Actions, Remove Background).
+/// Stored as that photo's cutout; the site then stands it upright as for any other.
+pub async fn hero_cutout(AxState(state): AxState<State>, Extension(cookie): Extension<CsrfCookie>, Auth(admin): Auth, mut mp: Multipart) -> AppResult {
+    let (mut csrf, mut product_id, mut bytes) = (String::new(), 0i32, None::<Vec<u8>>);
+    while let Some(field) = mp.next_field().await.map_err(|e| AppError::BadRequest(format!("upload: {e}")))? {
+        match field.name() {
+            Some("csrf") => csrf = field.text().await.unwrap_or_default(),
+            Some("product_id") => product_id = field.text().await.unwrap_or_default().trim().parse().unwrap_or(0),
+            Some("photo") => {
+                let b = field.bytes().await.map_err(|e| AppError::BadRequest(format!("photo: {e}")))?;
+                if b.len() > 10 * 1024 * 1024 {
+                    return Err(AppError::BadRequest("Photos must be under 10 MB. Go back and try a smaller file.".into()));
+                }
+                if !b.is_empty() {
+                    bytes = Some(b.to_vec());
+                }
+            }
+            _ => {}
+        }
+    }
+    check(&state, &cookie, &admin, &csrf)?;
+    let Some(bytes) = bytes else {
+        return Err(AppError::BadRequest("No photo was attached. Go back and choose the cut-out file.".into()));
+    };
+    let Some(rel) = crate::hero_photo::lead_photo(&state, product_id).await? else {
+        return Err(AppError::BadRequest("That pen has no photo yet. Add one on its page first.".into()));
+    };
+    let dest = state.cfg.media_dir.join(crate::media::cutout_rel(&rel));
+    match crate::media::save_cutout_upload_async(bytes, dest).await {
+        Ok(crate::media::CutoutUpload::Saved { .. }) => {}
+        Ok(crate::media::CutoutUpload::StillHasBackground) => {
+            return Err(AppError::BadRequest("That photo still has its background. On your Mac, right-click the photo in Finder and choose Quick Actions, then Remove Background (or open it in Preview: Tools, Remove Background). Then upload the new file it makes.".into()));
+        }
+        Err(_) => return Err(AppError::BadRequest("That file could not be read as a photo (PNG, JPEG or WebP). Go back and try again.".into())),
+    }
+    if let Err(e) = crate::hero_photo::remake(&state, product_id, &rel).await {
+        tracing::warn!("homepage photo remake failed: {e:#}");
+    }
+    store::audit(&state.pool, "admin.hero_cutout", serde_json::json!({"email": admin.email, "ip": admin.ip, "product_id": product_id})).await?;
     Ok(Redirect::to("/admin/settings/?saved=1").into_response())
 }
 

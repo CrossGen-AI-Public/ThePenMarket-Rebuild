@@ -43,6 +43,7 @@ pub struct HomeTpl {
     pub featured: ProductCard,
     pub featured_text: String,
     pub featured_image: String,
+    pub featured_cutout: String,
     pub featured_trim: String,
     pub featured_pattern: String,
     pub featured_kind: String,
@@ -104,11 +105,20 @@ pub async fn home(AxState(state): AxState<State>, axum::extract::RawQuery(query)
     } else {
         String::new()
     };
-    let featured_image = if featured.id > 0 {
-        db::product_images(&state.pool, featured.id).await?.first().map(|i| i.large.clone()).unwrap_or_else(|| featured.image.clone())
-    } else {
-        String::new()
+    let first_photo = if featured.id > 0 { db::product_images(&state.pool, featured.id).await?.into_iter().next() } else { None };
+    let featured_image = match (&first_photo, featured.id > 0) {
+        (Some(i), _) => i.large.clone(),
+        (None, true) => featured.image.clone(),
+        (None, false) => String::new(),
     };
+    // The same photo with its backdrop removed, when one has been made (scripts/make-cutouts.sh).
+    let mut featured_cutout = String::new();
+    if let Some(rel) = first_photo.as_ref().and_then(|i| i.full.strip_prefix("/media/")).filter(|r| !r.contains("..")) {
+        let c = thepenmarket::media::cutout_rel(rel);
+        if tokio::fs::metadata(state.cfg.media_dir.join(&c)).await.map(|m| m.is_file()).unwrap_or(false) {
+            featured_cutout = format!("/media/{c}");
+        }
+    }
     // What the 3D pen is made of, read from Nathaniel's own words about the featured pen.
     let lower = format!("{} {}", featured.title, featured_text).to_lowercase();
     let featured_trim = if lower.contains("chrome") || lower.contains("nickel") || lower.contains("silver") || lower.contains("steel") || lower.contains("rhodium") || lower.contains("platinum") { "silver" } else { "gold" }.to_string();
@@ -244,6 +254,7 @@ pub async fn home(AxState(state): AxState<State>, axum::extract::RawQuery(query)
         featured,
         featured_text,
         featured_image,
+        featured_cutout,
         featured_trim,
         featured_pattern,
         featured_kind,

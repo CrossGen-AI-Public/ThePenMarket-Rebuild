@@ -22,6 +22,15 @@ fn variant_path(dest: &Path, w: u32) -> PathBuf {
     dest.with_file_name(format!("{stem}-{w}.{ext}"))
 }
 
+/// His photo with the backdrop taken out (only the pen and cap, transparent PNG), made on a Mac by
+/// `scripts/make-cutouts.sh`: `uploads/x/6971-Pen.jpg` -> `uploads/x/6971-Pen-cutout.png`. It may not exist.
+pub fn cutout_rel(rel: &str) -> String {
+    let p = Path::new(rel);
+    let stem = p.file_stem().and_then(|s| s.to_str()).unwrap_or("img");
+    let dir = p.parent().and_then(|d| d.to_str()).unwrap_or("");
+    if dir.is_empty() { format!("{stem}-cutout.png") } else { format!("{dir}/{stem}-cutout.png") }
+}
+
 pub fn variant_rel(rel: &str, w: u32) -> String {
     let p = Path::new(rel);
     let stem = p.file_stem().and_then(|s| s.to_str()).unwrap_or("img");

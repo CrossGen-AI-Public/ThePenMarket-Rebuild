@@ -457,6 +457,8 @@ button.hotspot:hover,button.hotspot.is-on{background:var(--red);color:#fff}
 .hotspot-label.is-focus{display:block!important;background:var(--ink);color:#fff}
 .hero-stage.is-photo .hero-fallback{display:flex}
 .hero-stage.is-photo canvas,.hero-stage.is-photo .hotspots{display:none}
+/* his photo with the backdrop removed: just the pen and cap over the page, no multiply blend */
+.hero-stage.is-cutout .hero-fallback img{mix-blend-mode:normal;filter:drop-shadow(0 18px 22px rgba(0,0,0,.12))}
 html.classic body{zoom:1.12}
 html.classic *{animation:none!important;transition:none!important;scroll-behavior:auto!important}
 html.classic .hero-stage canvas,html.classic .hotspots{display:none}

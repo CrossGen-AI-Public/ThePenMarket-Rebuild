@@ -193,9 +193,9 @@ pub struct ExperimentDef {
 pub const REGISTRY: &[ExperimentDef] = &[
     ExperimentDef {
         key: "hero-stage",
-        name: "Homepage pen: 3D model or photograph",
-        description: "Half of visitors see the interactive 3D pen at the top of the homepage, half see Nathaniel's photograph of the same pen. Tells you whether the interactive pen helps or gets in the way.",
-        variants: &[("3d", "Interactive 3D pen"), ("photo", "His photograph of the pen")],
+        name: "Homepage pen: photograph or 3D model",
+        description: "Half of visitors see Nathaniel's photograph of the homepage pen, half see the interactive 3D pen. Tells you whether the interactive pen helps or gets in the way.",
+        variants: &[("photo", "His photograph of the pen"), ("3d", "Interactive 3D pen")],
     },
     ExperimentDef {
         key: "home-popular",

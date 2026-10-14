@@ -15,8 +15,9 @@ pub const SHOT_LIST: &str = "photo_shot_list";
 /// His list of the ways people misspell a search ("Schaffer" for Sheaffer). Absent = the examples
 /// from his e-mail of 2026-10-07 (`spelling::default_list`).
 pub const SEARCH_SPELLINGS: &str = "search_spellings";
-/// What the homepage hero shows when no experiment decides: "3d" (the model) or "photo" (his real
-/// photograph of the featured pen).
+/// What the homepage hero shows when no experiment decides: "photo" (his real photograph of the
+/// featured pen) or "3d" (the model). Absent = the photograph: on 2026-10-12 he and Brittany agreed
+/// the generated model can get details wrong that pen people notice, so the 3D pen is opt-in.
 pub const HERO_MODE: &str = "hero_mode";
 /// His shipping rates for pens bought online (`shipping::ShippingOption` list). Absent = the three rates
 /// from his e-mail of 2026-10-12 (`shipping::default_list`); once saved, his list rules, even empty.
@@ -76,7 +77,7 @@ pub async fn search_spellings(pool: &PgPool) -> anyhow::Result<Vec<crate::spelli
 }
 
 pub async fn hero_photo(pool: &PgPool) -> anyhow::Result<bool> {
-    Ok(get(pool, HERO_MODE).await?.and_then(|v| v.as_str().map(|s| s == "photo")).unwrap_or(false))
+    Ok(get(pool, HERO_MODE).await?.and_then(|v| v.as_str().map(|s| s != "3d")).unwrap_or(true))
 }
 
 /// His shipping options, and whether he has saved his own list (false = the defaults from his e-mail).

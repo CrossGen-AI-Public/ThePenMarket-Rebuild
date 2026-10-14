@@ -12,13 +12,13 @@
     <p>You chose <a href="{{ featured_url }}"><b>{{ featured_title }}</b></a>. When it sells, the homepage goes back to the newest pen by itself.</p>
     <label class="adm-check"><input type="checkbox" name="clear_featured" value="1"> Go back to showing the newest pen</label>
     {% endif %}
-    <h2>Spinning 3D pen or your photograph</h2>
+    <h2>Your photograph or the spinning 3D pen</h2>
     <fieldset class="adm-radio">
       <legend>The top of the homepage shows the pen above as…</legend>
-      <label><input type="radio" name="hero" value="3d"{% if !hero_photo %} checked{% endif %}> the spinning 3D pen. It is a model, not a photograph: its colours and trim are read from your first photo of that pen, and its clip, nib and filling system can be clicked.</label>
       <label><input type="radio" name="hero" value="photo"{% if hero_photo %} checked{% endif %}> your own photograph of that pen, large. It is the first photo on the pen’s page, so reorder its photos to choose which one leads.</label>
+      <label><input type="radio" name="hero" value="3d"{% if !hero_photo %} checked{% endif %}> the spinning 3D pen. It is a model, not a photograph: its colours and trim are read from your first photo of that pen, and its clip, nib and filling system can be clicked.</label>
     </fieldset>
-    {% if hero_experiment %}<p class="adm-warnbox">The “Homepage pen: 3D model or photograph” experiment decides this right now (see <a href="/admin/experiments/">Experiments</a>). Your choice here takes over once it is reset.</p>{% endif %}
+    {% if hero_experiment %}<p class="adm-warnbox">The “Homepage pen: photograph or 3D model” experiment decides this right now (see <a href="/admin/experiments/">Experiments</a>). Your choice here takes over once it is reset.</p>{% endif %}
     <h2>Most Popular row</h2>
     <label class="adm-check"><input type="checkbox" name="popular" value="1"{% if popular_on %} checked{% endif %}> Show a “Most Popular” row on the homepage: the pens the most visitors opened in the last 30 days</label>
     <p class="adm-hint">It only appears once at least four pens have each been opened by three different visitors, so it never shows a guess.</p>

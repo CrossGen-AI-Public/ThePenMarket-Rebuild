@@ -7,7 +7,13 @@ export PATH="$HOME/.cargo/bin:$HOME/.local/bin:$PATH"
 PORT="${PORT:-8140}"
 cargo build --release 2>&1 | tail -3
 if [ "${SKIP_IMPORT:-}" != 1 ] && [ -d "$HOME/thepenmarket/backup" ]; then
-  ./target/release/import | tail -1
+  # The importer refuses once the site holds his edits, sales or posted listings; that is the database
+  # being kept on purpose, not a failed deploy. Any other import error still stops the deploy.
+  if ! out="$(./target/release/import 2>&1)"; then
+    if grep -q "refusing to re-import" <<<"$out"; then echo "import skipped, database kept: $(grep -o 'refusing to re-import.*' <<<"$out" | head -1)"; else echo "$out" | tail -20 >&2; exit 1; fi
+  else
+    echo "$out" | tail -1
+  fi
 fi
 mkdir -p "$HOME/.config/systemd/user"
 cp ops/thepenmarket.service "$HOME/.config/systemd/user/thepenmarket.service"

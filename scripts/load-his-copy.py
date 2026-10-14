@@ -8,7 +8,8 @@ yet) and $DATABASE_URL. Safe to run twice and safe after he has edited anything:
 
 - Pen Grading, Defining Nibs, Buyer's Guide: the body is filled only while it is still empty
   (2026-09-18-load-his-pages.sql guards every UPDATE), then a page that has his text and is still a
-  draft is published. He asked for these pages on the site; the words are his.
+  draft is published. He asked for these pages on the site; the words are his. An `admin.page_his_copy`
+  row in event_log then makes `import` (and so deploy.sh) leave the database alone.
 - His nib glossary: each "Term: definition" line fills that glossary entry's definition only while it
   is empty, or adds the entry if the glossary has no such word. Entries stay drafts: nothing in the
   glossary is visible until he publishes it at /admin/glossary/.
@@ -76,6 +77,11 @@ slugs = ",".join(f"'{s}'" for s in PAGE_SLUGS)
 psql(f"UPDATE page SET status = 'published', published_at = now(), modified_at = now() "
      f"WHERE custom AND slug IN ({slugs}) AND status = 'draft' AND body_html <> '';")
 print(psql(f"SELECT slug || ': ' || status || ', ' || length(body_html) || ' characters' FROM page WHERE slug IN ({slugs}) ORDER BY slug", read=True).strip())
+# Record it the way an edit in /admin/ is recorded, so `import` (run by deploy.sh) refuses to wipe these
+# pages: the page table is truncated on a re-import and they are not in the WordPress backup.
+psql(f"INSERT INTO event_log (kind, detail) SELECT 'admin.page_his_copy', jsonb_build_object('slugs', {lit(','.join(PAGE_SLUGS))}) "
+     f"WHERE EXISTS (SELECT 1 FROM page WHERE custom AND slug IN ({slugs}) AND body_html <> '') "
+     f"AND NOT EXISTS (SELECT 1 FROM event_log WHERE kind = 'admin.page_his_copy');")
 
 # ---- nib glossary -----------------------------------------------------------------------------------
 entries = parse_nibs(open(NIBS, encoding="utf-8").read())

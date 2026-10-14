@@ -18,6 +18,10 @@ path = "src/bin/import.rs"
 name = "admin"
 path = "src/bin/admin.rs"
 
+[[bin]]
+name = "upright"
+path = "src/bin/upright.rs"
+
 [dependencies]
 axum = { version = "0.8", features = ["macros", "form", "query", "multipart"] }
 tokio = { version = "1", features = ["full"] }

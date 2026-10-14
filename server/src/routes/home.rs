@@ -111,14 +111,12 @@ pub async fn home(AxState(state): AxState<State>, axum::extract::RawQuery(query)
         (None, true) => featured.image.clone(),
         (None, false) => String::new(),
     };
-    // The same photo with its backdrop removed, when one has been made (scripts/make-cutouts.sh).
-    let mut featured_cutout = String::new();
-    if let Some(rel) = first_photo.as_ref().and_then(|i| i.full.strip_prefix("/media/")).filter(|r| !r.contains("..")) {
-        let c = thepenmarket::media::cutout_rel(rel);
-        if tokio::fs::metadata(state.cfg.media_dir.join(&c)).await.map(|m| m.is_file()).unwrap_or(false) {
-            featured_cutout = format!("/media/{c}");
-        }
-    }
+    // The same photo with its backdrop removed and the pen stood up beside its cap (crate::hero_photo):
+    // made in the background the first time, his photo as photographed until then.
+    let featured_cutout = match first_photo.as_ref().and_then(|i| i.full.strip_prefix("/media/")) {
+        Some(rel) => crate::hero_photo::best(&state, featured.id, rel).await.unwrap_or_default(),
+        None => String::new(),
+    };
     // What the 3D pen is made of, read from Nathaniel's own words about the featured pen.
     let lower = format!("{} {}", featured.title, featured_text).to_lowercase();
     let featured_trim = if lower.contains("chrome") || lower.contains("nickel") || lower.contains("silver") || lower.contains("steel") || lower.contains("rhodium") || lower.contains("platinum") { "silver" } else { "gold" }.to_string();

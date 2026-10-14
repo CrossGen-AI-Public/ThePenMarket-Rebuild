@@ -36,6 +36,10 @@ pub struct Config {
     /// it the webhook refuses every call, so checkout stays off until both are set.
     pub stripe_secret_key: String,
     pub stripe_webhook_secret: String,
+    /// Program that takes the backdrop out of a photo: `CUTOUT_CMD <photo> <out.png>` writes a PNG that is
+    /// transparent everywhere but the pen (`scripts/cutout-rembg.sh` on Linux; the Mac uses
+    /// `scripts/make-cutouts.sh`). Empty = only cutouts made elsewhere are used.
+    pub cutout_cmd: String,
 }
 
 /// Secrets never reach a log line: Debug shows which ones are set, not their values.
@@ -113,5 +117,6 @@ pub fn load() -> anyhow::Result<Config> {
         google_places_key: env("GOOGLE_PLACES_KEY"),
         stripe_secret_key: env("STRIPE_SECRET_KEY").trim().to_string(),
         stripe_webhook_secret: env("STRIPE_WEBHOOK_SECRET").trim().to_string(),
+        cutout_cmd: env("CUTOUT_CMD").trim().to_string(),
     })
 }

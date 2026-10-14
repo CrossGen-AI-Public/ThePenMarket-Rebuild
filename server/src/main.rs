@@ -8,6 +8,7 @@ mod catalog;
 mod db;
 mod glossary;
 mod guide;
+mod hero_photo;
 mod insights;
 mod links;
 mod reviews;

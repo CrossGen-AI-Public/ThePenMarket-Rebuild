@@ -120,6 +120,10 @@ pub async fn set_featured(AxState(state): AxState<State>, Extension(cookie): Ext
                 return Ok(api_err(StatusCode::BAD_REQUEST, "Only a pen that is for sale can lead the homepage."));
             }
             settings::set(&state.pool, settings::FEATURED_PRODUCT, serde_json::json!(id)).await?;
+            // his photo of it without the backdrop, stood upright, ready by the time he looks
+            if let Some(rel) = crate::hero_photo::lead_photo(&state, id).await? {
+                crate::hero_photo::spawn_make(state.clone(), id, rel, false);
+            }
             store::audit(&state.pool, "admin.featured_set", serde_json::json!({"email": admin.email, "ip": admin.ip, "pen": p.short_title, "product_id": id})).await?;
         }
         None => {
@@ -139,6 +143,10 @@ pub struct SettingsTpl {
     pub saved: bool,
     pub featured_title: String,
     pub featured_url: String,
+    /// The homepage image of the pen leading it now (chosen or newest), and whether he turned it around.
+    pub hero_image: String,
+    pub hero_product_id: i32,
+    pub hero_flipped: bool,
     pub popular_on: bool,
     pub hero_photo: bool,
     pub hero_experiment: bool,
@@ -203,11 +211,26 @@ pub async fn settings_page(AxState(state): AxState<State>, Extension(cookie): Ex
         None => None,
     };
     let (ship_list, ship_saved) = settings::shipping_options(&state.pool).await?;
+    // the pen leading the homepage now: his choice, else the newest (as routes::home picks it)
+    let leading = match &featured {
+        Some(p) => Some(p.id),
+        None => crate::db::products_by_slugs_or_recent(&state.pool, 1, &[], true, true).await?.first().map(|p| p.id),
+    };
+    let mut hero_image = String::new();
+    if let Some(id) = leading {
+        if let Some(rel) = crate::hero_photo::lead_photo(&state, id).await? {
+            hero_image = crate::hero_photo::best(&state, id, &rel).await.unwrap_or_default();
+        }
+    }
+    let hero_flipped = match leading { Some(id) => crate::hero_photo::flipped(&state, id).await, None => false };
     html(&SettingsTpl {
         page: meta(&state, "Homepage and photos", "/admin/settings/", &cookie),
         saved: q.saved == "1",
         featured_title: featured.as_ref().map(|p| p.short_title.clone()).unwrap_or_default(),
         featured_url: featured.map(|p| p.url).unwrap_or_default(),
+        hero_image,
+        hero_product_id: leading.unwrap_or(0),
+        hero_flipped,
         popular_on: settings::popular_section(&state.pool).await?,
         hero_photo: settings::hero_photo(&state.pool).await?,
         hero_experiment: crate::insights::variant(&state, "hero-stage").is_some(),
@@ -288,6 +311,28 @@ pub async fn settings_save(AxState(state): AxState<State>, Extension(cookie): Ex
     }
     crate::app::refresh_site_cache(&state).await;
     store::audit(&state.pool, "admin.settings_saved", serde_json::json!({"email": admin.email, "ip": admin.ip, "popular_section": form.popular == "1", "hero": if form.hero == "photo" { "photo" } else { "3d" }, "shots": shots.len(), "shipping_options": shipping.as_ref().map(|l| serde_json::to_value(l).unwrap_or_default()).unwrap_or_else(|| serde_json::json!("his e-mail of 2026-10-12"))})).await?;
+    Ok(Redirect::to("/admin/settings/?saved=1").into_response())
+}
+
+#[derive(Deserialize)]
+pub struct FlipForm {
+    pub csrf: String,
+    pub product_id: i32,
+}
+
+/// "Turn the pen the other way up": for the rare photo where the stand-up put the nib at the bottom.
+pub async fn hero_flip(AxState(state): AxState<State>, Extension(cookie): Extension<CsrfCookie>, Auth(admin): Auth, Form(form): Form<FlipForm>) -> AppResult {
+    check(&state, &cookie, &admin, &form.csrf)?;
+    let mut ids: Vec<i64> = settings::get(&state.pool, crate::hero_photo::FLIP_SETTING).await?.and_then(|v| serde_json::from_value(v).ok()).unwrap_or_default();
+    let id = form.product_id as i64;
+    let now_flipped = if ids.contains(&id) { ids.retain(|x| *x != id); false } else { ids.push(id); true };
+    settings::set(&state.pool, crate::hero_photo::FLIP_SETTING, serde_json::json!(ids)).await?;
+    if let Some(rel) = crate::hero_photo::lead_photo(&state, form.product_id).await? {
+        if let Err(e) = crate::hero_photo::remake(&state, form.product_id, &rel).await {
+            tracing::warn!("homepage photo remake failed: {e:#}");
+        }
+    }
+    store::audit(&state.pool, "admin.hero_flip", serde_json::json!({"email": admin.email, "ip": admin.ip, "product_id": form.product_id, "flipped": now_flipped})).await?;
     Ok(Redirect::to("/admin/settings/?saved=1").into_response())
 }
 

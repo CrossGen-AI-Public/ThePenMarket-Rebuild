@@ -422,15 +422,20 @@ fn stats_line(cat: &engine::Catalog, pred: impl Fn(&engine::Pen) -> bool) -> (us
 pub async fn shop(AxState(state): AxState<State>, Query(q): Query<ShopQuery>) -> AppResult {
     let cat = state.catalog();
     let s = engine::stats(&cat);
-    let (heading, intro) = match q.q.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
-        Some(term) => (format!("Search: {term}"), format!("Every pen, pencil, inkwell and camera in the case that matches “{term}”. Search covers names, brands, SKUs, eras, nibs, filling systems and his descriptions.")),
-        None => ("The case".into(), format!("Every one of the {} items in stock: {} vintage pens, {} pre-owned pens, pencils, inkwells and a few cameras, from {} to {}. All pens restored, tested and guaranteed; one of each.", s.live_total, s.by_category.iter().find(|c| c.slug == "vintage-pens").map(|c| c.count).unwrap_or(0), s.by_category.iter().find(|c| c.slug == "pre-owned-pens").map(|c| c.count).unwrap_or(0), fmt_dollars(s.price_min_cents), fmt_dollars(s.price_max_cents))),
+    // The shop page has no intro paragraph under its heading (Brittany, 2026-10-14); search engines still
+    // get a description made only from the catalog's own numbers.
+    let (heading, intro, description) = match q.q.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        Some(term) => {
+            let t = format!("Every pen, pencil, inkwell and camera in the case that matches “{term}”. Search covers names, brands, SKUs, eras, nibs, filling systems and his descriptions.");
+            (format!("Search: {term}"), t.clone(), t)
+        }
+        None => ("The case".into(), String::new(), format!("{} vintage and pre-owned pens, pencils and inkwells in stock at ThePenMarket.com, from {} to {}.", s.live_total, fmt_dollars(s.price_min_cents), fmt_dollars(s.price_max_cents))),
     };
     let title = match q.q.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
         Some(term) => format!("“{term}” in the case | ThePenMarket.com"),
         None => format!("Shop {} Restored Vintage & Pre-Owned Pens | ThePenMarket.com", s.live_total),
     };
-    render_archive(&state, "/shop/", q, Fixed::default(), heading, intro.clone(), title, intro, vec![("Home".into(), "/".into()), ("Shop".into(), "/shop/".into())], "", String::new(), vec![]).await
+    render_archive(&state, "/shop/", q, Fixed::default(), heading, intro, title, description, vec![("Home".into(), "/".into()), ("Shop".into(), "/shop/".into())], "", String::new(), vec![]).await
 }
 
 pub async fn on_sale(AxState(state): AxState<State>, Query(q): Query<ShopQuery>) -> AppResult {

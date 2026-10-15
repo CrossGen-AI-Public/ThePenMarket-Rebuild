@@ -3,7 +3,17 @@
 
 pub mod config;
 pub mod engine;
+pub mod gloss;
 pub mod media;
+pub mod upright;
 pub mod money;
+pub mod spelling;
+pub mod orders;
+pub mod shipping;
+pub mod stripe;
 pub mod text;
+pub mod tp_pay;
 pub mod wp;
+
+/// Admin sign-in, sessions and product edits shared by the server and the `admin` CLI.
+pub mod admin_core;

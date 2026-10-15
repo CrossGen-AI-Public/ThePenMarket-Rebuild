@@ -43,11 +43,15 @@ pub struct HomeTpl {
     pub featured: ProductCard,
     pub featured_text: String,
     pub featured_image: String,
+    pub featured_cutout: String,
     pub featured_trim: String,
     pub featured_pattern: String,
     pub featured_kind: String,
     pub featured_cat_url: String,
-    pub hero_thumbs: Vec<ProductCard>,
+    pub featured_is_chosen: bool,
+    pub hero_photo: bool,
+    pub popular: Vec<ProductCard>,
+    pub google_reviews: Option<crate::reviews::Reviews>,
     pub cat_tiles: Vec<CatTile>,
     pub latest_posts: Vec<PostCard>,
     pub live_total: usize,
@@ -73,7 +77,13 @@ pub struct HomeTpl {
 
 const MONTHS: [&str; 12] = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
-pub async fn home(AxState(state): AxState<State>) -> AppResult {
+pub async fn home(AxState(state): AxState<State>, axum::extract::RawQuery(query): axum::extract::RawQuery) -> AppResult {
+    // A really old address that lived on the home page's query (`/?page_id=12`), if he listed it.
+    if let Some(q) = query.as_deref().filter(|q| !q.is_empty()) {
+        if let Some(target) = db::redirect_for(&state.pool, "/", Some(q)).await?.filter(|t| t != "/") {
+            return Ok(crate::app::moved(&target));
+        }
+    }
     let cat = state.catalog();
     let s = engine::stats(&cat);
     let just_in = db::products_by_slugs_or_recent(&state.pool, 5, &[], true, true).await?;
@@ -81,18 +91,31 @@ pub async fn home(AxState(state): AxState<State>) -> AppResult {
     let case = db::products_by_slugs_or_recent(&state.pool, 8, &exclude, true, true).await?;
     let vault = db::top_priced(&state.pool, 3).await?;
 
-    // Featured pen: the newest fountain pen with a photo; its own description and specs fill the hero.
-    let featured = just_in.first().cloned().unwrap_or_default();
+    // Featured pen: the one he chose in the admin while it is still for sale, else the newest
+    // fountain pen with a photo. Its own description and specs fill the hero.
+    let chosen = match crate::settings::featured_product(&state.pool).await? {
+        Some(id) => db::products_by_ids(&state.pool, &[id], true).await?.into_iter().next(),
+        None => None,
+    };
+    let featured_is_chosen = chosen.is_some();
+    let featured = chosen.or_else(|| just_in.first().cloned()).unwrap_or_default();
     let featured_text = if featured.id > 0 {
         let body = db::product_body(&state.pool, featured.id).await?;
         crate::text::summary(&body.description_text, 300)
     } else {
         String::new()
     };
-    let featured_image = if featured.id > 0 {
-        db::product_images(&state.pool, featured.id).await?.first().map(|i| i.large.clone()).unwrap_or_else(|| featured.image.clone())
-    } else {
-        String::new()
+    let first_photo = if featured.id > 0 { db::product_images(&state.pool, featured.id).await?.into_iter().next() } else { None };
+    let featured_image = match (&first_photo, featured.id > 0) {
+        (Some(i), _) => i.large.clone(),
+        (None, true) => featured.image.clone(),
+        (None, false) => String::new(),
+    };
+    // The same photo with its backdrop removed and the pen stood up beside its cap (crate::hero_photo):
+    // made in the background the first time, his photo as photographed until then.
+    let featured_cutout = match first_photo.as_ref().and_then(|i| i.full.strip_prefix("/media/")) {
+        Some(rel) => crate::hero_photo::best(&state, featured.id, rel).await.unwrap_or_default(),
+        None => String::new(),
     };
     // What the 3D pen is made of, read from Nathaniel's own words about the featured pen.
     let lower = format!("{} {}", featured.title, featured_text).to_lowercase();
@@ -114,7 +137,26 @@ pub async fn home(AxState(state): AxState<State>) -> AppResult {
     }
     .to_string();
     let featured_cat_url = if featured.category_slug.is_empty() { "/shop/".to_string() } else { format!("/product-category/{}/", featured.category_slug) };
-    let hero_thumbs: Vec<ProductCard> = just_in.iter().skip(1).take(3).cloned().collect();
+
+    // Most Popular: the pens the most different visitors opened this month. It needs real traffic to
+    // mean anything, so it stays off the page until at least four pens have three visitors each.
+    let popular_exp = crate::insights::variant(&state, "home-popular");
+    let popular_on = match &popular_exp {
+        Some(a) => a.variant == "on",
+        None => crate::settings::popular_section(&state.pool).await?,
+    };
+    let popular = if popular_on {
+        let ids = crate::insights::popular_product_ids(&state.pool, 30, 8, 3).await?;
+        if ids.len() >= 4 { db::products_by_ids(&state.pool, &ids, true).await? } else { vec![] }
+    } else {
+        vec![]
+    };
+    let hero_exp = crate::insights::variant(&state, "hero-stage");
+    // A running experiment decides; otherwise his choice in Homepage and photos (the 3D model by default).
+    let hero_photo = match hero_exp.as_ref() {
+        Some(a) => a.variant == "photo",
+        None => crate::settings::hero_photo(&state.pool).await?,
+    };
     let tile_image = |slug: &str| cat.pens.iter().find(|p| p.is_live() && p.category_slug == slug && !p.image.is_empty() && p.slug != featured.slug).map(|p| p.image.clone()).unwrap_or_default();
     let sale_image = cat.pens.iter().find(|p| p.is_live() && p.sale_price_cents.is_some() && !p.image.is_empty()).map(|p| p.image.clone()).unwrap_or_default();
     let count_cat = |slug: &str| cat.pens.iter().filter(|p| p.is_live() && p.category_slug == slug).count();
@@ -125,7 +167,7 @@ pub async fn home(AxState(state): AxState<State>) -> AppResult {
         CatTile { name: "Inkwells & Blotters".into(), url: "/product-category/inkwells-blotters/".into(), image: tile_image("inkwells-blotters"), count: count_cat("inkwells-blotters") },
         CatTile { name: "Best Bargains".into(), url: "/on-sale-pens/".into(), image: sale_image, count: s.on_sale },
     ];
-    let (latest_posts, _) = db::posts(&state.pool, None, None, 1, 3).await?;
+    let (latest_posts, _) = db::posts(&state.pool, None, &[], 1, 3).await?;
 
     // Edit photographs: one distinct pen per edit, chosen from the catalog snapshot (newest first).
     let pick = |pred: &dyn Fn(&engine::Pen) -> bool, used: &[String]| cat.pens.iter().find(|p| p.is_live() && !p.image.is_empty() && pred(p) && !used.contains(&p.slug)).map(|p| (p.image.clone(), p.short_title.clone(), p.slug.clone()));
@@ -203,16 +245,22 @@ pub async fn home(AxState(state): AxState<State>) -> AppResult {
         breadcrumb_node(&state, &[("Home", "/")]),
     ]);
 
+    page.experiments = crate::insights::exposure_attr(&[("hero-stage", &hero_exp), ("home-popular", &popular_exp)]);
+
     html(&HomeTpl {
         page,
         featured,
         featured_text,
         featured_image,
+        featured_cutout,
         featured_trim,
         featured_pattern,
         featured_kind,
         featured_cat_url,
-        hero_thumbs,
+        featured_is_chosen,
+        hero_photo,
+        popular,
+        google_reviews: state.site().google_reviews.clone(),
         cat_tiles,
         latest_posts,
         live_total: s.live_total,

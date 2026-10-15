@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="admin-page">
+  <div class="adm-top"><div><h1>Automatic cut-outs on your Mac</h1><p class="lead"><a href="/admin/settings/">Homepage and photos</a></p></div></div>
+  <section class="adm-form adm-hero-photo">
+    <p>Once this is set up, your Mac takes the background out of each new pen's first photo by itself, every 15 minutes while it is on, and sends the result here. You do not need to do anything else.</p>
+    <ol>
+      <li>On the Mac you use for your pen photos, open <b>Terminal</b> (in Finder: Applications, then Utilities, then Terminal).</li>
+      <li>Copy the line below, paste it into Terminal and press Return.</li>
+      <li>When it says “Done”, you can close Terminal.</li>
+    </ol>
+    <pre class="adm-code" style="white-space:pre-wrap;word-break:break-all;background:#f2f2f0;padding:14px;border:1px solid #ddd;font-size:13px">{{ command }}</pre>
+    <p class="adm-hint">This line holds a key that only lets your Mac send cut-outs. It is shown once: if you lose it, press “Set up a Mac” again and the old key stops working. To stop it, press “Turn off” on Homepage and photos.</p>
+    <p><a class="btn btn-outline" href="/admin/settings/">Back to Homepage and photos</a></p>
+  </section>
+</div>
+{% endblock %}

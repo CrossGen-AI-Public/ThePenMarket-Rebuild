@@ -7,7 +7,9 @@
   </nav>
   <header class="archive-head">
     <h1>{{ heading }}</h1>
-    <p class="lede">{{ intro }}</p>
+    {% if !intro.is_empty() %}<p class="lede">{{ intro }}</p>{% endif %}
+    {% if !search_note.is_empty() %}<p class="search-note">{{ search_note }}</p>{% endif %}
+    {% if let Some(g) = gloss %}<div class="definition gloss-card"><p class="eyebrow">From the glossary</p><p><b>{{ g.0 }}.</b> {{ g.1 }} <a href="{{ g.2 }}">Read the entry</a></p></div>{% endif %}
     {% if !term_definition.is_empty() %}<div class="definition"><p class="eyebrow">What “{{ heading }}” means here</p><p>{{ term_definition }}</p></div>{% endif %}
   </header>
 </div>
@@ -40,21 +42,30 @@
       {% if g.options.len() > 8 %}<button type="button" class="facet-more" data-more>See all {{ g.options.len() }}</button>{% endif %}
     </details>
     {% endfor %}
+    {% if archive %}
+    <div class="facet">
+      <p class="eyebrow">For sale</p>
+      <a class="rail-link" href="/shop/">Pens for sale now</a>
+    </div>
+    {% else if sold_n > 0 %}
     <div class="facet">
       <p class="eyebrow">Sold pens</p>
-      <a class="rail-link" href="{{ base_path }}?sold=1" rel="nofollow">Include sold pens</a>
+      <a class="rail-link" href="{{ sold_url }}">{{ sold_n }} sold in the Sold Pen Archive</a>
     </div>
+    {% endif %}
   </aside>
 
   <section class="results">
     <div class="results-bar">
-      <span class="results-count"><strong class="mono">{{ total }}</strong> {% if total == 1 %}result{% else %}results{% endif %}</span>
+      <span class="results-count" data-results-total="{{ total }}" data-results-q="{{ q }}"><strong class="mono">{{ total }}</strong> {% if total == 1 %}result{% else %}results{% endif %}</span>
       <form class="sort" method="get" action="{{ base_path }}">
         {% if !q.is_empty() %}<input type="hidden" name="q" value="{{ q }}">{% endif %}
         {% for h in hidden_fields %}<input type="hidden" name="{{ h.0 }}" value="{{ h.1 }}">{% endfor %}
         <label for="sort">Sort</label>
         <select id="sort" name="sort" data-autosubmit>
+          {% if !q.is_empty() %}<option value="relevance"{% if sort == "relevance" %} selected{% endif %}>Best match</option>{% endif %}
           <option value="newest"{% if sort == "newest" %} selected{% endif %}>Newest first</option>
+          <option value="popular"{% if sort == "popular" %} selected{% endif %}>Most viewed</option>
           <option value="price-asc"{% if sort == "price-asc" %} selected{% endif %}>Price: low to high</option>
           <option value="price-desc"{% if sort == "price-desc" %} selected{% endif %}>Price: high to low</option>
           <option value="name"{% if sort == "name" %} selected{% endif %}>Name</option>
@@ -70,7 +81,9 @@
 
     {% if items.is_empty() %}
     <div class="empty">
-      <p>Nothing in the case matches that. Loosen a filter, or <a href="/#ask">ask the guide</a> what comes closest.</p>
+      {% if archive %}<p>No sold pen matches that. Loosen a filter, or <a href="/shop/?q={{ q|urlencode }}">search the pens for sale</a>.</p>
+      {% else %}<p>Nothing in the case matches that. Loosen a filter, or <a href="/#ask">ask the guide</a> what comes closest.</p>
+      {% if sold_n > 0 %}<p><a href="{{ sold_url }}">{{ sold_n }} sold {% if sold_n == 1 %}pen matches{% else %}pens match{% endif %} in the Sold Pen Archive.</a></p>{% endif %}{% endif %}
     </div>
     {% else %}
     <div class="grid grid-3 results-grid" id="resultsGrid">

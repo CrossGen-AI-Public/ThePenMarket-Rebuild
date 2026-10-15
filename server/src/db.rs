@@ -170,9 +170,9 @@ impl From<ProductRow> for ProductCard {
 
 const PRODUCT_SELECT: &str = "SELECT p.id, p.sku, p.slug, p.title, p.short_title, p.status, p.price_cents, p.sale_price_cents, p.length_mm::float8 AS length_mm, p.listed_year, p.listed_month, p.is_subscription,
         c.name AS category, c.slug AS category_slug, b.name AS brand, b.slug AS brand_slug, e.name AS era, e.slug AS era_slug, n.name AS nib, n.slug AS nib_slug, f.name AS mechanism, f.slug AS mechanism_slug,
-        (SELECT path FROM product_image i WHERE i.product_id = p.id ORDER BY position LIMIT 1) AS image,
-        (SELECT alt FROM product_image i WHERE i.product_id = p.id ORDER BY position LIMIT 1) AS image_alt,
-        (SELECT has_480 FROM product_image i WHERE i.product_id = p.id ORDER BY position LIMIT 1) AS has_480
+        (SELECT path FROM product_image i WHERE i.product_id = p.id AND i.archived_at IS NULL ORDER BY position LIMIT 1) AS image,
+        (SELECT alt FROM product_image i WHERE i.product_id = p.id AND i.archived_at IS NULL ORDER BY position LIMIT 1) AS image_alt,
+        (SELECT has_480 FROM product_image i WHERE i.product_id = p.id AND i.archived_at IS NULL ORDER BY position LIMIT 1) AS has_480
         FROM product p JOIN category c ON c.id = p.category_id LEFT JOIN brand b ON b.id = p.brand_id LEFT JOIN era e ON e.id = p.era_id LEFT JOIN nib n ON n.id = p.nib_id LEFT JOIN filling_mechanism f ON f.id = p.filling_mechanism_id";
 
 #[derive(Clone, Debug, Default)]
@@ -186,8 +186,14 @@ pub struct ShopFilter {
     pub min_cents: Option<i64>,
     pub max_cents: Option<i64>,
     pub q: Option<String>,
+    /// The same search in the other spellings on his list (`spelling::expand`); matched as well as `q`.
+    pub q_alts: Vec<String>,
+    /// A product tag's slug: the /product-tag/{slug}/ archive.
+    pub tag: Option<String>,
     pub on_sale: bool,
     pub include_sold: bool,
+    /// The Sold Pen Archive: sold pens only, most recently sold first.
+    pub sold_only: bool,
     pub sort: String,
     pub page: i64,
     pub per_page: i64,
@@ -196,7 +202,9 @@ pub struct ShopFilter {
 impl ShopFilter {
     fn push_where(&self, qb: &mut QueryBuilder<'_, Postgres>, skip: &str) {
         qb.push(" WHERE c.slug <> 'memberships' ");
-        if !self.include_sold {
+        if self.sold_only {
+            qb.push(" AND p.status = 'sold' ");
+        } else if !self.include_sold {
             qb.push(" AND p.status = 'live' ");
         }
         if skip != "category" {
@@ -235,9 +243,36 @@ impl ShopFilter {
         if self.on_sale {
             qb.push(" AND p.sale_price_cents IS NOT NULL ");
         }
-        if let Some(q) = self.q.as_deref().map(str::trim).filter(|q| !q.is_empty()) {
-            qb.push(" AND (p.search_tsv @@ websearch_to_tsquery('english', ").push_bind(q.to_string()).push(") OR p.title ILIKE ").push_bind(format!("%{q}%")).push(" OR p.sku = ").push_bind(q.to_string()).push(") ");
+        if let Some(t) = &self.tag {
+            qb.push(" AND EXISTS (SELECT 1 FROM product_tag_link l JOIN product_tag t ON t.id = l.tag_id WHERE l.product_id = p.id AND t.slug = ").push_bind(t.clone()).push(") ");
         }
+        let variants = self.variants();
+        if !variants.is_empty() {
+            qb.push(" AND (");
+            for (i, v) in variants.iter().enumerate() {
+                if i > 0 {
+                    qb.push(" OR ");
+                }
+                qb.push("p.search_tsv @@ websearch_to_tsquery('english', ").push_bind(v.clone()).push(") OR p.title ILIKE ").push_bind(format!("%{}%", crate::text::like_escape(v))).push(" OR p.sku = ").push_bind(v.clone());
+                qb.push(" OR EXISTS (SELECT 1 FROM product_tag_link l JOIN product_tag t ON t.id = l.tag_id WHERE l.product_id = p.id AND t.name ILIKE ").push_bind(crate::text::like_escape(v)).push(")");
+            }
+            qb.push(") ");
+        }
+    }
+
+    /// The search and its other spellings, trimmed, empty ones dropped.
+    fn variants(&self) -> Vec<String> {
+        self.q.iter().chain(self.q_alts.iter()).map(|v| v.trim().to_string()).filter(|v| !v.is_empty()).collect()
+    }
+}
+
+/// `ts_rank` over every spelling of the search at once (the tsqueries OR'd together).
+fn push_rank_query(qb: &mut QueryBuilder<'_, Postgres>, variants: &[String]) {
+    for (i, v) in variants.iter().enumerate() {
+        if i > 0 {
+            qb.push(" || ");
+        }
+        qb.push("websearch_to_tsquery('english', ").push_bind(v.clone()).push(")");
     }
 }
 
@@ -265,6 +300,14 @@ pub struct ShopPage {
     pub facets: Facets,
 }
 
+/// How many sold pens match the same filter: the "N sold in the archive" link under a list.
+pub async fn sold_count(pool: &PgPool, f: &ShopFilter) -> anyhow::Result<i64> {
+    let f = ShopFilter { sold_only: true, ..f.clone() };
+    let mut qb = QueryBuilder::new("SELECT count(*) AS n FROM product p JOIN category c ON c.id = p.category_id LEFT JOIN brand b ON b.id = p.brand_id LEFT JOIN era e ON e.id = p.era_id LEFT JOIN nib n ON n.id = p.nib_id LEFT JOIN filling_mechanism f ON f.id = p.filling_mechanism_id");
+    f.push_where(&mut qb, "");
+    Ok(qb.build().fetch_one(pool).await?.get("n"))
+}
+
 pub async fn shop(pool: &PgPool, f: &ShopFilter, ranges: &[PriceRange]) -> anyhow::Result<ShopPage> {
     // count
     let mut qb = QueryBuilder::new("SELECT count(*) AS n FROM product p JOIN category c ON c.id = p.category_id LEFT JOIN brand b ON b.id = p.brand_id LEFT JOIN era e ON e.id = p.era_id LEFT JOIN nib n ON n.id = p.nib_id LEFT JOIN filling_mechanism f ON f.id = p.filling_mechanism_id");
@@ -273,12 +316,35 @@ pub async fn shop(pool: &PgPool, f: &ShopFilter, ranges: &[PriceRange]) -> anyho
 
     let mut qb = QueryBuilder::new(PRODUCT_SELECT);
     f.push_where(&mut qb, "");
-    qb.push(match f.sort.as_str() {
-        "price-asc" => " ORDER BY COALESCE(p.sale_price_cents, p.price_cents) ASC, p.title ",
-        "price-desc" => " ORDER BY COALESCE(p.sale_price_cents, p.price_cents) DESC, p.title ",
-        "name" => " ORDER BY p.short_title ",
-        _ => " ORDER BY p.status ASC, p.listed_year DESC NULLS LAST, p.listed_month DESC NULLS LAST, p.wp_id DESC ",
-    });
+    const VIEWS_90D: &str = "(SELECT count(DISTINCT v.visitor) FROM visit_event v WHERE v.product_id = p.id AND v.kind = 'view' AND v.at > now() - interval '90 days')";
+    let variants = f.variants();
+    let q = (!variants.is_empty()).then_some(());
+    match (f.sort.as_str(), q) {
+        ("price-asc", _) => {
+            qb.push(" ORDER BY COALESCE(p.sale_price_cents, p.price_cents) ASC, p.title ");
+        }
+        ("price-desc", _) => {
+            qb.push(" ORDER BY COALESCE(p.sale_price_cents, p.price_cents) DESC, p.title ");
+        }
+        ("name", _) => {
+            qb.push(" ORDER BY p.short_title ");
+        }
+        ("popular", _) => {
+            qb.push(format!(" ORDER BY p.status ASC, {VIEWS_90D} DESC, p.listed_year DESC NULLS LAST, p.listed_month DESC NULLS LAST, p.wp_id DESC "));
+        }
+        // A search with no sort chosen: best text match first, then what other visitors opened most.
+        ("" | "relevance", Some(())) => {
+            qb.push(" ORDER BY p.status ASC, ts_rank(p.search_tsv, ");
+            push_rank_query(&mut qb, &variants);
+            qb.push(format!(") DESC, {VIEWS_90D} DESC, p.listed_year DESC NULLS LAST, p.wp_id DESC "));
+        }
+        _ if f.sold_only => {
+            qb.push(" ORDER BY p.sold_at DESC NULLS LAST, p.listed_year DESC NULLS LAST, p.listed_month DESC NULLS LAST, p.wp_id DESC ");
+        }
+        _ => {
+            qb.push(" ORDER BY p.status ASC, p.listed_year DESC NULLS LAST, p.listed_month DESC NULLS LAST, p.wp_id DESC ");
+        }
+    }
     qb.push(" LIMIT ").push_bind(f.per_page).push(" OFFSET ").push_bind((f.page - 1).max(0) * f.per_page);
     let rows: Vec<ProductRow> = qb.build_query_as().fetch_all(pool).await?;
     let items = rows.into_iter().map(ProductCard::from).collect();
@@ -290,7 +356,12 @@ pub async fn shop(pool: &PgPool, f: &ShopFilter, ranges: &[PriceRange]) -> anyho
             a = table_alias
         ));
         f.push_where(&mut qb, dim);
-        qb.push(format!(" AND {a}.slug IS NOT NULL GROUP BY {a}.slug, {a}.name, {a}.sort_order ORDER BY {a}.sort_order, {a}.name", a = table_alias));
+        if dim == "brand" {
+            // Brands he pinned lead in his order; the rest follow by how many pens are in stock right now.
+            qb.push(" AND b.slug IS NOT NULL GROUP BY b.slug, b.name, b.pin_rank ORDER BY b.pin_rank NULLS LAST, count(*) DESC, b.name");
+        } else {
+            qb.push(format!(" AND {a}.slug IS NOT NULL GROUP BY {a}.slug, {a}.name, {a}.sort_order ORDER BY {a}.sort_order, {a}.name", a = table_alias));
+        }
         let rows = qb.build().fetch_all(pool).await?;
         let selected = match dim {
             "category" => f.category.clone(),
@@ -345,6 +416,50 @@ pub async fn products_by_slugs_or_recent(pool: &PgPool, limit: i64, exclude_ids:
     Ok(rows.into_iter().map(ProductCard::from).collect())
 }
 
+pub async fn pinned_brand_slugs(pool: &PgPool) -> anyhow::Result<Vec<String>> {
+    let rows = sqlx::query("SELECT slug FROM brand WHERE pin_rank IS NOT NULL ORDER BY pin_rank").fetch_all(pool).await?;
+    Ok(rows.iter().map(|r| r.get("slug")).collect())
+}
+
+/// Published custom pages he flagged for the footer, as (title, path).
+pub async fn footer_pages(pool: &PgPool) -> anyhow::Result<Vec<(String, String)>> {
+    let rows = sqlx::query("SELECT title, slug FROM page WHERE custom AND show_in_footer AND status = 'published' ORDER BY title").fetch_all(pool).await?;
+    Ok(rows.iter().map(|r| (r.get("title"), format!("/{}/", r.get::<String, _>("slug")))).collect())
+}
+
+// ---------- FAQs ----------
+#[derive(Clone, Debug, FromRow)]
+pub struct FaqRow {
+    pub id: i32,
+    pub topic: String,
+    pub question: String,
+    pub answer: String,
+    pub sort_order: i32,
+    pub status: String,
+    pub in_guide: bool,
+}
+
+pub async fn faqs(pool: &PgPool, published_only: bool) -> anyhow::Result<Vec<FaqRow>> {
+    Ok(sqlx::query_as("SELECT id, topic, question, answer, sort_order, status, in_guide FROM faq WHERE ($1 = FALSE OR status = 'published') ORDER BY topic, sort_order, id").bind(published_only).fetch_all(pool).await?)
+}
+
+pub async fn guide_faqs(pool: &PgPool) -> anyhow::Result<Vec<(String, String)>> {
+    let rows = sqlx::query("SELECT question, answer FROM faq WHERE status = 'published' AND in_guide ORDER BY topic, sort_order, id LIMIT 40").fetch_all(pool).await?;
+    Ok(rows.iter().map(|r| (r.get::<String, _>("question"), r.get::<String, _>("answer").chars().take(700).collect())).collect())
+}
+
+/// Cards for specific ids, returned in the order given (ids that are gone or not live are skipped).
+pub async fn products_by_ids(pool: &PgPool, ids: &[i32], only_live: bool) -> anyhow::Result<Vec<ProductCard>> {
+    if ids.is_empty() {
+        return Ok(vec![]);
+    }
+    let sql = format!("{PRODUCT_SELECT} WHERE p.id = ANY($1) AND ($2 = FALSE OR p.status = 'live')");
+    let rows: Vec<ProductRow> = sqlx::query_as(&sql).bind(ids.to_vec()).bind(only_live).fetch_all(pool).await?;
+    let mut cards: Vec<ProductCard> = rows.into_iter().map(ProductCard::from).collect();
+    cards.sort_by_key(|c| ids.iter().position(|i| *i == c.id).unwrap_or(usize::MAX));
+    Ok(cards)
+}
+
 pub async fn top_priced(pool: &PgPool, limit: i64) -> anyhow::Result<Vec<ProductCard>> {
     let sql = format!("{PRODUCT_SELECT} WHERE p.status = 'live' AND c.slug <> 'memberships' ORDER BY COALESCE(p.sale_price_cents, p.price_cents) DESC LIMIT $1");
     let rows: Vec<ProductRow> = sqlx::query_as(&sql).bind(limit).fetch_all(pool).await?;
@@ -371,6 +486,7 @@ pub async fn product_body(pool: &PgPool, id: i32) -> anyhow::Result<ProductBody>
 
 #[derive(Clone, Debug)]
 pub struct Image {
+    pub id: i32,
     pub full: String,
     pub large: String,
     pub thumb: String,
@@ -380,7 +496,7 @@ pub struct Image {
 }
 
 pub async fn product_images(pool: &PgPool, id: i32) -> anyhow::Result<Vec<Image>> {
-    let rows = sqlx::query("SELECT path, alt, width, height, has_480, has_960 FROM product_image WHERE product_id = $1 ORDER BY position").bind(id).fetch_all(pool).await?;
+    let rows = sqlx::query("SELECT id, path, alt, width, height, has_480, has_960 FROM product_image WHERE product_id = $1 AND archived_at IS NULL ORDER BY position").bind(id).fetch_all(pool).await?;
     Ok(rows
         .iter()
         .map(|r| {
@@ -388,6 +504,7 @@ pub async fn product_images(pool: &PgPool, id: i32) -> anyhow::Result<Vec<Image>
             let has_480: bool = r.get("has_480");
             let has_960: bool = r.get("has_960");
             Image {
+                id: r.get("id"),
                 full: format!("/media/{p}"),
                 large: if has_960 { format!("/media/{}", variant_rel(&p, 960)) } else { format!("/media/{p}") },
                 thumb: if has_480 { format!("/media/{}", variant_rel(&p, 480)) } else { format!("/media/{p}") },
@@ -476,16 +593,25 @@ impl From<PostRow> for PostCard {
 
 const POST_SELECT: &str = "SELECT p.id, p.slug, p.title, p.excerpt, p.meta_description, p.author_name, p.featured_path, p.featured_alt, p.published_at, p.modified_at, p.word_count, bc.name AS category_name, bc.slug AS category_slug FROM post p LEFT JOIN blog_category bc ON bc.id = p.category_id";
 
-pub async fn posts(pool: &PgPool, category: Option<&str>, q: Option<&str>, page: i64, per_page: i64) -> anyhow::Result<(Vec<PostCard>, i64)> {
-    let mut count = QueryBuilder::new("SELECT count(*) AS n FROM post p LEFT JOIN blog_category bc ON bc.id = p.category_id WHERE 1=1 ");
+/// `q` is the search in every spelling on his list (the visitor's own first); empty = no search.
+pub async fn posts(pool: &PgPool, category: Option<&str>, q: &[String], page: i64, per_page: i64) -> anyhow::Result<(Vec<PostCard>, i64)> {
+    let mut count = QueryBuilder::new("SELECT count(*) AS n FROM post p LEFT JOIN blog_category bc ON bc.id = p.category_id WHERE p.status = 'published' ");
     let mut list = QueryBuilder::new(POST_SELECT);
-    list.push(" WHERE 1=1 ");
+    list.push(" WHERE p.status = 'published' ");
     for qb in [&mut count, &mut list] {
         if let Some(c) = category {
             qb.push(" AND bc.slug = ").push_bind(c.to_string());
         }
-        if let Some(q) = q.map(str::trim).filter(|q| !q.is_empty()) {
-            qb.push(" AND (p.search_tsv @@ websearch_to_tsquery('english', ").push_bind(q.to_string()).push(") OR p.title ILIKE ").push_bind(format!("%{q}%")).push(") ");
+        let variants: Vec<&str> = q.iter().map(|v| v.trim()).filter(|v| !v.is_empty()).collect();
+        if !variants.is_empty() {
+            qb.push(" AND (");
+            for (i, v) in variants.iter().enumerate() {
+                if i > 0 {
+                    qb.push(" OR ");
+                }
+                qb.push("p.search_tsv @@ websearch_to_tsquery('english', ").push_bind(v.to_string()).push(") OR p.title ILIKE ").push_bind(format!("%{}%", crate::text::like_escape(v)));
+            }
+            qb.push(") ");
         }
     }
     let total: i64 = count.build().fetch_one(pool).await?.get("n");
@@ -494,9 +620,10 @@ pub async fn posts(pool: &PgPool, category: Option<&str>, q: Option<&str>, page:
     Ok((rows.into_iter().map(PostCard::from).collect(), total))
 }
 
-pub async fn post_by_slug(pool: &PgPool, slug: &str) -> anyhow::Result<Option<(PostRow, String)>> {
-    let sql = format!("{POST_SELECT} WHERE p.slug = $1");
-    let row: Option<PostRow> = sqlx::query_as(&sql).bind(slug).fetch_optional(pool).await?;
+/// `include_drafts` is true only for the signed-in admin, who can read a draft at its future URL.
+pub async fn post_by_slug(pool: &PgPool, slug: &str, include_drafts: bool) -> anyhow::Result<Option<(PostRow, String)>> {
+    let sql = format!("{POST_SELECT} WHERE p.slug = $1 AND ($2 OR p.status = 'published')");
+    let row: Option<PostRow> = sqlx::query_as(&sql).bind(slug).bind(include_drafts).fetch_optional(pool).await?;
     match row {
         Some(r) => {
             let body: String = sqlx::query("SELECT body_html FROM post WHERE id = $1").bind(r.id).fetch_one(pool).await?.get("body_html");
@@ -507,15 +634,15 @@ pub async fn post_by_slug(pool: &PgPool, slug: &str) -> anyhow::Result<Option<(P
 }
 
 pub async fn posts_by_slugs(pool: &PgPool, slugs: &[&str]) -> anyhow::Result<Vec<PostCard>> {
-    let sql = format!("{POST_SELECT} WHERE p.slug = ANY($1) ORDER BY p.published_at DESC");
+    let sql = format!("{POST_SELECT} WHERE p.slug = ANY($1) AND p.status = 'published' ORDER BY p.published_at DESC");
     let owned: Vec<String> = slugs.iter().map(|s| s.to_string()).collect();
     let rows: Vec<PostRow> = sqlx::query_as(&sql).bind(owned).fetch_all(pool).await?;
     Ok(rows.into_iter().map(PostCard::from).collect())
 }
 
 pub async fn posts_matching(pool: &PgPool, q: &str, limit: i64) -> anyhow::Result<Vec<PostCard>> {
-    let sql = format!("{POST_SELECT} WHERE p.search_tsv @@ websearch_to_tsquery('english', $1) OR p.title ILIKE $2 ORDER BY ts_rank(p.search_tsv, websearch_to_tsquery('english', $1)) DESC, p.published_at DESC LIMIT $3");
-    let rows: Vec<PostRow> = sqlx::query_as(&sql).bind(q).bind(format!("%{q}%")).bind(limit).fetch_all(pool).await?;
+    let sql = format!("{POST_SELECT} WHERE p.status = 'published' AND (p.search_tsv @@ websearch_to_tsquery('english', $1) OR p.title ILIKE $2) ORDER BY ts_rank(p.search_tsv, websearch_to_tsquery('english', $1)) DESC, p.published_at DESC LIMIT $3");
+    let rows: Vec<PostRow> = sqlx::query_as(&sql).bind(q).bind(format!("%{}%", crate::text::like_escape(q))).bind(limit).fetch_all(pool).await?;
     Ok(rows.into_iter().map(PostCard::from).collect())
 }
 
@@ -528,11 +655,11 @@ pub struct BlogCategory {
 }
 
 pub async fn blog_categories(pool: &PgPool) -> anyhow::Result<Vec<BlogCategory>> {
-    Ok(sqlx::query_as("SELECT bc.slug, bc.name, bc.description, (SELECT count(*) FROM post p WHERE p.category_id = bc.id) AS count FROM blog_category bc WHERE bc.slug <> 'uncategorized-new' ORDER BY count DESC").fetch_all(pool).await?)
+    Ok(sqlx::query_as("SELECT bc.slug, bc.name, bc.description, (SELECT count(*) FROM post p WHERE p.category_id = bc.id AND p.status = 'published') AS count FROM blog_category bc WHERE bc.slug <> 'uncategorized-new' ORDER BY count DESC").fetch_all(pool).await?)
 }
 
 pub async fn blog_category(pool: &PgPool, slug: &str) -> anyhow::Result<Option<BlogCategory>> {
-    Ok(sqlx::query_as("SELECT bc.slug, bc.name, bc.description, (SELECT count(*) FROM post p WHERE p.category_id = bc.id) AS count FROM blog_category bc WHERE bc.slug = $1").bind(slug).fetch_optional(pool).await?)
+    Ok(sqlx::query_as("SELECT bc.slug, bc.name, bc.description, (SELECT count(*) FROM post p WHERE p.category_id = bc.id AND p.status = 'published') AS count FROM blog_category bc WHERE bc.slug = $1").bind(slug).fetch_optional(pool).await?)
 }
 
 // ---------- pages ----------
@@ -547,6 +674,28 @@ pub struct Page {
 
 pub async fn page(pool: &PgPool, slug: &str) -> anyhow::Result<Option<Page>> {
     Ok(sqlx::query_as("SELECT slug, title, body_html, meta_description, modified_at FROM page WHERE slug = $1").bind(slug).fetch_optional(pool).await?)
+}
+
+#[derive(Clone, Debug, FromRow)]
+pub struct CustomPage {
+    pub id: i32,
+    pub slug: String,
+    pub title: String,
+    pub body_html: String,
+    pub meta_description: String,
+    pub status: String,
+    pub modified_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// A page written in the admin. Imported WordPress pages (custom = FALSE) keep their own routes.
+pub async fn custom_page(pool: &PgPool, slug: &str, include_drafts: bool) -> anyhow::Result<Option<CustomPage>> {
+    Ok(sqlx::query_as("SELECT id, slug, title, body_html, meta_description, status, modified_at FROM page WHERE custom AND slug = $1 AND ($2 OR status = 'published')").bind(slug).bind(include_drafts).fetch_optional(pool).await?)
+}
+
+/// Published custom pages as (title, slug), for the site map and the XML sitemap.
+pub async fn custom_pages(pool: &PgPool) -> anyhow::Result<Vec<(String, String)>> {
+    let rows = sqlx::query("SELECT title, slug FROM page WHERE custom AND status = 'published' ORDER BY title").fetch_all(pool).await?;
+    Ok(rows.iter().map(|r| (r.get("title"), r.get("slug"))).collect())
 }
 
 // ---------- trading post ----------
@@ -614,15 +763,26 @@ pub async fn listings(pool: &PgPool, page: i64, per_page: i64) -> anyhow::Result
 }
 
 pub async fn listing(pool: &PgPool, slug: &str) -> anyhow::Result<Option<Listing>> {
-    let row: Option<ListingRow> = sqlx::query_as("SELECT slug, title, era_text, price_text, price_cents, contact_text, description_html, image_path, image_alt, published_at, modified_at FROM tp_listing WHERE slug = $1").bind(slug).fetch_optional(pool).await?;
+    let row: Option<ListingRow> = sqlx::query_as("SELECT slug, title, era_text, price_text, price_cents, contact_text, description_html, image_path, image_alt, published_at, modified_at FROM tp_listing WHERE slug = $1 AND status = 'live'").bind(slug).fetch_optional(pool).await?;
     Ok(row.map(Listing::from))
 }
 
 // ---------- redirects and forms ----------
-pub async fn redirect_for(pool: &PgPool, path: &str) -> anyhow::Result<Option<String>> {
+/// The redirect for an old address. An old URL that carried a query (`/index.php?main_page=…`) is
+/// matched with its query first, then on its path alone; a trailing slash either way is the same URL.
+pub async fn redirect_for(pool: &PgPool, path: &str, query: Option<&str>) -> anyhow::Result<Option<String>> {
     let alt = if path.ends_with('/') { path.trim_end_matches('/').to_string() } else { format!("{path}/") };
-    let row = sqlx::query("UPDATE redirect SET hits = hits + 1 WHERE old_path = $1 OR old_path = $2 RETURNING new_path").bind(path).bind(alt).fetch_optional(pool).await?;
-    Ok(row.map(|r| r.get("new_path")))
+    let mut wanted: Vec<String> = vec![];
+    if let Some(q) = query.filter(|q| !q.is_empty()) {
+        wanted.push(format!("{path}?{q}"));
+        wanted.push(format!("{alt}?{q}"));
+    }
+    wanted.push(path.to_string());
+    wanted.push(alt);
+    let row = sqlx::query("SELECT id, new_path FROM redirect WHERE old_path = ANY($1) ORDER BY array_position($1, old_path) LIMIT 1").bind(&wanted).fetch_optional(pool).await?;
+    let Some(row) = row else { return Ok(None) };
+    sqlx::query("UPDATE redirect SET hits = hits + 1 WHERE id = $1").bind(row.get::<i32, _>("id")).execute(pool).await?;
+    Ok(Some(row.get("new_path")))
 }
 
 pub async fn save_form(pool: &PgPool, kind: &str, fields: serde_json::Value, photo_key: Option<String>) -> anyhow::Result<i32> {
@@ -632,12 +792,12 @@ pub async fn save_form(pool: &PgPool, kind: &str, fields: serde_json::Value, pho
 
 // ---------- sitemaps ----------
 pub async fn sitemap_products(pool: &PgPool) -> anyhow::Result<Vec<(String, String)>> {
-    let rows = sqlx::query("SELECT slug, updated_at FROM product ORDER BY slug").fetch_all(pool).await?;
+    let rows = sqlx::query("SELECT slug, updated_at FROM product WHERE status IN ('live', 'sold') ORDER BY slug").fetch_all(pool).await?;
     Ok(rows.iter().map(|r| (format!("/product/{}/", r.get::<String, _>("slug")), r.get::<chrono::DateTime<chrono::Utc>, _>("updated_at").format("%Y-%m-%d").to_string())).collect())
 }
 
 pub async fn sitemap_posts(pool: &PgPool) -> anyhow::Result<Vec<(String, String)>> {
-    let rows = sqlx::query("SELECT slug, modified_at FROM post ORDER BY published_at DESC").fetch_all(pool).await?;
+    let rows = sqlx::query("SELECT slug, modified_at FROM post WHERE status = 'published' ORDER BY published_at DESC").fetch_all(pool).await?;
     Ok(rows.iter().map(|r| (format!("/{}/", r.get::<String, _>("slug")), r.get::<chrono::DateTime<chrono::Utc>, _>("modified_at").format("%Y-%m-%d").to_string())).collect())
 }
 
@@ -647,7 +807,43 @@ pub async fn sitemap_listings(pool: &PgPool) -> anyhow::Result<Vec<(String, Stri
 }
 
 pub async fn term_slugs_with_products(pool: &PgPool, table: &str, fk: &str) -> anyhow::Result<Vec<String>> {
-    let sql = format!("SELECT t.slug FROM {table} t WHERE EXISTS (SELECT 1 FROM product p WHERE p.{fk} = t.id) ORDER BY t.sort_order, t.name");
+    let sql = format!("SELECT t.slug FROM {table} t WHERE EXISTS (SELECT 1 FROM product p WHERE p.{fk} = t.id AND p.status IN ('live', 'sold')) ORDER BY t.sort_order, t.name");
     let rows = sqlx::query(&sql).fetch_all(pool).await?;
     Ok(rows.iter().map(|r| r.get::<String, _>("slug")).collect())
+}
+
+// ---------- product tags ----------
+#[derive(Clone, Debug, FromRow)]
+pub struct Tag {
+    pub slug: String,
+    pub name: String,
+    /// Items with this tag that a visitor can buy right now.
+    pub live: i64,
+}
+
+impl Tag {
+    pub fn url(&self) -> String {
+        format!("/product-tag/{}/", self.slug)
+    }
+}
+
+const TAG_SELECT: &str = "SELECT t.slug, t.name, (SELECT count(*) FROM product_tag_link l2 JOIN product p2 ON p2.id = l2.product_id WHERE l2.tag_id = t.id AND p2.status = 'live') AS live FROM product_tag t";
+
+pub async fn product_tags(pool: &PgPool, product_id: i32) -> anyhow::Result<Vec<Tag>> {
+    let sql = format!("{TAG_SELECT} JOIN product_tag_link l ON l.tag_id = t.id WHERE l.product_id = $1 ORDER BY l.position, t.name");
+    Ok(sqlx::query_as(&sql).bind(product_id).fetch_all(pool).await?)
+}
+
+pub async fn tag_by_slug(pool: &PgPool, slug: &str) -> anyhow::Result<Option<Tag>> {
+    let sql = format!("{TAG_SELECT} WHERE t.slug = $1");
+    Ok(sqlx::query_as(&sql).bind(slug).fetch_optional(pool).await?)
+}
+
+/// A tag archive is indexed (and in the sitemap) once it holds this many items for sale; below that
+/// it is a thin page that still works for visitors.
+pub const TAG_INDEX_MIN: i64 = 3;
+
+pub async fn indexable_tags(pool: &PgPool) -> anyhow::Result<Vec<Tag>> {
+    let sql = format!("SELECT * FROM ({TAG_SELECT}) x WHERE x.live >= $1 ORDER BY x.slug");
+    Ok(sqlx::query_as(&sql).bind(TAG_INDEX_MIN).fetch_all(pool).await?)
 }

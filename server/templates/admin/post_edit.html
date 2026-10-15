@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="admin-page">
+  <div class="adm-top"><div><h1>{% if is_new %}New blog post{% else %}Edit blog post{% endif %}</h1><p class="lead"><a href="/admin/posts/">All posts</a>{% if !is_new %} · <a href="{{ url }}">View it on the site</a>{% endif %}</p></div></div>
+  {% if saved %}<div class="adm-ok">Saved. {% if status == "published" %}It is live at <a href="{{ url }}">{{ url }}</a>.{% else %}It is a draft: only you can see it, at <a href="{{ url }}">{{ url }}</a>.{% endif %}</div>{% endif %}
+  {% if missing > 0 %}<div class="adm-warnbox">{{ missing }} photo{% if missing != 1 %}s{% endif %} in this post point{% if missing == 1 %}s{% endif %} at a file that did not survive the move from GoDaddy. Click the broken photo in the editor, delete it, and use “Photo” to put the original back.</div>{% endif %}
+  <form class="adm-form" method="post" action="{% if is_new %}/admin/posts/new/{% else %}/admin/posts/{{ id }}/{% endif %}">
+    <input type="hidden" name="csrf" value="{{ page.csrf }}">
+    <label for="title">Title</label>
+    <input id="title" name="title" value="{{ title }}" required maxlength="200">
+    <div class="adm-cols">
+      <div>
+        <label for="category">Category</label>
+        <select id="category" name="category"><option value="">None</option>{% for c in categories %}<option value="{{ c.value }}"{% if c.selected %} selected{% endif %}>{{ c.label }}</option>{% endfor %}</select>
+      </div>
+      <div>
+        <label for="new_category">…or start a new category</label>
+        <input id="new_category" name="new_category" maxlength="80" placeholder="Leave blank to use the one on the left">
+      </div>
+    </div>
+    <label>The post</label>
+    <div class="adm-rte" data-editor>
+      <textarea name="body_html" rows="18">{{ body_html }}</textarea>
+    </div>
+    <fieldset class="adm-featured" data-featured>
+      <legend>Photo at the top of the post (also used on the blog page and when the post is shared)</legend>
+      <img data-featured-img src="{{ featured_url }}" alt=""{% if featured_url.is_empty() %} hidden{% endif %}>
+      <input type="hidden" name="featured_path" value="{{ featured_path }}">
+      <label class="btn btn-outline adm-file">Choose a photo<input type="file" accept="image/*" data-featured-file></label>
+      <button type="button" class="btn btn-ghost" data-featured-clear{% if featured_url.is_empty() %} hidden{% endif %}>Remove</button>
+      <label for="featured_alt">Describe the photo (for people who cannot see it)</label>
+      <input id="featured_alt" name="featured_alt" value="{{ featured_alt }}" maxlength="200">
+    </fieldset>
+    <details class="adm-more">
+      <summary>Summary and search description (filled in for you if left blank)</summary>
+      <label for="excerpt">Summary shown on the blog page</label>
+      <textarea id="excerpt" name="excerpt" rows="3" maxlength="400">{{ excerpt }}</textarea>
+      <label for="meta_description">Description shown by Google (about 155 characters)</label>
+      <textarea id="meta_description" name="meta_description" rows="2" maxlength="300">{{ meta_description }}</textarea>
+    </details>
+    <div class="adm-actions">
+      <label for="status">Status</label>
+      <select id="status" name="status"><option value="draft"{% if status == "draft" %} selected{% endif %}>Draft (only you can see it)</option><option value="published"{% if status == "published" %} selected{% endif %}>Published</option></select>
+      <button type="submit" class="btn">Save</button>
+    </div>
+  </form>
+</div>
+{% endblock %}
+{% block scripts %}<script src="/static/js/editor.js?v={{ page.asset_v }}" defer></script>{% endblock %}

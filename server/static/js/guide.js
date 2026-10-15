@@ -62,6 +62,9 @@
   function renderDates(r) {
     addCard('<div class="gcard ok"><div class="t"><span>Our Guarantee dates</span><span class="mono small">received ' + esc(r.received_on) + '</span></div><ul><li>Return by ' + esc(r.return_by) + ' (' + r.return_days + ' days) for a full refund of the item price, same condition, insured U.S. Mail</li><li>Problems found by ' + esc(r.fix_by) + ' (' + r.fix_days + ' days): let him know and he will do what he can to fix it</li></ul></div>');
   }
+  function renderDefine(r) {
+    addCard('<div class="gcard ok"><div class="t"><span>' + esc(r.name) + '</span><span class="mono small">' + esc(r.kind) + ' · glossary</span></div><p>' + esc(r.definition) + '</p><p><a class="btn btn-ghost btn-sm" href="' + esc(link(r.url)) + '">Read the entry</a></p></div>');
+  }
   function renderHandoff(summary) {
     addCard('<div class="gcard ok"><div class="t"><span>Over to Nathaniel</span><span class="mono small">Norwich, CT</span></div>' + (summary ? '<p>' + esc(summary) + '</p>' : '') + '<ul><li>Call <a href="tel:+18477085062">' + PHONE + '</a></li><li>E-mail <a href="mailto:' + EMAIL + '">' + EMAIL + '</a></li><li>Estimates and offers come from him, not from this guide</li></ul></div>');
     quickEl.innerHTML = "";
@@ -73,6 +76,7 @@
       else if (t.name === "repair_scope") renderRepair(t.result);
       else if (t.name === "sell_triage") renderSell(t.result);
       else if (t.name === "guarantee_dates") renderDates(t.result);
+      else if (t.name === "define_term") renderDefine(t.result);
       else if (t.name === "handoff") renderHandoff(t.result.summary);
     });
   }
@@ -108,6 +112,7 @@
   function send(text) {
     text = (text || "").trim(); if (!text || state.busy) return;
     inputEl.value = ""; bubble("me", text); quickEl.innerHTML = "";
+    if (window.pmTrack) window.pmTrack("search", { q: text.slice(0, 120), source: "guide" });
     if (state.mode === "offline") { offline(); return; }
     state.turns.push({ role: "user", content: text });
     state.busy = true; sendEl.disabled = true;

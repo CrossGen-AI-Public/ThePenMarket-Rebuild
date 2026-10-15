@@ -1,0 +1,121 @@
+#!/usr/bin/env python3
+"""Admin gate: sign in as the test account, pass the new-device code (read from the mail log),
+open a product page with editing on, change the title inline and change it back, toggle preview,
+and fail on any console error or failed request along the way. Screenshots go next to the other
+gate output. Usage: ADMIN_TEST_EMAIL=… ADMIN_TEST_PASSWORD=… admin_check.py <base-url> <mail-log> <out-dir>
+"""
+import os, re, sys, time
+from playwright.sync_api import sync_playwright
+
+base, mail_log, out = sys.argv[1].rstrip("/"), sys.argv[2], sys.argv[3]
+email, password = os.environ["ADMIN_TEST_EMAIL"], os.environ["ADMIN_TEST_PASSWORD"]
+os.makedirs(out, exist_ok=True)
+bad = []
+
+def shot(pg, name, full=True):
+    """Chromium under SwiftShader occasionally refuses a capture mid-paint; settle and retry."""
+    for i in range(4):
+        try:
+            pg.wait_for_load_state("networkidle", timeout=10000)
+        except Exception:
+            pass
+        try:
+            pg.screenshot(path=f"{out}/{name}.png", full_page=full); return
+        except Exception as e:
+            if i == 3: raise
+            time.sleep(1)
+
+def wait_text(loc, pred, what, timeout=15):
+    for _ in range(int(timeout * 10)):
+        if pred(loc.inner_text().strip()): return
+        time.sleep(0.1)
+    raise AssertionError(f"timed out waiting for {what}: {loc.inner_text().strip()!r}")
+
+def latest_code():
+    text = open(mail_log, encoding="utf-8", errors="replace").read()
+    codes = re.findall(r"code is: (\d{6})", text)
+    return codes[-1] if codes else None
+
+with sync_playwright() as p:
+    b = p.chromium.launch(headless=True, args=["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"])
+    ctx = b.new_context(viewport={"width": 1440, "height": 1000})
+    pg = ctx.new_page()
+    pg.on("console", lambda m: bad.append(f"console.{m.type}: {m.text[:160]}") if m.type == "error" else None)
+    pg.on("pageerror", lambda e: bad.append(f"pageerror: {str(e)[:160]}"))
+    # a form post navigates away while photos are still loading; those aborts are not failures
+    pg.on("requestfailed", lambda r: bad.append(f"requestfailed: {r.url[:120]} {r.failure}") if "ERR_ABORTED" not in str(r.failure) else None)
+    pg.on("response", lambda r: bad.append(f"http {r.status}: {r.url[:120]}") if r.status >= 500 else None)
+
+    pg.goto(f"{base}/admin/login/", wait_until="load")
+    shot(pg, "admin-login-1440")
+    pg.fill("#email", email); pg.fill("#password", password)
+    with pg.expect_navigation(wait_until="load"):
+        pg.click(".admin-box button[type=submit]")
+    if "/admin/verify/" in pg.url:
+        shot(pg, "admin-verify-1440")
+        code = None
+        for _ in range(20):
+            code = latest_code()
+            if code: break
+            time.sleep(0.5)
+        assert code, "no sign-in code in the mail log"
+        pg.fill("input[name=code]", code)
+        with pg.expect_navigation(wait_until="load"):
+            pg.click(".admin-box button[type=submit]")
+    assert pg.url.rstrip("/").endswith("/admin"), f"unexpected page after sign-in: {pg.url}"
+    shot(pg, "admin-home-1440")
+
+    # a product page with editing on
+    pg.goto(f"{base}/shop/", wait_until="load")
+    href = pg.get_attribute("a[href^='/product/']", "href")
+    pg.goto(f"{base}{href}", wait_until="load")
+    assert pg.locator("#admBar").count() == 1, "editing bar missing"
+    assert pg.evaluate("document.documentElement.classList.contains('editing')"), "editing class missing"
+    shot(pg, "admin-product-1440")
+    title = pg.locator("[data-edit=title]"); before = title.inner_text().strip()
+    title.click(); pg.wait_for_selector("[data-edit=title] input")
+    pg.fill("[data-edit=title] input", before + " (gate)"); pg.click("[data-edit=title] .save")
+    wait_text(title, lambda t: "(gate)" in t, "the edited title")
+    shot(pg, "admin-product-edited-1440")
+    title.click(); pg.wait_for_selector("[data-edit=title] input"); pg.fill("[data-edit=title] input", before); pg.click("[data-edit=title] .save")
+    wait_text(title, lambda t: t == before, "the title to be put back")
+    # preview as a customer, then back
+    with pg.expect_navigation(wait_until="load"):
+        pg.click("#admBar button:has-text('Preview as customer')")
+    assert pg.locator("#admBar").count() == 0 and pg.locator(".adm-pill").count() == 1, "preview mode did not hide the editing bar"
+    shot(pg, "admin-preview-1440", full=False)
+    with pg.expect_navigation(wait_until="load"):
+        pg.click(".adm-pill button")
+    assert pg.locator("#admBar").count() == 1, "leaving preview did not restore the editing bar"
+    # history shows the two edits
+    pg.goto(f"{base}/admin/history/", wait_until="load")
+    assert pg.locator("td:has-text('(gate)')").count() >= 1, "history missing the edit"
+    shot(pg, "admin-history-1440")
+    # every admin page added after the 2026-09-14 meeting renders, at desktop and phone width
+    pages = ["/admin/", "/admin/inbox/", "/admin/posts/", "/admin/posts/new/", "/admin/pages/", "/admin/pages/new/", "/admin/faqs/", "/admin/glossary/", "/admin/settings/", "/admin/brands/", "/admin/insights/", "/admin/experiments/", "/admin/sourcing/"]
+    for path in pages:
+        r = pg.goto(f"{base}{path}", wait_until="load")
+        if not r or r.status != 200: bad.append(f"{path} answered {r.status if r else 'nothing'}")
+    pg.goto(f"{base}/admin/posts/new/", wait_until="load")
+    assert pg.locator(".adm-rte-bar button").count() >= 10, "the writing toolbar did not load"
+    shot(pg, "admin-post-new-1440")
+    pg.goto(f"{base}/admin/insights/", wait_until="load"); shot(pg, "admin-insights-1440")
+    # the heat map toggles on a customer page
+    pg.goto(f"{base}/shop/", wait_until="load")
+    pg.click("#admHeat"); pg.wait_for_selector(".heat-panel")
+    assert pg.locator(".heat-layer").count() == 1, "the heat map layer did not draw"
+    pg.click("#admHeat")
+    # phone width
+    ctx2 = b.new_context(viewport={"width": 390, "height": 844}, storage_state=ctx.storage_state())
+    m = ctx2.new_page(); m.goto(f"{base}{href}", wait_until="load"); shot(m, "admin-product-390")
+    over = m.evaluate("document.documentElement.scrollWidth - document.documentElement.clientWidth")
+    if over > 0: bad.append(f"overflow {over}px at 390 on the product page with editing on")
+    for path in pages:
+        m.goto(f"{base}{path}", wait_until="load")
+        over = m.evaluate("document.documentElement.scrollWidth - document.documentElement.clientWidth")
+        if over > 0: bad.append(f"overflow {over}px at 390 on {path}")
+    b.close()
+
+for line in bad: print(line)
+print("admin check:", "PASS" if not bad else f"FAIL ({len(bad)})")
+sys.exit(1 if bad else 0)

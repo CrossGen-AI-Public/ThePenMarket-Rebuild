@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="admin-page">
+  <div class="adm-top"><div><h1>Devices</h1><p class="lead">Laptops and phones that don't need the email code. Forget one and it will be asked for a code next time.</p></div></div>
+  <table class="adm">
+    <tr><th>Device</th><th>First used</th><th>Last used</th><th>Remembered until</th><th>From</th><th></th></tr>
+    {% for d in devices %}
+    <tr><td><b>{{ d.name }}</b></td><td>{{ d.first_seen }}</td><td>{{ d.last_seen }}</td><td>{{ d.expires }}</td><td>{{ d.ip }}</td>
+      <td><form method="post" action="/admin/devices/{{ d.id }}/revoke/"><input type="hidden" name="csrf" value="{{ page.csrf }}"><button type="submit" class="btn btn-outline btn-sm">Forget</button></form></td></tr>
+    {% endfor %}
+    {% if devices.is_empty() %}<tr><td colspan="6">No remembered devices yet.</td></tr>{% endif %}
+  </table>
+</div>
+{% endblock %}

@@ -91,7 +91,7 @@ pub async fn read_multipart(state: &State, cookie: &CsrfCookie, peer: SocketAddr
         rand::rng().fill_bytes(&mut rnd);
         let key = format!("{}.jpg", hex::encode(rnd));
         let dest = state.cfg.uploads_dir.join(&key);
-        match crate::media::reencode_upload(&bytes, &dest) {
+        match crate::media::reencode_upload_async(bytes.to_vec(), dest.clone()).await {
             Ok(_) => photo_key = Some(key),
             Err(_) => return Err(AppError::BadRequest("the photo could not be read as an image (JPEG, PNG or WebP)".into())),
         }
@@ -99,8 +99,42 @@ pub async fn read_multipart(state: &State, cookie: &CsrfCookie, peer: SocketAddr
     Ok(Submitted { fields: serde_json::Value::Object(fields), photo_key })
 }
 
+/// E-mail a stored submission to the address that kind routes to, in the background so the visitor
+/// never waits on the mail server. `mailed` is set only when a real SMTP server accepted it.
+pub fn notify(state: &State, kind: &'static str, id: i32, fields: &serde_json::Value, has_photo: bool) {
+    let (to, what) = match kind {
+        "repair" => (state.cfg.forms_to.clone(), "Repair estimate request"),
+        "sell" => (state.cfg.forms_to.clone(), "Pens offered for sale"),
+        "contact" => (state.cfg.forms_to.clone(), "Contact form message"),
+        "guide_handoff" => (state.cfg.forms_to.clone(), "Ask the Pen Market handoff"),
+        "trading_post" => (state.cfg.trading_post_to.clone(), "Trading Post listing"),
+        _ => return, // mailing-list signups stay in the inbox; they are not messages
+    };
+    let pairs: Vec<(String, String)> = fields.as_object().map(|o| o.iter().map(|(k, v)| (k.clone(), v.as_str().unwrap_or("").to_string())).collect()).unwrap_or_default();
+    let msg = crate::admin::mail::form_message(&to, what, id, &pairs, has_photo, &state.abs("/admin/inbox/"));
+    let state = state.clone();
+    tokio::spawn(async move {
+        match state.mailer.send(msg).await {
+            Ok(()) if state.mailer.name() == "smtp" => {
+                let _ = sqlx::query("UPDATE form_submission SET mailed = TRUE WHERE id = $1").bind(id).execute(&state.pool).await;
+            }
+            Ok(()) => {}
+            Err(e) => tracing::warn!("form #{id} ({kind}) could not be e-mailed: {e:#}"),
+        }
+    });
+}
+
+/// First line of every confirmation: the truth about where the message went.
+fn receipt(state: &State, id: i32) -> String {
+    if state.mailer.name() == "smtp" {
+        format!("Reference #{id}. Your message was e-mailed to Nathaniel and saved in the shop's inbox.")
+    } else {
+        format!("Reference #{id}. Your message is saved in the shop's inbox, where Nathaniel reads it. (Outgoing e-mail is not connected on this preview build.)")
+    }
+}
+
 fn done(state: &State, path: &str, heading: &str, lines: Vec<String>, back_url: &str, back_label: &str) -> AppResult {
-    let mut page = PageMeta::new(state, &format!("{heading} | ThePenMarket.com"), "Demo submission stored on the server; nothing was e-mailed.", path);
+    let mut page = PageMeta::new(state, &format!("{heading} | ThePenMarket.com"), "Your message was received.", path);
     page.noindex = true;
     html(&FormDoneTpl { page, heading: heading.to_string(), lines, back_url: back_url.to_string(), back_label: back_label.to_string() })
 }
@@ -108,8 +142,9 @@ fn done(state: &State, path: &str, heading: &str, lines: Vec<String>, back_url: 
 pub async fn repair(AxState(state): AxState<State>, Extension(cookie): Extension<CsrfCookie>, ConnectInfo(peer): ConnectInfo<SocketAddr>, headers: HeaderMap, mp: Multipart) -> AppResult {
     let f = read_multipart(&state, &cookie, peer, &headers, mp, &["name", "email"]).await?;
     let id = db::save_form(&state.pool, "repair", f.fields.clone(), f.photo_key.clone()).await?;
-    done(&state, "/pen-repairs/", "Repair estimate request received, as a demo", vec![
-        format!("Reference #{id}. This build stores the request on the server; it does not e-mail Nathaniel. On the live site the same form reaches info@thepenmarket.com."),
+    notify(&state, "repair", id, &f.fields, f.photo_key.is_some());
+    done(&state, "/pen-repairs/", "Repair estimate request received", vec![
+        receipt(&state, id),
         format!("From {} ({}). {}", f.get("name"), f.get("email"), if f.get("message").is_empty() { String::new() } else { format!("Message: {}", f.get("message")) }),
         if f.photo_key.is_some() { "Your photo was received and stored (re-encoded, metadata stripped)." } else { "No photo was attached; a photo helps the estimate." }.to_string(),
         "Reminder from the repairs page: discounts are available for shipments of 5 or more pens.".into(),
@@ -119,8 +154,9 @@ pub async fn repair(AxState(state): AxState<State>, Extension(cookie): Extension
 pub async fn sell(AxState(state): AxState<State>, Extension(cookie): Extension<CsrfCookie>, ConnectInfo(peer): ConnectInfo<SocketAddr>, headers: HeaderMap, mp: Multipart) -> AppResult {
     let f = read_multipart(&state, &cookie, peer, &headers, mp, &["name", "email"]).await?;
     let id = db::save_form(&state.pool, "sell", f.fields.clone(), f.photo_key.clone()).await?;
-    done(&state, "/sell-my-pens/", "Your pens are on the list, as a demo", vec![
-        format!("Reference #{id}. This build stores the message on the server; it does not e-mail Nathaniel. On the live site the same form reaches info@thepenmarket.com."),
+    notify(&state, "sell", id, &f.fields, f.photo_key.is_some());
+    done(&state, "/sell-my-pens/", "Thanks. Nathaniel will take a look", vec![
+        receipt(&state, id),
         format!("From {} ({}). {}", f.get("name"), f.get("email"), if f.get("message").is_empty() { String::new() } else { format!("What you have: {}", f.get("message")) }),
         if f.photo_key.is_some() { "Your photo was received and stored (re-encoded, metadata stripped)." } else { "No photo was attached; if you aren't sure what you have, a photo helps." }.to_string(),
     ], "/sell-my-pens/", "Back to Sell My Pens")
@@ -129,8 +165,9 @@ pub async fn sell(AxState(state): AxState<State>, Extension(cookie): Extension<C
 pub async fn contact(AxState(state): AxState<State>, Extension(cookie): Extension<CsrfCookie>, ConnectInfo(peer): ConnectInfo<SocketAddr>, headers: HeaderMap, mp: Multipart) -> AppResult {
     let f = read_multipart(&state, &cookie, peer, &headers, mp, &["name", "email"]).await?;
     let id = db::save_form(&state.pool, "contact", f.fields.clone(), f.photo_key.clone()).await?;
-    done(&state, "/contact/", "Message received, as a demo", vec![
-        format!("Reference #{id}. This build stores the message on the server; it does not e-mail Nathaniel. On the live site the same form reaches info@thepenmarket.com."),
+    notify(&state, "contact", id, &f.fields, f.photo_key.is_some());
+    done(&state, "/contact/", "Message received", vec![
+        receipt(&state, id),
         format!("From {} ({}).", f.get("name"), f.get("email")),
         if f.photo_key.is_some() { "Your photo was received and stored." } else { "No photo was attached." }.to_string(),
     ], "/contact/", "Back to Contact")

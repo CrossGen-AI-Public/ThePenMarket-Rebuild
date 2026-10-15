@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="admin-page">
+  <h1>Hello, {{ name }}</h1>
+  <p class="lead">Everything you can change on the site, in one place. Nothing here is ever deleted for good.</p>
+  <div class="adm-tiles">
+    {% for t in tiles %}
+    <a class="adm-tile" href="{{ t.url }}">
+      <span class="adm-tile-title">{{ t.title }}{% if !t.badge.is_empty() %} <span class="adm-chip">{{ t.badge }}</span>{% endif %}</span>
+      <span class="adm-tile-line">{{ t.line }}</span>
+    </a>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

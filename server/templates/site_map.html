@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="wrap site-map">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Home</a><span aria-hidden="true">›</span><span aria-current="page">Site Map</span></nav>
+  <h1>Site Map</h1>
+  <p class="lede">Every section of ThePenMarket.com on one page.</p>
+  <div class="site-map-grid">
+    {% for g in groups %}
+    <section>
+      <h2>{{ g.name }}</h2>
+      <ul>
+        {% for l in g.links %}<li><a href="{{ l.url }}">{{ l.name }}</a>{% if !l.note.is_empty() %} <span class="muted mono small">{{ l.note }}</span>{% endif %}</li>{% endfor %}
+      </ul>
+    </section>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

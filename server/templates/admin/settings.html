@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="admin-page">
+  <div class="adm-top"><div><h1>Homepage and photos</h1><p class="lead"><a href="/admin/">Admin home</a></p></div></div>
+  {% if saved %}<div class="adm-ok">Saved.</div>{% endif %}
+  {% if hero_product_id > 0 %}
+  <section class="adm-form adm-hero-photo">
+    <h2>The homepage photo of {{ hero_title }}</h2>
+    {% if !hero_image.is_empty() %}
+    <img src="{{ hero_image }}" alt="The homepage photo of {{ hero_title }}" style="max-height:260px;width:auto;display:block;margin:8px 0 12px">
+    <p class="adm-hint">Your photo with the background taken out and the pen stood up beside its cap. If the nib ended up at the bottom, turn it around.</p>
+    <form method="post" action="/admin/settings/hero-flip/">
+      <input type="hidden" name="csrf" value="{{ page.csrf }}">
+      <button type="submit" class="btn btn-outline" name="product_id" value="{{ hero_product_id }}">{% if hero_flipped %}Turn it back the way it was{% else %}Turn the pen the other way up{% endif %}</button>
+    </form>
+    {% else %}
+    <img src="{{ hero_plain }}" alt="Your photo of {{ hero_title }}" style="max-height:200px;width:auto;display:block;margin:8px 0 12px">
+    <p>The homepage shows this photo as it is, background and all, because it has no cut-out yet.</p>
+    {% endif %}
+    <h3>{% if hero_image.is_empty() %}Add the cut-out{% else %}Use a different cut-out{% endif %}</h3>
+    <ol class="adm-hint">
+      <li>On your Mac, find this photo in Finder (the same file you added to the pen).</li>
+      <li>Right-click it and choose <b>Quick Actions</b>, then <b>Remove Background</b>. Your Mac saves a new copy with only the pen and cap. (Or open it in Preview: <b>Tools</b>, then <b>Remove Background</b>, and save.)</li>
+      <li>Choose that new file below. The site stands the pen up beside its cap by itself.</li>
+    </ol>
+    <form method="post" action="/admin/settings/hero-cutout/" enctype="multipart/form-data">
+      <input type="hidden" name="csrf" value="{{ page.csrf }}">
+      <input type="hidden" name="product_id" value="{{ hero_product_id }}">
+      <label class="btn btn-outline adm-file">Choose the cut-out<input type="file" name="photo" accept="image/png,image/webp,image/jpeg" required></label>
+      <button type="submit" class="btn">Upload</button>
+    </form>
+  </section>
+  {% endif %}
+  <section class="adm-form adm-hero-photo">
+    <h2>Automatic cut-outs from your Mac</h2>
+    {% if helper_on %}
+    <p><b>On.</b> {% if helper_seen.is_empty() %}Your Mac has not checked in yet (it does every 15 minutes while it is on).{% else %}Your Mac last checked in on {{ helper_seen }}.{% endif %} {% if helper_waiting == 0 %}Every pen for sale has its cut-out.{% else %}{{ helper_waiting }} {% if helper_waiting == 1 %}pen is{% else %}pens are{% endif %} waiting for one.{% endif %}</p>
+    {% else %}
+    <p>Your Mac can take the background out of each new pen's first photo by itself, with the same Remove Background as Finder, and send it here. {% if helper_waiting > 0 %}{{ helper_waiting }} {% if helper_waiting == 1 %}pen is{% else %}pens are{% endif %} waiting for a cut-out now.{% endif %}</p>
+    {% endif %}
+    <form method="post" action="/admin/settings/cutout-helper/">
+      <input type="hidden" name="csrf" value="{{ page.csrf }}">
+      <button type="submit" class="btn btn-outline" name="action" value="on">{% if helper_on %}Set up a Mac again (new key){% else %}Set up a Mac{% endif %}</button>
+      {% if helper_on %}<button type="submit" class="btn btn-ghost" name="action" value="off">Turn off</button>{% endif %}
+    </form>
+  </section>
+  <form class="adm-form" method="post" action="/admin/settings/">
+    <input type="hidden" name="csrf" value="{{ page.csrf }}">
+    <h2>The pen at the top of the homepage</h2>
+    {% if featured_title.is_empty() %}
+    <p>Right now it is <b>the newest pen you listed</b>, automatically. To choose one yourself, open that pen's page and press “Feature on the homepage”.</p>
+    {% else %}
+    <p>You chose <a href="{{ featured_url }}"><b>{{ featured_title }}</b></a>. When it sells, the homepage goes back to the newest pen by itself.</p>
+    <label class="adm-check"><input type="checkbox" name="clear_featured" value="1"> Go back to showing the newest pen</label>
+    {% endif %}
+    <h2>Your photograph or the spinning 3D pen</h2>
+    <fieldset class="adm-radio">
+      <legend>The top of the homepage shows the pen above as…</legend>
+      <label><input type="radio" name="hero" value="photo"{% if hero_photo %} checked{% endif %}> your own photograph of that pen, large. It is the first photo on the pen’s page, so reorder its photos to choose which one leads.</label>
+      <label><input type="radio" name="hero" value="3d"{% if !hero_photo %} checked{% endif %}> the spinning 3D pen. It is a model, not a photograph: its colours and trim are read from your first photo of that pen, and its clip, nib and filling system can be clicked.</label>
+    </fieldset>
+    {% if hero_experiment %}<p class="adm-warnbox">The “Homepage pen: photograph or 3D model” experiment decides this right now (see <a href="/admin/experiments/">Experiments</a>). Your choice here takes over once it is reset.</p>{% endif %}
+    <h2>Most Popular row</h2>
+    <label class="adm-check"><input type="checkbox" name="popular" value="1"{% if popular_on %} checked{% endif %}> Show a “Most Popular” row on the homepage: the pens the most visitors opened in the last 30 days</label>
+    <p class="adm-hint">It only appears once at least four pens have each been opened by three different visitors, so it never shows a guess.</p>
+    <h2>Guided photo shoot</h2>
+    <p>When you add photos to a pen with “Guided photo shoot”, the site asks for these shots in this order, names each photo for you, and puts them in place. One per line, {{ max_photos }} at most (a pen holds {{ max_photos }} photos).</p>
+    <textarea name="shots" rows="11" aria-label="Shot list">{{ shots }}</textarea>
+    <h2>Shipping on online orders</h2>
+    <p>{% if checkout_mode == "off" %}Online checkout is off until CrossGen adds your Stripe keys; these rates are used once it is on.{% else if checkout_mode == "test" %}Checkout is in Stripe's test mode (test cards only, no real money).{% else %}Checkout is taking real payments through Stripe.{% endif %} The buyer says first whether the pen ships in the US or outside it, then picks one of your rates for that place on Stripe's page. Enter 0 for free shipping; clear a row's name and price to remove it. At most {{ ship_max }} for each place.</p>
+    {% if !ship_saved %}<p class="adm-hint">These are the rates from your e-mail of October 12. They stay until you change them here.</p>{% endif %}
+    <table class="adm adm-ship">
+      <tr><th>Name buyers see</th><th>Price, in dollars</th><th>Ships</th></tr>
+      {% for r in ship_rows %}
+      <tr>
+        <td><input name="ship_name_{{ loop.index0 }}" value="{{ r.name }}" maxlength="100" aria-label="Shipping name {{ loop.index }}"></td>
+        <td><input name="ship_price_{{ loop.index0 }}" value="{{ r.price }}" maxlength="10" inputmode="decimal" aria-label="Shipping price {{ loop.index }}"></td>
+        <td><select name="ship_where_{{ loop.index0 }}" aria-label="Where shipping {{ loop.index }} applies"><option value="us"{% if r.region == "us" %} selected{% endif %}>In the US</option><option value="intl"{% if r.region == "intl" %} selected{% endif %}>Outside the US</option></select></td>
+      </tr>
+      {% endfor %}
+    </table>
+    <p class="adm-hint">With no rate outside the US, buyers abroad are not offered checkout. With no US rate, US buyers pay the pen's price only.</p>
+    {% if ship_saved %}<label class="adm-check"><input type="checkbox" name="ship_default" value="1"> Go back to the rates from your e-mail of October 12 ($6, $15 and $55 international)</label>{% endif %}
+    <h2>Google reviews</h2>
+    <p>Reviews live on your Google Business Profile, which is free to set up at business.google.com. Once you have one, paste its Place ID here (find it with Google's “Place ID Finder”). From then on every page carries a “Review us on Google” link that opens the review box for your shop, which is the fastest way to get your first reviews.</p>
+    <label for="place_id">Your Google Place ID</label>
+    <input id="place_id" name="place_id" value="{{ place_id }}" maxlength="200" placeholder="ChIJ…">
+    <p class="adm-hint">{% if places_key_set %}The site checks Google once a day and shows your rating and the reviews Google returns (five at most, its choice) on the homepage, word for word. Until a review exists, nothing is shown. {{ reviews_line }}{% else %}Showing the reviews themselves on the homepage needs a Google key that CrossGen adds (GOOGLE_PLACES_KEY in the runbook). The review link works without it.{% endif %}</p>
+    <div class="adm-actions"><button type="submit" class="btn">Save</button></div>
+  </form>
+  <h2>Where the forms are e-mailed</h2>
+  <table class="adm">
+    <tr><th>Form</th><th>Goes to</th></tr>
+    <tr><td>Repair estimate, Sell my pens, Contact, handoffs from Ask the Pen Market</td><td>{{ forms_to }}</td></tr>
+    <tr><td>Trading Post listings</td><td>{{ trading_post_to }}</td></tr>
+  </table>
+  <p class="adm-hint">{% if mail_connected %}Outgoing e-mail is connected. Every message is also kept in your <a href="/admin/inbox/">inbox</a>.{% else %}Outgoing e-mail is not connected on this server yet, so nothing is sent; every message is kept in your <a href="/admin/inbox/">inbox</a>. CrossGen connects it by setting SMTP_URL (see the runbook).{% endif %} To change an address, tell CrossGen.</p>
+</div>
+{% endblock %}

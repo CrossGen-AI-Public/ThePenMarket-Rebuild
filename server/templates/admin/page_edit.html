@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="admin-page">
+  <div class="adm-top"><div><h1>{% if is_new %}New page{% else %}Edit page{% endif %}</h1><p class="lead"><a href="/admin/pages/">All pages</a>{% if !is_new %} · <a href="{{ url }}">View it on the site</a>{% endif %}</p></div></div>
+  {% if saved %}<div class="adm-ok">Saved. {% if status == "published" %}It is live at <a href="{{ url }}">{{ url }}</a>.{% else %}It is a draft: only you can see it, at <a href="{{ url }}">{{ url }}</a>.{% endif %}</div>{% endif %}
+  <form class="adm-form" method="post" action="{% if is_new %}/admin/pages/new/{% else %}/admin/pages/{{ id }}/{% endif %}">
+    <input type="hidden" name="csrf" value="{{ page.csrf }}">
+    <label for="title">Title</label>
+    <input id="title" name="title" value="{{ title }}" required maxlength="160">
+    {% if is_new %}
+    <label for="slug">Address (optional; made from the title if left blank, and it cannot change later)</label>
+    <input id="slug" name="slug" maxlength="90" placeholder="pen-grading-system">
+    {% endif %}
+    <label>The page</label>
+    <div class="adm-rte" data-editor>
+      <textarea name="body_html" rows="18">{{ body_html }}</textarea>
+    </div>
+    <label for="meta_description">Description shown by Google (about 155 characters; made from the page if left blank)</label>
+    <textarea id="meta_description" name="meta_description" rows="2" maxlength="300">{{ meta_description }}</textarea>
+    <label class="adm-check"><input type="checkbox" name="in_footer" value="1"{% if in_footer %} checked{% endif %}> Link this page from the footer of every page</label>
+    <div class="adm-actions">
+      <label for="status">Status</label>
+      <select id="status" name="status"><option value="draft"{% if status == "draft" %} selected{% endif %}>Draft (only you can see it)</option><option value="published"{% if status == "published" %} selected{% endif %}>Published</option></select>
+      <button type="submit" class="btn">Save</button>
+    </div>
+  </form>
+</div>
+{% endblock %}
+{% block scripts %}<script src="/static/js/editor.js?v={{ page.asset_v }}" defer></script>{% endblock %}

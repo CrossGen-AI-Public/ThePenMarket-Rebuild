@@ -7,11 +7,14 @@
       <a href="/sell-my-pens/"{% if page.section == "sell" %} aria-current="page"{% endif %}>Sell</a>
       <a href="/trading-post/"{% if page.section == "trading-post" %} aria-current="page"{% endif %}>Trading Post</a>
       <a href="/blog/"{% if page.section == "blog" %} aria-current="page"{% endif %}>Blog</a>
+      {% for fp in page.footer_pages %}{% if fp.1 == "/pen-grading/" %}<a href="/pen-grading/"{% if page.current_path == "/pen-grading/" %} aria-current="page"{% endif %}>Pen Grading</a>{% endif %}{% endfor %}
+      {% if page.glossary_live %}<a href="/glossary/"{% if page.current_path.starts_with("/glossary/") %} aria-current="page"{% endif %}>Glossary</a>{% endif %}
+      <a href="/contact/"{% if page.section == "contact" %} aria-current="page"{% endif %}>Contact</a>
     </nav>
     <div class="masthead-tools">
       <button class="icon-btn" type="button" aria-label="Search" aria-expanded="false" aria-controls="searchbar"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M16.5 16.5 21 21"></path></svg></button>
       <a class="icon-btn" href="/shop/" aria-label="Shop all pens"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h16l-1.5 11a1 1 0 0 1-1 .9H6.5a1 1 0 0 1-1-.9Z"></path><path d="M8 8V6a4 4 0 0 1 8 0v2"></path></svg></a>
-      <a class="icon-btn" href="/contact/" aria-label="Contact"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M4 21a8 8 0 0 1 16 0"></path></svg></a>
+      <a class="icon-btn" href="/admin/login/" aria-label="Sign in" rel="nofollow"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M4 21a8 8 0 0 1 16 0"></path></svg></a>
       <button class="menu-btn" type="button" aria-expanded="false" aria-controls="sheet">Menu</button>
     </div>
   </div>
@@ -21,6 +24,9 @@
       <input id="q" type="search" name="q" placeholder="Search {{ page.nav_counts.live_total }} pens by name, brand, era or nib" autocomplete="off">
       <button type="submit" class="btn">Search</button>
     </form>
+    {% if !page.popular_searches.is_empty() %}
+    <p class="wrap search-popular"><span>Popular searches</span>{% for ps in page.popular_searches %}<a href="/shop/?q={{ ps|urlencode }}" rel="nofollow">{{ ps }}</a>{% endfor %}</p>
+    {% endif %}
   </div>
   <div id="sheet" class="sheet" hidden>
     <div class="wrap sheet-cols">
@@ -33,6 +39,7 @@
         <a href="/product-category/inkwells-blotters/">Inkwells &amp; Blotters ({{ page.nav_counts.inkwells }})</a>
         <a href="/product-category/camera/">Cameras</a>
         <a href="/on-sale-pens/">Best Bargains</a>
+        <a href="/sold-pens/">Sold Pen Archive</a>
       </div>
       <div>
         <h2>Buy, sell, trade</h2>
@@ -45,6 +52,9 @@
       <div>
         <h2>Read and reach us</h2>
         <a href="/blog/">Blog</a>
+        <a href="/faq/">FAQ</a>
+        {% if page.glossary_live %}<a href="/glossary/">Pen Glossary</a>{% endif %}
+        {% for fp in page.footer_pages %}<a href="{{ fp.1 }}">{{ fp.0 }}</a>{% endfor %}
         <a href="/about-us/">About Us</a>
         <a href="/contact/">Contact Us</a>
         <a href="tel:+18477085062">(847) 708-5062</a>

@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="wrap"><div class="admin-box">
+  <img src="/static/img/logo.png" alt="ThePenMarket.com">
+  <h1>Sign in</h1>
+  <p>For Nathaniel only. This page isn't linked from the site.</p>
+  {% if !notice.is_empty() %}<div class="ok">{{ notice }}</div>{% endif %}
+  {% if !error.is_empty() %}<div class="err">{{ error }}</div>{% endif %}
+  <form method="post" action="/admin/login/">
+    <input type="hidden" name="csrf" value="{{ page.csrf }}">
+    <label for="email">Email</label>
+    <input id="email" type="email" name="email" required autocomplete="username" autofocus>
+    <label for="password">Password</label>
+    <input id="password" type="password" name="password" required autocomplete="current-password">
+    <div class="row"><label style="margin:0;font-weight:400"><input type="checkbox" id="showpw"> Show password</label><a href="/admin/forgot/">Forgot password?</a></div>
+    <button type="submit" class="btn">Sign in</button>
+  </form>
+  <p class="note">New laptop or phone? We'll email you a six-digit code the first time.</p>
+</div></div>
+{% endblock %}
+{% block scripts %}<script src="/static/js/admin-forms.js?v={{ page.asset_v }}" defer></script>{% endblock %}

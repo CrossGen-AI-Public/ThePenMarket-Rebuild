@@ -8,6 +8,7 @@
         <a href="tel:+18477085062">(847) 708-5062</a><br>
         <a href="mailto:info@thepenmarket.com">info@thepenmarket.com</a>
       </address>
+      {% if !page.review_url.is_empty() %}<p class="footer-review"><a href="{{ page.review_url }}" rel="noopener" target="_blank">Review us on Google</a></p>{% endif %}
       <p class="social"><a href="https://www.facebook.com/pages/Thepenmarketcom/427549874033020" rel="noopener" target="_blank">Facebook</a><a href="https://www.instagram.com/thepenmarketdotcom" rel="noopener" target="_blank">Instagram</a></p>
     </div>
     <div class="footer-col">
@@ -19,6 +20,7 @@
       <a href="/product-category/inkwells-blotters/">Inkwells &amp; Blotters</a>
       <a href="/product-category/camera/">Cameras</a>
       <a href="/on-sale-pens/">Best Bargains</a>
+      <a href="/sold-pens/">Sold Pen Archive</a>
     </div>
     <div class="footer-col">
       <h2>Services</h2>
@@ -35,12 +37,15 @@
       <a href="/category/how-do-i-start-collecting-pens/">How Do I Start Collecting Pens?</a>
       <a href="/category/notes-from-the-work-bench/">Notes from the Work Bench</a>
       <a href="/category/ink-reviews/">Ink Reviews</a>
+      <a href="/faq/">FAQ</a>
+      {% if page.glossary_live %}<a href="/glossary/">Pen Glossary</a>{% endif %}
+      {% for fp in page.footer_pages %}<a href="{{ fp.1 }}">{{ fp.0 }}</a>{% endfor %}
       <a href="/about-us/">About Us</a>
       <a href="/contact/">Contact Us</a>
     </div>
     <div class="footer-col footer-mail">
       <h2>Join Our Mailing List</h2>
-      <form method="post" action="/mailing-list/" class="mail-form" data-csrf-from-cookie>
+      <form method="post" action="/mailing-list/" class="mail-form">
         <label class="sr" for="ml-name">Name</label>
         <input id="ml-name" name="name" required placeholder="Name*" autocomplete="name">
         <label class="sr" for="ml-email">Email</label>
@@ -52,8 +57,11 @@
       </form>
     </div>
   </div>
+  <div class="wrap footer-view">
+    <button type="button" class="view-toggle" id="classicToggle" aria-pressed="false">Classic view: larger text, no animation</button>
+  </div>
   <div class="wrap footer-legal">
     <p>© 2026, ThePenMarket.com. All Rights Reserved.</p>
-    <p><a href="/privacy/">Privacy Policy</a><a href="/guarantee/">Guarantee</a><a href="/sitemap.xml">Sitemap</a><a href="/llms.txt">llms.txt</a></p>
+    <p><a href="/privacy/">Privacy Policy</a><a href="/guarantee/">Guarantee</a><a href="/site-map/">Site Map</a><a href="/sitemap.xml">XML sitemap</a><a href="/llms.txt">llms.txt</a></p>
   </div>
 </footer>

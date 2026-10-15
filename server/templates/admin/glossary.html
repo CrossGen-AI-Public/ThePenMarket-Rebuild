@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="admin-page">
+  <div class="adm-top"><div><h1>Glossary</h1><p class="lead">The words your customers trip over, explained in your words. Published entries appear in the <a href="/glossary/">glossary</a>, above a matching shop search, as tap-to-define links in your listings, and in Ask the Pen Market's answers. Nothing is shown until you publish it, and no definition here is written for you.</p></div></div>
+  {% if !note.is_empty() %}<div class="adm-ok">{{ note }}</div>{% endif %}
+
+  <details class="adm-card" open>
+    <summary><b>Add an entry</b></summary>
+    <form class="adm-form" method="post" action="/admin/glossary/">
+      <input type="hidden" name="csrf" value="{{ page.csrf }}">
+      <div class="adm-cols">
+        <div><label for="new-name">The word, or the model's name</label><input id="new-name" name="name" required maxlength="80" placeholder="Brassing"></div>
+        <div><label for="new-kind">It is a</label><select id="new-kind" name="kind"><option value="term">Term (a part, material, condition…)</option><option value="model">Model (Parker 51, Snorkel…)</option></select></div>
+      </div>
+      <div class="adm-actions"><button type="submit" class="btn">Add it and write the definition</button></div>
+    </form>
+  </details>
+
+  <h2 class="adm-h2">Published ({{ live.len() }})</h2>
+  {% if live.is_empty() %}<p class="muted">Nothing is published yet, so the glossary is not linked from the site.</p>{% endif %}
+  <ul class="adm-gloss-list">
+    {% for t in live %}<li><a href="/admin/glossary/{{ t.id }}/"><b>{{ t.name }}</b></a> <span class="muted">{% if t.kind == "model" %}Model{% else %}{{ t.topic }}{% endif %}</span> · <a href="/glossary/{{ t.slug }}/">view</a></li>{% endfor %}
+  </ul>
+
+  {% if !mine.is_empty() %}
+  <h2 class="adm-h2">Your drafts ({{ mine.len() }})</h2>
+  <ul class="adm-gloss-list">
+    {% for t in mine %}<li><a href="/admin/glossary/{{ t.id }}/"><b>{{ t.name }}</b></a> <span class="adm-chip">Hidden</span> <span class="muted">{% if t.kind == "model" %}Model{% else %}{{ t.topic }}{% endif %}</span></li>{% endfor %}
+  </ul>
+  {% endif %}
+
+  <h2 class="adm-h2">Words found in your own writing ({{ found.len() }})</h2>
+  <p class="muted">Each of these turns up in at least two of your posts or listings. They are empty, hidden drafts: open one to see the sentences where you used the word, write the definition, and publish. Delete the ones that do not need explaining.</p>
+  <form method="post" action="/admin/glossary/mine/" class="adm-inline-form"><input type="hidden" name="csrf" value="{{ page.csrf }}"><button type="submit" class="btn btn-outline">Look through my writing again</button></form>
+  <ul class="adm-gloss-list adm-gloss-cols">
+    {% for t in found %}<li><a href="/admin/glossary/{{ t.id }}/">{{ t.name }}</a> <span class="muted">{{ t.mentions }}×{% if t.kind == "model" %} · model{% endif %}</span></li>{% endfor %}
+  </ul>
+
+  {% if !misses.is_empty() %}
+  <h2 class="adm-h2">Words visitors looked up that have no entry</h2>
+  <ul class="adm-gloss-list adm-gloss-cols">
+    {% for m in misses %}<li>{{ m.word }} <span class="muted">{{ m.hits }}×</span></li>{% endfor %}
+  </ul>
+  {% endif %}
+
+  <h2 class="adm-h2" id="defs">Makes, nibs, filling systems and eras ({{ defs_approved }} of {{ defs.len() }} approved)</h2>
+  <p class="muted">These short definitions already sit at the top of each make, nib, filling-system and era page. They were drafted from your posts when the site was built, not written by you. Rewrite one and tick the box, and it joins the glossary as yours; unticked ones are listed in the glossary by name only.</p>
+  {% for d in defs %}
+  <details class="adm-card">
+    <summary><span class="muted">{{ d.label }}</span> · <b>{{ d.name }}</b>{% if d.approved %} <span class="adm-chip adm-chip-ok">Yours</span>{% endif %}</summary>
+    <form class="adm-form" method="post" action="/admin/glossary/defs/">
+      <input type="hidden" name="csrf" value="{{ page.csrf }}">
+      <input type="hidden" name="tbl" value="{{ d.tbl }}">
+      <input type="hidden" name="slug" value="{{ d.slug }}">
+      <label>Definition shown on <a href="{{ d.url }}">{{ d.url }}</a></label>
+      <textarea name="definition" rows="4" maxlength="4000">{{ d.definition }}</textarea>
+      <label class="adm-check"><input type="checkbox" name="approved" value="1"{% if d.approved %} checked{% endif %}> These are my words: use them in the glossary, the listings and Ask the Pen Market</label>
+      <div class="adm-actions"><button type="submit" class="btn">Save</button></div>
+    </form>
+  </details>
+  {% endfor %}
+</div>
+{% endblock %}

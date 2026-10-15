@@ -156,6 +156,23 @@ async fn main() -> Result<()> {
 
     let pool = PgPoolOptions::new().max_connections(4).connect(&cfg.database_url).await?;
     sqlx::migrate!("./migrations").run(&pool).await?;
+    // Once Nathaniel has edited anything in the admin, a re-import would throw his work away.
+    let edits: i64 = sqlx::query_scalar("SELECT count(*) FROM event_log WHERE kind LIKE 'admin.edit' OR kind LIKE 'admin.create' OR kind LIKE 'admin.photo%' OR kind LIKE 'admin.post_%' OR kind LIKE 'admin.page_%' OR kind LIKE 'admin.brands_%' OR kind LIKE 'admin.media_%' OR kind LIKE 'admin.glossary_def_%' OR kind LIKE 'admin.redirect%'").fetch_one(&pool).await.unwrap_or(0);
+    if edits > 0 && std::env::var("FORCE_IMPORT").ok().as_deref() != Some("1") {
+        anyhow::bail!("refusing to re-import: the admin has made {edits} change(s) that a re-import would erase. Set FORCE_IMPORT=1 to do it anyway.");
+    }
+    // A pen sold online is marked sold in `product`; a re-import would put it back on sale.
+    let sales: i64 = sqlx::query_scalar("SELECT count(*) FROM shop_order WHERE status IN ('paid', 'processing')").fetch_one(&pool).await.unwrap_or(0);
+    if sales > 0 && std::env::var("FORCE_IMPORT").ok().as_deref() != Some("1") {
+        anyhow::bail!("refusing to re-import: {sales} pen(s) were sold or are being paid for online, and a re-import would put them back on sale. Set FORCE_IMPORT=1 to do it anyway.");
+    }
+    // Trading Post listings people posted (and paid for) here are not in any backup; a re-import would delete them.
+    let posted: i64 = sqlx::query_scalar("SELECT count(*) FROM tp_listing WHERE form_submission_id IS NOT NULL").fetch_one(&pool).await.unwrap_or(0);
+    if posted > 0 && std::env::var("FORCE_IMPORT").ok().as_deref() != Some("1") {
+        anyhow::bail!("refusing to re-import: {posted} Trading Post listing(s) were posted on this site, and a re-import would delete them. Set FORCE_IMPORT=1 to do it anyway.");
+    }
+    // The old addresses he added himself survive a forced re-import; his destination wins over the import's.
+    let his_redirects: Vec<(String, String, String)> = sqlx::query_as("SELECT old_path, new_path, reason FROM redirect WHERE added_by = 'admin'").fetch_all(&pool).await?;
     sqlx::query("TRUNCATE product_image, product, tp_listing, post, page, redirect, category, brand, era, nib, filling_mechanism, price_range, blog_category RESTART IDENTITY CASCADE").execute(&pool).await?;
 
     let term_data: TermData = match std::fs::read_to_string(data_dir.join("terms.json")) {
@@ -626,7 +643,11 @@ async fn main() -> Result<()> {
     for (old, (new, why)) in &redirects {
         sqlx::query("INSERT INTO redirect (old_path, new_path, status, reason) VALUES ($1,$2,301,$3) ON CONFLICT (old_path) DO NOTHING").bind(old).bind(new).bind(why).execute(&pool).await?;
     }
+    for (old, new, why) in &his_redirects {
+        sqlx::query("INSERT INTO redirect (old_path, new_path, status, reason, added_by) VALUES ($1,$2,301,$3,'admin') ON CONFLICT (old_path) DO UPDATE SET new_path = EXCLUDED.new_path, reason = EXCLUDED.reason, added_by = 'admin'").bind(old).bind(new).bind(why).execute(&pool).await?;
+    }
     log.count("redirect rows", redirects.len() as i64);
+    log.count("redirect rows he added, kept", his_redirects.len() as i64);
     log.count("old sitemap URLs examined", seen_paths.len() as i64);
 
     std::fs::write(&log_path, log.render())?;

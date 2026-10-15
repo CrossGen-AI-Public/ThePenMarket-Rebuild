@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="wrap"><div class="admin-box">
+  <h1>Choose a new password</h1>
+  {% if invalid %}
+  <div class="err">That link has expired or was already used. <a href="/admin/forgot/">Ask for a new one.</a></div>
+  {% else %}
+  <p>At least 12 characters. A few words you can remember work well. We'll refuse it if it shows up in known password leaks.</p>
+  {% if !error.is_empty() %}<div class="err">{{ error }}</div>{% endif %}
+  <form method="post" action="/admin/reset/{{ token }}/">
+    <input type="hidden" name="csrf" value="{{ page.csrf }}">
+    <label for="password">New password</label>
+    <input id="password" type="password" name="password" required minlength="12" autocomplete="new-password" autofocus>
+    <label for="password2">Type it again</label>
+    <input id="password2" type="password" name="password2" required minlength="12" autocomplete="new-password">
+    <div class="row"><label style="margin:0;font-weight:400"><input type="checkbox" id="showpw"> Show password</label></div>
+    <button type="submit" class="btn">Save the new password</button>
+  </form>
+  {% endif %}
+</div></div>
+{% endblock %}
+{% block scripts %}<script src="/static/js/admin-forms.js?v={{ page.asset_v }}" defer></script>{% endblock %}

@@ -40,7 +40,10 @@ pub fn system_prompt(state: &State) -> String {
     let cat = state.catalog();
     let s = engine::stats(&cat);
     let cats: Vec<String> = s.by_category.iter().map(|c| format!("{} {}", c.count, c.name)).collect();
-    format!(
+    // The FAQs Nathaniel keeps in the admin (and marked for the guide), in his words.
+    let faqs: String = state.site().guide_faqs.iter().map(|(q, a)| format!("\nQ: {q}\nA: {a}")).collect();
+    let faq_block = if faqs.is_empty() { String::new() } else { format!("\nNATHANIEL'S OWN ANSWERS to questions he gets all the time. When a visitor asks one of these, answer with his answer, kept short, and do not add facts to it:{faqs}") };
+    let base = format!(
         "You are Ask the Pen Market, the AI guide on ThePenMarket.com, Nathaniel Cerf's vintage pen shop (online since 2007, Norwich, Connecticut). You are an AI, not Nathaniel; say so if asked. Nathaniel restores and sells vintage fountain pens and pre-owned luxury pens, one of each, repairs vintage pens, buys and consigns collections, and runs the Trading Post classifieds ($5 a listing, $125 a year for Unlimited Posts). The blog is Drippy Musings.
 Voice: plain, warm, a little wry, collector to collector, like his blog. Short messages: at most three short sentences or a short list. One question at a time. Plain text only: no markdown, no asterisks, no headings, no emojis, no em dashes.
 The catalog right now: {live} items in stock ({cats}), {min} to {max}, {brands} brands with stock. Never repeat these counts from memory later; call the tools.
@@ -50,6 +53,7 @@ RULES:
 - After find_pens, name the top one or two pens with their price and one reason, mention how many matched, and offer to narrow or to show the page. The page shows cards for the results; do not list every field.
 - For a specific pen (a SKU, a model name), call pen_details.
 - For \"can you fix my X\" call repair_scope with the visitor's words. For \"do you buy X\" or \"I want to sell\" call sell_triage. For nib width questions call nib_fact. For return or guarantee dates call guarantee_dates with the delivery date.
+- For \"what is X\", \"what does X mean\" or any pen word the visitor does not know (a part, a material, a condition word, a filling system, a nib, a make or a model), call define_term with the word. If it returns an entry, answer with Nathaniel's definition, kept short, and add no facts to it. If it returns found false, say the glossary has no entry for that word yet and offer to pass the question to Nathaniel; NEVER define a pen term from memory.
 - Estimates for repairs and offers for collections come from Nathaniel, never from you. Do not invent turnaround times, repair prices or offers.
 - Authenticity: you cannot authenticate a pen. Point to his fake-Montblanc posts and the description on the listing.
 - Checkout is not connected in this preview build; say a visitor can contact the shop to buy, and never pretend to take payment.
@@ -57,7 +61,8 @@ RULES:
 - When the visitor wants a repair estimate, wants to sell, wants a pen over $1,000, or asks for a person, call handoff with a two-sentence summary; then give the phone (847) 708-5062 and info@thepenmarket.com.
 - HARD RULE: if the visitor's first message already contains a budget or a pen description, your first action is find_pens, not a question.",
         live = s.live_total, cats = cats.join(", "), min = fmt_dollars(s.price_min_cents), max = fmt_dollars(s.price_max_cents), brands = s.brands_with_stock
-    )
+    );
+    format!("{base}{faq_block}")
 }
 
 pub fn tools() -> Vec<Value> {
@@ -76,6 +81,7 @@ pub fn tools() -> Vec<Value> {
         f("sell_triage", "Whether he is looking for the pens a visitor wants to sell, and the options (cash, consignment).", json!({"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]})),
         f("guarantee_dates", "Return-by and repair-promise dates from the day a pen was received (YYYY-MM-DD).", json!({"type": "object", "properties": {"received_on": {"type": "string"}}, "required": ["received_on"]})),
         f("nib_fact", "Line width and notes for a nib grade.", json!({"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]})),
+        f("define_term", "Look a pen word up in Nathaniel's glossary: parts, materials, condition and repair terms, filling systems, nibs, makes and models. Returns his definition, or found false when he has not written one.", json!({"type": "object", "properties": {"term": {"type": "string", "description": "the word or model name, as the visitor wrote it"}}, "required": ["term"]})),
         f("handoff", "Record a summary for Nathaniel and show the visitor the human contact card.", json!({"type": "object", "properties": {"summary": {"type": "string"}}, "required": ["summary"]})),
     ]
 }
@@ -119,9 +125,25 @@ pub async fn run_tool(state: &State, name: &str, args: &Value) -> (Value, Option
             Some(f) => (serde_json::to_value(f).unwrap_or(Value::Null), None),
             None => (json!({"error": "unknown nib grade; the grades are extra-fine, fine, medium, broad, BB, stub, oblique, accountant, semi-flexible, flexible"}), None),
         },
+        "define_term" => {
+            let word = s("term").unwrap_or_default();
+            let site = state.site();
+            match site.glossary.find(&word).filter(|e| e.in_guide) {
+                Some(e) => {
+                    let v = json!({"found": true, "name": e.name, "kind": e.kind_label, "definition": e.definition, "url": e.url});
+                    (v, Some(json!({"name": e.name, "kind": e.kind_label, "definition": e.short, "url": e.url})))
+                }
+                None => {
+                    crate::glossary::record_miss(&state.pool, &word).await;
+                    (json!({"found": false, "message": "Nathaniel has not written a glossary entry for this word. Say so, do not define it yourself, and offer to pass the question to him."}), None)
+                }
+            }
+        }
         "handoff" => {
             let summary = s("summary").unwrap_or_default();
-            let _ = db::save_form(&state.pool, "guide_handoff", json!({"summary": summary}), None).await;
+            if let Ok(id) = db::save_form(&state.pool, "guide_handoff", json!({"summary": summary}), None).await {
+                crate::routes::forms::notify(state, "guide_handoff", id, &json!({"summary": summary}), false);
+            }
             (json!({"ok": true, "phone": "(847) 708-5062", "email": "info@thepenmarket.com"}), Some(json!({"summary": summary})))
         }
         _ => (json!({"error": "unknown tool"}), None),
@@ -143,6 +165,57 @@ pub async fn health(AxState(state): AxState<State>) -> Response {
     Json(json!({"backend": "openai-compatible", "model": state.cfg.guide_ai_model, "host": host, "catalog": cat.pens.len(), "generated_at": cat.generated_at})).into_response()
 }
 
+/// Spending limits for the model, which costs money per call: a daily ceiling for the whole site
+/// (`GUIDE_DAILY_MAX`, default 600 conversations' turns), a daily ceiling per visitor address, and at
+/// most a few hand-offs to Nathaniel's inbox per address per day. `GUIDE_ENABLED=0` turns it off.
+struct Daily {
+    day: chrono::NaiveDate,
+    total: u64,
+    per_ip: std::collections::HashMap<std::net::IpAddr, (u32, u32)>,
+}
+static DAILY: std::sync::Mutex<Option<Daily>> = std::sync::Mutex::new(None);
+const PER_IP_DAY: u32 = 80;
+const HANDOFFS_PER_IP_DAY: u32 = 3;
+const MAX_INPUT_CHARS: usize = 8000;
+
+enum Budget {
+    Ok,
+    SiteFull,
+    VisitorFull,
+}
+
+fn spend(ip: std::net::IpAddr) -> Budget {
+    let max: u64 = std::env::var("GUIDE_DAILY_MAX").ok().and_then(|v| v.parse().ok()).unwrap_or(600);
+    let today = chrono::Utc::now().date_naive();
+    let Ok(mut g) = DAILY.lock() else { return Budget::Ok };
+    let d = g.get_or_insert_with(|| Daily { day: today, total: 0, per_ip: Default::default() });
+    if d.day != today {
+        *d = Daily { day: today, total: 0, per_ip: Default::default() };
+    }
+    if d.total >= max {
+        return Budget::SiteFull;
+    }
+    let e = d.per_ip.entry(ip).or_insert((0, 0));
+    if e.0 >= PER_IP_DAY {
+        return Budget::VisitorFull;
+    }
+    e.0 += 1;
+    d.total += 1;
+    Budget::Ok
+}
+
+/// May this address send Nathaniel another hand-off today?
+fn handoff_allowed(ip: std::net::IpAddr) -> bool {
+    let Ok(mut g) = DAILY.lock() else { return false };
+    let Some(d) = g.as_mut() else { return false };
+    let e = d.per_ip.entry(ip).or_insert((0, 0));
+    if e.1 >= HANDOFFS_PER_IP_DAY {
+        return false;
+    }
+    e.1 += 1;
+    true
+}
+
 fn err(status: StatusCode, msg: &str) -> Response {
     (status, Json(json!({"error": msg}))).into_response()
 }
@@ -151,7 +224,11 @@ pub async fn chat(AxState(state): AxState<State>, ConnectInfo(peer): ConnectInfo
     if state.cfg.guide_ai_url.is_empty() || state.cfg.guide_ai_key.is_empty() {
         return Ok(err(StatusCode::SERVICE_UNAVAILABLE, "no model configured"));
     }
-    if !state.guide_limiter.allow(security::client_ip(&headers, peer.ip())) {
+    if std::env::var("GUIDE_ENABLED").map(|v| v == "0" || v.eq_ignore_ascii_case("false")).unwrap_or(false) {
+        return Ok(err(StatusCode::SERVICE_UNAVAILABLE, "the guide is resting; call (847) 708-5062 or e-mail info@thepenmarket.com"));
+    }
+    let ip = security::client_ip(&headers, peer.ip());
+    if !state.guide_limiter.allow(ip) {
         return Ok(err(StatusCode::TOO_MANY_REQUESTS, "too many requests, try again in a minute"));
     }
     let Json(body) = match body {
@@ -159,10 +236,35 @@ pub async fn chat(AxState(state): AxState<State>, ConnectInfo(peer): ConnectInfo
         Err(_) => return Ok(err(StatusCode::BAD_REQUEST, "body must be JSON {messages:[{role,content}]}")),
     };
     let messages: Vec<Msg> = body.messages.into_iter().filter(|m| (m.role == "user" || m.role == "assistant") && !m.content.trim().is_empty()).map(|m| Msg { role: m.role, content: m.content.chars().take(2000).collect() }).collect();
-    let messages: Vec<Msg> = messages.into_iter().rev().take(24).collect::<Vec<_>>().into_iter().rev().collect();
+    let mut messages: Vec<Msg> = messages.into_iter().rev().take(24).collect::<Vec<_>>().into_iter().rev().collect();
     if messages.last().map(|m| m.role != "user").unwrap_or(true) {
         return Ok(err(StatusCode::BAD_REQUEST, "messages must end with a user turn"));
     }
+    // The oldest turns go first when a conversation gets long; the newest question always stays.
+    while messages.len() > 1 && messages.iter().map(|m| m.content.chars().count()).sum::<usize>() > MAX_INPUT_CHARS {
+        messages.remove(0);
+    }
+    match spend(ip) {
+        Budget::Ok => {}
+        Budget::SiteFull => {
+            tracing::warn!("guide: daily limit for the whole site reached");
+            return Ok(err(StatusCode::SERVICE_UNAVAILABLE, "the guide has answered all it can for today; call (847) 708-5062 or e-mail info@thepenmarket.com"));
+        }
+        Budget::VisitorFull => return Ok(err(StatusCode::TOO_MANY_REQUESTS, "that's a lot of questions for one day; call (847) 708-5062 or e-mail info@thepenmarket.com")),
+    }
+    // The whole answer, every model call and tool included, has 60 seconds.
+    match tokio::time::timeout(std::time::Duration::from_secs(60), converse(&state, messages, ip)).await {
+        Ok(r) => r,
+        Err(_) => {
+            tracing::warn!("guide: answer took longer than 60 seconds");
+            Ok(err(StatusCode::GATEWAY_TIMEOUT, "the model took too long; try a shorter question"))
+        }
+    }
+}
+
+async fn converse(state: &State, messages: Vec<Msg>, ip: std::net::IpAddr) -> Result<Response, AppError> {
+    let state = state.clone();
+    let mut handed_off = false;
 
     let mut msgs: Vec<Value> = vec![json!({"role": "system", "content": system_prompt(&state)})];
     msgs.extend(messages.iter().map(|m| json!({"role": m.role, "content": m.content})));
@@ -196,6 +298,13 @@ pub async fn chat(AxState(state): AxState<State>, ConnectInfo(peer): ConnectInfo
             let name = c["function"]["name"].as_str().unwrap_or("").to_string();
             let raw = c["function"]["arguments"].as_str().unwrap_or("{}");
             let args: Value = serde_json::from_str(raw).unwrap_or_else(|_| json!({}));
+            // One hand-off per answer, and a few per visitor a day: a crafted message cannot make the
+            // model fill Nathaniel's inbox.
+            if name == "handoff" && (handed_off || !handoff_allowed(ip)) {
+                msgs.push(json!({"role": "tool", "tool_call_id": c["id"], "name": name, "content": json!({"ok": true, "phone": "(847) 708-5062", "email": "info@thepenmarket.com", "note": "already passed on"}).to_string()}));
+                continue;
+            }
+            handed_off |= name == "handoff";
             let (for_model, for_page) = run_tool(&state, &name, &args).await;
             if let Some(p) = for_page {
                 tool_results.push(ToolResult { name: name.clone(), args: args.clone(), result: p });

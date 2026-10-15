@@ -3,7 +3,7 @@
 
 use std::path::PathBuf;
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Config {
     pub database_url: String,
     pub host: String,
@@ -18,6 +18,53 @@ pub struct Config {
     pub guide_ai_key: String,
     pub guide_ai_model: String,
     pub guide_rate_per_min: u32,
+    /// Where lockout alerts go besides the admin (CrossGen), e.g. brittany.iversen@crossgen-ai.com.
+    pub admin_alert_email: String,
+    /// Where the repair, sell and contact forms (and guide handoffs) are e-mailed. `FORMS_TO`.
+    pub forms_to: String,
+    /// Where Trading Post submissions are e-mailed. `TRADING_POST_TO`.
+    pub trading_post_to: String,
+    /// eBay Browse API keys for the sourcing watchlist (`EBAY_APP_ID`, `EBAY_CERT_ID`); empty = the
+    /// watchlist still works, with prepared marketplace searches instead of fetched listings.
+    pub ebay_app_id: String,
+    pub ebay_cert_id: String,
+    /// Google Places API key for his rating and reviews (`GOOGLE_PLACES_KEY`); empty = only the
+    /// "Review us on Google" link works.
+    pub google_places_key: String,
+    /// Stripe secret key (`STRIPE_SECRET_KEY`, `sk_test_…` or `sk_live_…`); empty = the buy button
+    /// stays the labelled demo. Webhook signing secret (`STRIPE_WEBHOOK_SECRET`, `whsec_…`); without
+    /// it the webhook refuses every call, so checkout stays off until both are set.
+    pub stripe_secret_key: String,
+    pub stripe_webhook_secret: String,
+    /// Program that takes the backdrop out of a photo: `CUTOUT_CMD <photo> <out.png>` writes a PNG that is
+    /// transparent everywhere but the pen (`scripts/cutout-rembg.sh` on Linux; the Mac uses
+    /// `scripts/make-cutouts.sh`). Empty = only cutouts made elsewhere are used.
+    pub cutout_cmd: String,
+}
+
+/// Secrets never reach a log line: Debug shows which ones are set, not their values.
+impl std::fmt::Debug for Config {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let set = |v: &str| if v.is_empty() { "unset" } else { "set" };
+        f.debug_struct("Config")
+            .field("host", &self.host)
+            .field("port", &self.port)
+            .field("site_origin", &self.site_origin)
+            .field("database_url", &set(&self.database_url))
+            .field("csrf_secret", &set(&self.csrf_secret))
+            .field("guide_ai_url", &self.guide_ai_url)
+            .field("guide_ai_key", &set(&self.guide_ai_key))
+            .field("stripe_secret_key", &set(&self.stripe_secret_key))
+            .field("stripe_webhook_secret", &set(&self.stripe_webhook_secret))
+            .finish_non_exhaustive()
+    }
+}
+
+impl Config {
+    /// Checkout takes money only when both Stripe values are present.
+    pub fn checkout_enabled(&self) -> bool {
+        !self.stripe_secret_key.is_empty() && !self.stripe_webhook_secret.is_empty()
+    }
 }
 
 /// Load `~/.config/thepenmarket.env` if present (local runs), then read the environment.
@@ -62,5 +109,14 @@ pub fn load() -> anyhow::Result<Config> {
         guide_ai_key: env("GUIDE_AI_KEY"),
         guide_ai_model: env("GUIDE_AI_MODEL"),
         guide_rate_per_min: env("GUIDE_RATE_PER_MIN").parse().unwrap_or(10),
+        admin_alert_email: env("ADMIN_ALERT_EMAIL"),
+        forms_to: if env("FORMS_TO").is_empty() { "info@thepenmarket.com".to_string() } else { env("FORMS_TO") },
+        trading_post_to: if env("TRADING_POST_TO").is_empty() { "info@thepenmarket.com".to_string() } else { env("TRADING_POST_TO") },
+        ebay_app_id: env("EBAY_APP_ID"),
+        ebay_cert_id: env("EBAY_CERT_ID"),
+        google_places_key: env("GOOGLE_PLACES_KEY"),
+        stripe_secret_key: env("STRIPE_SECRET_KEY").trim().to_string(),
+        stripe_webhook_secret: env("STRIPE_WEBHOOK_SECRET").trim().to_string(),
+        cutout_cmd: env("CUTOUT_CMD").trim().to_string(),
     })
 }

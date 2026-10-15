@@ -15,14 +15,15 @@ pub async fn load(pool: &PgPool) -> anyhow::Result<Catalog> {
                 COALESCE(e.name,'') AS era, COALESCE(e.slug,'') AS era_slug,
                 COALESCE(n.name,'') AS nib, COALESCE(n.slug,'') AS nib_slug,
                 COALESCE(f.name,'') AS mechanism, COALESCE(f.slug,'') AS mechanism_slug, COALESCE(f.repairable,false) AS repairable,
-                (SELECT path FROM product_image i WHERE i.product_id = p.id ORDER BY position LIMIT 1) AS image,
-                (SELECT has_480 FROM product_image i WHERE i.product_id = p.id ORDER BY position LIMIT 1) AS has_480
+                (SELECT path FROM product_image i WHERE i.product_id = p.id AND i.archived_at IS NULL ORDER BY position LIMIT 1) AS image,
+                (SELECT has_480 FROM product_image i WHERE i.product_id = p.id AND i.archived_at IS NULL ORDER BY position LIMIT 1) AS has_480
          FROM product p
          JOIN category c ON c.id = p.category_id
          LEFT JOIN brand b ON b.id = p.brand_id
          LEFT JOIN era e ON e.id = p.era_id
          LEFT JOIN nib n ON n.id = p.nib_id
          LEFT JOIN filling_mechanism f ON f.id = p.filling_mechanism_id
+         WHERE p.status <> 'archived'
          ORDER BY p.listed_year DESC NULLS LAST, p.listed_month DESC NULLS LAST, p.wp_id DESC",
     )
     .fetch_all(pool)

@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="admin-page">
+  <div class="adm-top"><div><h1>Insights</h1><p class="lead">What visitors did on the site in the last {{ days }} days. Counted on this server only: no names, no e-mail or IP addresses, nothing shared with anyone, and you are never counted while signed in.</p></div>
+    <nav class="adm-range" aria-label="Time range">{% for d in [7, 30, 90] %}<a href="/admin/insights/?days={{ d }}"{% if *d == days %} aria-current="true"{% endif %}>{{ d }} days</a>{% endfor %}</nav>
+  </div>
+  <div class="adm-stats">
+    <div class="adm-stat"><span class="adm-stat-n">{{ totals.visitors }}</span><span class="adm-stat-l">visitors</span></div>
+    <div class="adm-stat"><span class="adm-stat-n">{{ totals.page_views }}</span><span class="adm-stat-l">pages viewed</span></div>
+    <div class="adm-stat"><span class="adm-stat-n">{{ totals.pen_views }}</span><span class="adm-stat-l">pen pages opened</span></div>
+    <div class="adm-stat"><span class="adm-stat-n">{{ totals.searches }}</span><span class="adm-stat-l">searches and questions</span></div>
+    <div class="adm-stat"><span class="adm-stat-n">{{ totals.conversions }}</span><span class="adm-stat-l">buy presses, calls, e-mails, forms</span></div>
+  </div>
+  <p class="adm-hint">To see where people click and how far they scroll on a page, open that page while signed in and press <b>Heat map</b> in the black bar.</p>
+  <div class="adm-lists">
+    {% for l in lists %}
+    <section class="adm-card adm-list">
+      <h2>{{ l.title }}</h2>
+      {% if !l.note.is_empty() %}<p class="adm-hint">{{ l.note }}</p>{% endif %}
+      {% if l.rows.is_empty() %}<p class="muted">Nothing recorded yet.</p>{% else %}
+      <table class="adm-rank">
+        <tr><th scope="col">What</th><th scope="col" class="num">{{ l.unit }}</th></tr>
+        {% for r in l.rows %}
+        <tr>
+          <td>{% if r.url.is_empty() %}{{ r.label }}{% else %}<a href="{{ r.url }}">{{ r.label }}</a>{% endif %}{% if !r.extra.is_empty() %} <span class="muted small">{{ r.extra }}</span>{% endif %}<span class="adm-bar-track" aria-hidden="true"><span class="adm-bar-fill" style="width:{{ r.pct }}%"></span></span></td>
+          <td class="num">{{ r.n }}</td>
+        </tr>
+        {% endfor %}
+      </table>
+      {% endif %}
+    </section>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

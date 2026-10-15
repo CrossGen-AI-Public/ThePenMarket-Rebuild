@@ -14,6 +14,7 @@ What still stands between the rebuild and handing ThePenMarket.com to Nathaniel.
 - [ ] **B** His droplet: SSH keys only, DigitalOcean firewall (80/443, 22 limited), unattended upgrades, Postgres internal only (scripts already do this), nightly `pg_dump` kept 14 days plus DO weekly backups.
 - [ ] **N** (with B on screen) Two-step sign-in on his DigitalOcean (then team Secure Sign-In, currently Disabled), Stripe, GoDaddy, Anthropic console and Microsoft e-mail.
 - [ ] **B** Stripe: live webhook endpoint and secret on his droplet only; test keys never on it.
+- [ ] **B** Dependabot alert 1 (moderate): `rustls` in `server/Cargo.lock` accepts some TLS 1.3 handshake messages across encryption levels; update to 0.23.45 or later (`cargo update -p rustls`), test, deploy.
 - [ ] **B** Code scanning: CodeQL's Rust analysis has never completed on this repo; get it to run and clear any high/critical alert. Secret scan of the git history.
 - [ ] **B** Decide CrossGen's ongoing access (named accounts on his DO/Stripe, a separate CrossGen admin login or none) with **S**; never share his password (10-05 said both "invite" and "send me the passwords").
 - [ ] **B** Old "www" pages Claude found that he thought were private (09-21): decide with him whether they stay public.

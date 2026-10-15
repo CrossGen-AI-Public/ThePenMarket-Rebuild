@@ -20,7 +20,10 @@ cp ops/thepenmarket.service "$HOME/.config/systemd/user/thepenmarket.service"
 systemctl --user daemon-reload
 systemctl --user enable thepenmarket.service >/dev/null 2>&1 || true
 systemctl --user restart thepenmarket.service
-ok=0; for i in $(seq 1 20); do sleep 1; if curl -sf "http://127.0.0.1:${PORT}/healthz" | grep -q ok; then ok=1; break; fi; done
+# The service listens only where ops/thepenmarket.service says (the Tailscale address since the
+# 2026-10-12 security review), so check it there; 127.0.0.1 when the unit sets no HOST.
+CHECK_HOST="$(sed -n 's/^Environment=HOST=//p' ops/thepenmarket.service | head -1)"; CHECK_HOST="${CHECK_HOST:-127.0.0.1}"; [ "$CHECK_HOST" = 0.0.0.0 ] && CHECK_HOST=127.0.0.1
+ok=0; for i in $(seq 1 20); do sleep 1; if curl -sf "http://${CHECK_HOST}:${PORT}/healthz" | grep -q ok; then ok=1; break; fi; done
 [ "$ok" = 1 ] || { echo "thepenmarket: service did not become healthy" >&2; systemctl --user status thepenmarket.service --no-pager | tail -20 >&2; exit 1; }
 echo "thepenmarket: healthy on :${PORT} ($(git -C .. rev-parse --short HEAD 2>/dev/null || echo no-git))"
-curl -sf "http://127.0.0.1:${PORT}/api/guide/health"; echo
+curl -sf "http://${CHECK_HOST}:${PORT}/api/guide/health"; echo

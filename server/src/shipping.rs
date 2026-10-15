@@ -136,18 +136,25 @@ pub fn chosen_name(offered: &[ShippingOption], cents: i64) -> String {
     offered.iter().filter(|o| o.cents == cents).map(|o| o.name.clone()).collect::<Vec<_>>().join(" or ")
 }
 
+/// Places that pay his US rates (his e-mail of 2026-10-14: "All U.S. Territories, Hawaii and Alaska
+/// should have the same shipping rates as the rest of the country"). Hawaii, Alaska and military
+/// APO/FPO addresses are `US` already; Stripe lists Puerto Rico and Guam as countries of their own.
+/// The US Virgin Islands, American Samoa and the Northern Marianas are not in Stripe's list, so buyers
+/// there enter a US address.
+pub const US_RATES: [&str; 3] = ["US", "PR", "GU"];
+
 /// Countries Stripe Checkout can collect a shipping address for, other than the US: the
 /// `shipping_address_collection[allowed_countries]` enum of POST /v1/checkout/sessions, as listed at
 /// https://docs.stripe.com/api/checkout/sessions/create?query=shipping_address_collection (read
-/// 2026-10-12), with `US` removed and `ZZ` ("unknown region") left out on purpose: a pen cannot be
-/// posted to an address in no country.
-pub const OUTSIDE_US: [&str; 236] = [
-    "AC", "AD", "AE", "AF", "AG", "AI", "AL", "AM", "AO", "AQ", "AR", "AT", "AU", "AW", "AX", "AZ", "BA", "BB", "BD", "BE", "BF", "BG", "BH", "BI", "BJ", "BL", "BM", "BN", "BO", "BQ", "BR", "BS", "BT", "BV", "BW", "BY", "BZ", "CA", "CD", "CF", "CG", "CH", "CI", "CK", "CL", "CM", "CN", "CO", "CR", "CV", "CW", "CY", "CZ", "DE", "DJ", "DK", "DM", "DO", "DZ", "EC", "EE", "EG", "EH", "ER", "ES", "ET", "FI", "FJ", "FK", "FO", "FR", "GA", "GB", "GD", "GE", "GF", "GG", "GH", "GI", "GL", "GM", "GN", "GP", "GQ", "GR", "GS", "GT", "GU", "GW", "GY", "HK", "HN", "HR", "HT", "HU", "ID", "IE", "IL", "IM", "IN", "IO", "IQ", "IS", "IT", "JE", "JM", "JO", "JP", "KE", "KG", "KH", "KI", "KM", "KN", "KR", "KW", "KY", "KZ", "LA", "LB", "LC", "LI", "LK", "LR", "LS", "LT", "LU", "LV", "LY", "MA", "MC", "MD", "ME", "MF", "MG", "MK", "ML", "MM", "MN", "MO", "MQ", "MR", "MS", "MT", "MU", "MV", "MW", "MX", "MY", "MZ", "NA", "NC", "NE", "NG", "NI", "NL", "NO", "NP", "NR", "NU", "NZ", "OM", "PA", "PE", "PF", "PG", "PH", "PK", "PL", "PM", "PN", "PR", "PS", "PT", "PY", "QA", "RE", "RO", "RS", "RU", "RW", "SA", "SB", "SC", "SD", "SE", "SG", "SH", "SI", "SJ", "SK", "SL", "SM", "SN", "SO", "SR", "SS", "ST", "SV", "SX", "SZ", "TA", "TC", "TD", "TF", "TG", "TH", "TJ", "TK", "TL", "TM", "TN", "TO", "TR", "TT", "TV", "TW", "TZ", "UA", "UG", "UY", "UZ", "VA", "VC", "VE", "VG", "VN", "VU", "WF", "WS", "XK", "YE", "YT", "ZA", "ZM", "ZW",
+/// 2026-10-12), with `US_RATES` removed and `ZZ` ("unknown region") left out on purpose: a pen cannot
+/// be posted to an address in no country.
+pub const OUTSIDE_US: [&str; 234] = [
+    "AC", "AD", "AE", "AF", "AG", "AI", "AL", "AM", "AO", "AQ", "AR", "AT", "AU", "AW", "AX", "AZ", "BA", "BB", "BD", "BE", "BF", "BG", "BH", "BI", "BJ", "BL", "BM", "BN", "BO", "BQ", "BR", "BS", "BT", "BV", "BW", "BY", "BZ", "CA", "CD", "CF", "CG", "CH", "CI", "CK", "CL", "CM", "CN", "CO", "CR", "CV", "CW", "CY", "CZ", "DE", "DJ", "DK", "DM", "DO", "DZ", "EC", "EE", "EG", "EH", "ER", "ES", "ET", "FI", "FJ", "FK", "FO", "FR", "GA", "GB", "GD", "GE", "GF", "GG", "GH", "GI", "GL", "GM", "GN", "GP", "GQ", "GR", "GS", "GT", "GW", "GY", "HK", "HN", "HR", "HT", "HU", "ID", "IE", "IL", "IM", "IN", "IO", "IQ", "IS", "IT", "JE", "JM", "JO", "JP", "KE", "KG", "KH", "KI", "KM", "KN", "KR", "KW", "KY", "KZ", "LA", "LB", "LC", "LI", "LK", "LR", "LS", "LT", "LU", "LV", "LY", "MA", "MC", "MD", "ME", "MF", "MG", "MK", "ML", "MM", "MN", "MO", "MQ", "MR", "MS", "MT", "MU", "MV", "MW", "MX", "MY", "MZ", "NA", "NC", "NE", "NG", "NI", "NL", "NO", "NP", "NR", "NU", "NZ", "OM", "PA", "PE", "PF", "PG", "PH", "PK", "PL", "PM", "PN", "PS", "PT", "PY", "QA", "RE", "RO", "RS", "RU", "RW", "SA", "SB", "SC", "SD", "SE", "SG", "SH", "SI", "SJ", "SK", "SL", "SM", "SN", "SO", "SR", "SS", "ST", "SV", "SX", "SZ", "TA", "TC", "TD", "TF", "TG", "TH", "TJ", "TK", "TL", "TM", "TN", "TO", "TR", "TT", "TV", "TW", "TZ", "UA", "UG", "UY", "UZ", "VA", "VC", "VE", "VG", "VN", "VU", "WF", "WS", "XK", "YE", "YT", "ZA", "ZM", "ZW",
 ];
 
 pub fn allowed_countries(region: Region) -> &'static [&'static str] {
     match region {
-        Region::Us => &["US"],
+        Region::Us => &US_RATES,
         Region::Intl => &OUTSIDE_US,
     }
 }
@@ -193,7 +200,8 @@ mod tests {
         let mut sorted = OUTSIDE_US.to_vec();
         sorted.dedup();
         assert_eq!(sorted.len(), OUTSIDE_US.len());
-        assert_eq!(allowed_countries(Region::Us), &["US"]);
+        assert_eq!(allowed_countries(Region::Us), &["US", "PR", "GU"]);
+        assert!(!OUTSIDE_US.contains(&"PR") && !OUTSIDE_US.contains(&"GU"), "territories pay US rates");
     }
 
     #[test]

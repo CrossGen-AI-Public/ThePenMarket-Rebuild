@@ -101,6 +101,27 @@
   });
   document.addEventListener("keydown", function (e) { if (e.key === "Escape") glClose(); });
 
+  // Search: the magnifier in the header opens the search bar under it with the cursor in the box;
+  // Escape closes it, "/" opens it from the keyboard. Submitting goes to /shop/?q=.
+  var sBtn = $('.icon-btn[aria-controls="searchbar"]'), sBar = $("#searchbar");
+  if (sBtn && sBar) {
+    var sInput = $("input[type=search]", sBar);
+    var setSearch = function (open) {
+      if (open) sBar.removeAttribute("hidden"); else sBar.setAttribute("hidden", "");
+      sBtn.setAttribute("aria-expanded", open ? "true" : "false");
+      if (open && sInput) sInput.focus();
+    };
+    sBtn.addEventListener("click", function () { setSearch(sBar.hasAttribute("hidden")); });
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && !sBar.hasAttribute("hidden")) { setSearch(false); sBtn.focus(); }
+      var t = e.target && e.target.tagName ? e.target.tagName.toLowerCase() : "";
+      if (e.key === "/" && sBar.hasAttribute("hidden") && t !== "input" && t !== "textarea" && t !== "select" && !(e.target && e.target.isContentEditable)) {
+        e.preventDefault();
+        setSearch(true);
+      }
+    });
+  }
+
   // Nav bar safety net: whatever the window width, zoom or font, if a nav link would come within 16px of
   // the logo or the icons, hand over to the Menu button (html.nav-collapsed) instead of overlapping.
   var nav = $(".mainnav"), logo = $(".logo"), tools = $(".masthead-tools");

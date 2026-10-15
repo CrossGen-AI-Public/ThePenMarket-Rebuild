@@ -217,9 +217,9 @@ pub fn sharpen(img: &RgbaImage) -> RgbaImage {
                         n += 1;
                     }
                 }
-                if n > 0 {
+                if let (Some(r), Some(g), Some(b)) = (r.checked_div(n), g.checked_div(n), b.checked_div(n)) {
                     let a = filled.get_pixel(x, y)[3];
-                    filled.put_pixel(x, y, image::Rgba([(r / n) as u8, (g / n) as u8, (b / n) as u8, a]));
+                    filled.put_pixel(x, y, image::Rgba([r as u8, g as u8, b as u8, a]));
                     known[i] = true;
                 }
             }

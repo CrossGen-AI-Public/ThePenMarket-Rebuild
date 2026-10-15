@@ -54,12 +54,13 @@
     var dead = {}, clicks = data.clicks || [];
     clicks.forEach(function (c) { if (c.dead) { var k = c.tx || c.sel || "?"; dead[k] = (dead[k] || 0) + 1; } });
     var rows = Object.keys(dead).map(function (k) { return [k, dead[k]]; }).sort(function (a, b) { return b[1] - a[1]; }).slice(0, 6);
-    var html = '<b>Heat map: ' + location.pathname + '</b><p>' + data.views + ' visitors, ' + clicks.length + ' clicks in the last ' + days + ' days' + (device ? ' on a ' + device : '') + '.</p>';
+    var esc = function (t) { return String(t).replace(/[&<>"']/g, function (ch) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]; }); };
+    var html = '<b>Heat map: ' + esc((function () { try { return decodeURI(location.pathname); } catch (e) { return location.pathname; } })()) + '</b><p>' + esc(Number(data.views) || 0) + ' visitors, ' + clicks.length + ' clicks in the last ' + esc(days) + ' days' + (device ? ' on a ' + esc(device) : '') + '.</p>';
     html += '<label>Show <select data-dev><option value="">every device</option><option value="desktop">computers</option><option value="tablet">tablets</option><option value="phone">phones</option></select></label> <label>over <select data-days><option value="7">7 days</option><option value="30">30 days</option><option value="90">90 days</option></select></label>';
     html += '<p class="heat-key"><span class="heat-dot"></span> a click <span class="heat-ring"></span> a click on something that is not a link: they expected it to do something</p>';
     if (rows.length) { html += "<p><b>Clicked, but it goes nowhere</b></p><ol>" + rows.map(function (r) { return "<li></li>"; }).join("") + "</ol>"; }
     if (!clicks.length) html += "<p>No clicks recorded here yet. Visitors are counted from the day this went live; you are never counted while signed in.</p>";
-    if (device && device !== (window.innerWidth < 600 ? "phone" : window.innerWidth < 1024 ? "tablet" : "desktop")) html += "<p>Tip: make this window about as wide as a " + device + " to see the page the way those visitors saw it.</p>";
+    if (device && device !== (window.innerWidth < 600 ? "phone" : window.innerWidth < 1024 ? "tablet" : "desktop")) html += "<p>Tip: make this window about as wide as a " + esc(device) + " to see the page the way those visitors saw it.</p>";
     panel.innerHTML = html;
     var items = panel.querySelectorAll("ol li"); rows.forEach(function (r, i) { items[i].textContent = r[0] + " (" + r[1] + ")"; }); // visitor-page text is set as text, never as HTML
     var ds = panel.querySelector("[data-dev]"), dd = panel.querySelector("[data-days]"); ds.value = device; dd.value = String(days);

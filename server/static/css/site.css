@@ -90,7 +90,7 @@ html.nav-collapsed .mainnav{display:none}html.nav-collapsed .menu-btn{display:in
    the plant stood, three product cards below the button, the category list on the right edge */
 .hero{position:relative;padding-bottom:var(--s6)}
 .hero-bg{position:absolute;left:0;top:-140px;bottom:290px;width:min(72vw,1100px);background:var(--grey);border-bottom-right-radius:240px;z-index:-1}
-.hero-grid{display:grid;grid-template-columns:minmax(0,11fr) minmax(0,11fr) 120px;gap:var(--s6);align-items:start}
+.hero-grid{display:grid;grid-template-columns:minmax(0,11fr) minmax(0,11fr) max-content;gap:var(--s6);align-items:start}
 .hero-copy{display:flex;flex-direction:column;align-items:flex-start;gap:22px;min-width:0;padding-top:64px}
 .hero-copy > *{max-width:100%}
 .hero .kicker{display:inline-flex;align-items:center;gap:8px;margin:0;font-size:15px;font-weight:500;letter-spacing:.12em;color:var(--ink)}

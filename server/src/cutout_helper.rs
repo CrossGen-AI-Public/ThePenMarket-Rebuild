@@ -64,7 +64,7 @@ pub async fn waiting(state: &State) -> anyhow::Result<Vec<(i32, String)>> {
             let c = cutout_rel(rel);
             !media.join(&c).is_file() && !media.join(format!("{c}.none")).is_file()
         })
-        .map(|(id, rel, has960)| (id, if has960 { thepenmarket::media::variant_rel(&rel, 960) } else { rel }))
+        .map(|(id, rel, _)| (id, rel)) // the full-size photo: the cut-out is shown large
         .collect())
 }
 

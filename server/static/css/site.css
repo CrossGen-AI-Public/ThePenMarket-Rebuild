@@ -462,7 +462,10 @@ button.hotspot:hover,button.hotspot.is-on{background:var(--red);color:#fff}
 .hero-stage.is-photo .hero-fallback{display:flex}
 .hero-stage.is-photo canvas,.hero-stage.is-photo .hotspots{display:none}
 /* his photo with the backdrop removed: just the pen and cap over the page, no multiply blend */
-.hero-stage.is-cutout .hero-fallback img{mix-blend-mode:normal;filter:drop-shadow(0 18px 22px rgba(0,0,0,.12))}
+/* his photo without its background, the pen standing beside its cap: every featured pen the same height
+   in the same place (the stage is 760 / 560 / 380 px tall by width) */
+.hero-stage.is-cutout .hero-fallback{padding:48px 0}
+.hero-stage.is-cutout .hero-fallback img{height:100%;width:auto;max-width:100%;object-fit:contain;mix-blend-mode:normal;filter:drop-shadow(0 18px 22px rgba(0,0,0,.12))}
 html.classic body{zoom:1.12}
 html.classic *{animation:none!important;transition:none!important;scroll-behavior:auto!important}
 html.classic .hero-stage canvas,html.classic .hotspots{display:none}

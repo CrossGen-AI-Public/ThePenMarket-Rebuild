@@ -22,7 +22,7 @@ while IFS='|' read -r path has960; do
   [ -n "$path" ] || continue
   case "$path" in *..*) continue ;; esac
   stem="${path%.*}"; ext="${path##*.}"
-  src="$MEDIA/$path"; [ "$has960" = t ] && src="$MEDIA/$stem-960.$ext"
+  src="$MEDIA/$path"; [ -f "$src" ] || src="$MEDIA/$stem-960.$ext"   # full size: shown large on the homepage
   out="$MEDIA/$stem-cutout.png"
   if [ -f "$out" ] && [ -z "${FORCE:-}" ]; then kept=$((kept+1)); continue; fi
   [ -f "$src" ] || { echo "missing photo: $src" >&2; failed=$((failed+1)); continue; }

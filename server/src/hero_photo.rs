@@ -39,12 +39,19 @@ pub async fn best(state: &State, product_id: i32, photo_rel: &str) -> Option<Str
     if let Some(p) = file(&media, &up) {
         return Some(url(&p, &up));
     }
-    // Nothing upright yet: make it (from the cutout, or a cutout first when CUTOUT_CMD is set) unless a
-    // pen-shaped check already said no (marker file), then show the cutout meanwhile.
-    if file(&media, &format!("{up}.none")).is_none() {
-        spawn_make(state.clone(), product_id, photo_rel.to_string(), false);
+    // Nothing upright yet: make it now from the cutout (a fraction of a second), so the homepage never
+    // shows the flat version; without a cutout, make that first in the background (CUTOUT_CMD).
+    if file(&media, &cut).is_some() {
+        if let Err(e) = make(state, product_id, photo_rel, false).await {
+            tracing::warn!(photo = %photo_rel, error = %e, "homepage photo: could not stand it up");
+        }
+        if let Some(p) = file(&media, &up) {
+            return Some(url(&p, &up));
+        }
+        return file(&media, &cut).map(|p| url(&p, &cut));
     }
-    file(&media, &cut).map(|p| url(&p, &cut))
+    spawn_make(state.clone(), product_id, photo_rel.to_string(), false);
+    None
 }
 
 /// Remake the upright now (after he turns it the other way up). Ok(true): there is one to show.
@@ -88,9 +95,8 @@ async fn make(state: &State, product_id: i32, photo_rel: &str, force: bool) -> a
         if state.cfg.cutout_cmd.is_empty() {
             return Ok(());
         }
-        // the 960-pixel copy is plenty for the homepage and quicker than the original
-        let v = variant_rel(photo_rel, 960);
-        let src = file(&media, &v).or_else(|| file(&media, photo_rel)).ok_or_else(|| anyhow::anyhow!("photo missing"))?;
+        // the full-size photo: the homepage shows the pen large, and detail is what makes it look good
+        let src = file(&media, photo_rel).or_else(|| file(&media, &variant_rel(photo_rel, 960))).ok_or_else(|| anyhow::anyhow!("photo missing"))?;
         let tmp = cut.with_extension("tmp.png");
         let run = tokio::process::Command::new(&state.cfg.cutout_cmd).arg(&src).arg(&tmp).kill_on_drop(true).output();
         let out = tokio::time::timeout(Duration::from_secs(180), run).await.map_err(|_| anyhow::anyhow!("CUTOUT_CMD took over 3 minutes"))??;

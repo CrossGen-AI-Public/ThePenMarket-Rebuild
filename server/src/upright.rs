@@ -39,14 +39,13 @@ pub fn upright_rel(rel: &str) -> String {
     if dir.is_empty() { format!("{stem}-upright.png") } else { format!("{dir}/{stem}-upright.png") }
 }
 
-/// `flip`: turn every piece that was lying down the other way up (for the rare photo where the thinner
-/// end is not the nib; the admin's "Turn it the other way up").
-pub fn stand_upright(img: &RgbaImage, flip: bool) -> Option<RgbaImage> {
+/// The solid pieces of a cutout (8-connected, specks under 2% of the biggest dropped, pieces whose boxes
+/// touch joined: a clip or band the mask drew apart), with the label of every pixel.
+fn find_pieces(img: &RgbaImage) -> Option<(Vec<u32>, Vec<Piece>)> {
     let (w, h) = img.dimensions();
     if w < 8 || h < 8 {
         return None;
     }
-    // 1. label the solid pieces (8-connected)
     let mut label = vec![0u32; (w * h) as usize];
     let mut pieces: Vec<Piece> = Vec::new();
     for sy in 0..h {
@@ -82,8 +81,6 @@ pub fn stand_upright(img: &RgbaImage, flip: bool) -> Option<RgbaImage> {
             pieces.push(p);
         }
     }
-    // 2. drop specks (under 2% of the biggest piece), then join pieces whose boxes touch (a clip or a
-    //    band the mask drew apart from its cap)
     let biggest = pieces.iter().map(|p| p.area).max()?;
     let mut keep: Vec<Piece> = pieces.into_iter().filter(|p| p.area * 50 >= biggest).collect();
     'merge: loop {
@@ -104,26 +101,24 @@ pub fn stand_upright(img: &RgbaImage, flip: bool) -> Option<RgbaImage> {
         }
         break;
     }
-    if keep.is_empty() || keep.len() > 4 {
-        return None;
-    }
-    // 3. only long, thin pieces: pens, pencils, caps. A box is stubbier and fills its outline.
-    // Measured on his 238 photos: lying pens are 5.5-14.5 times longer than wide, caps 3.4-4.2, and no
-    // pen or cap is thicker than 18% of the longest piece; boxes and cases are 21-48%.
-    let longest = keep.iter().map(|p| p.w().max(p.h())).max()? as f32;
-    for p in &keep {
-        let (long, short) = (p.w().max(p.h()) as f32, p.w().min(p.h()) as f32);
-        let fill = p.area as f32 / (p.w() as f32 * p.h() as f32);
-        if long / short < 2.2 || short > 0.2 * longest || (fill > 0.93 && long / short < 5.0) {
-            return None;
-        }
-    }
-    if keep.iter().all(|p| p.h() >= p.w()) {
-        return None; // already standing
-    }
-    // 4. cut each piece out (with its soft edge), stand it up, nib to the top
+    Some((label, keep))
+}
+
+/// Long, thin and not a filled rectangle: a pen, pencil or cap. Measured on his 238 photos: lying pens
+/// are 5.5-14.5 times longer than wide, caps 3.4-4.2, and no pen or cap is thicker than 18% of the
+/// longest piece; boxes and cases are 21-48%.
+fn pen_like(p: &Piece, longest: f32, min_aspect: f32) -> bool {
+    let (long, short) = (p.w().max(p.h()) as f32, p.w().min(p.h()) as f32);
+    let fill = p.area as f32 / (p.w() as f32 * p.h() as f32);
+    long / short >= min_aspect && short <= 0.2 * longest && !(fill > 0.93 && long / short < 5.0)
+}
+
+/// Each piece cut out (with its soft edge), stood up with the thinner end on top (`flip` the other way),
+/// set side by side in the order they lay, bottoms on one line.
+fn compose(img: &RgbaImage, label: &[u32], pieces: &[&Piece], flip: bool) -> Option<RgbaImage> {
+    let w = img.width();
     let mut parts: Vec<(u32, RgbaImage)> = Vec::new();
-    for p in &keep {
+    for p in pieces {
         let mut c = RgbaImage::new(p.w(), p.h());
         for y in p.y0..=p.y1 {
             for x in p.x0..=p.x1 {
@@ -143,7 +138,6 @@ pub fn stand_upright(img: &RgbaImage, flip: bool) -> Option<RgbaImage> {
         parts.push(((p.x0 + p.x1) / 2, c));
     }
     parts.sort_by_key(|(cx, _)| *cx);
-    // 5. side by side, bottoms on one line
     let tallest = parts.iter().map(|(_, c)| c.height()).max()?;
     let gap = (tallest / 10).max(8);
     let pad = gap / 2;
@@ -155,6 +149,91 @@ pub fn stand_upright(img: &RgbaImage, flip: bool) -> Option<RgbaImage> {
         x += c.width() + gap;
     }
     Some(out)
+}
+
+/// Strict: only when every piece is a pen, pencil or cap (at most four) and at least one lies down.
+/// `flip`: turn every piece that was lying down the other way up (for the rare photo where the thinner
+/// end is not the nib; the admin's "Turn it the other way up").
+pub fn stand_upright(img: &RgbaImage, flip: bool) -> Option<RgbaImage> {
+    let (label, keep) = find_pieces(img)?;
+    if keep.is_empty() || keep.len() > 4 {
+        return None;
+    }
+    let longest = keep.iter().map(|p| p.w().max(p.h())).max()? as f32;
+    if !keep.iter().all(|p| pen_like(p, longest, 2.2)) || keep.iter().all(|p| p.h() >= p.w()) {
+        return None;
+    }
+    compose(img, &label, &keep.iter().collect::<Vec<_>>(), flip)
+}
+
+/// Always upright, for the homepage (Brittany, 2026-10-14: "the pen should display vertically always"):
+/// the strict result when there is one; else only the pen-like pieces of the photo stood up (a box,
+/// stand or inkwell beside them is left out); else, with no pen-like piece at all, the whole cutout
+/// turned so its long side stands. Then sharpened.
+pub fn stand_upright_always(img: &RgbaImage, flip: bool) -> Option<RgbaImage> {
+    let up = stand_upright(img, flip).or_else(|| {
+        let (label, keep) = find_pieces(img)?;
+        let candidates: Vec<&Piece> = keep.iter().filter(|p| p.w().max(p.h()) as f32 / p.w().min(p.h()) as f32 >= 3.0).collect();
+        let longest = candidates.iter().map(|p| p.w().max(p.h())).max().unwrap_or(0) as f32;
+        let pens: Vec<&Piece> = candidates.into_iter().filter(|p| pen_like(p, longest, 3.0)).collect();
+        if (1..=4).contains(&pens.len()) {
+            compose(img, &label, &pens, flip)
+        } else if img.width() > img.height() {
+            Some(imageops::rotate270(img))
+        } else {
+            Some(img.clone())
+        }
+    })?;
+    Some(sharpen(&up))
+}
+
+/// A light unsharp mask on the colour only. The see-through pixels first take the colour of the pen
+/// edge next to them, so the blur inside the mask does not pull a dark or light halo onto the edge.
+pub fn sharpen(img: &RgbaImage) -> RgbaImage {
+    let (w, h) = img.dimensions();
+    let mut filled = img.clone();
+    let mut known: Vec<bool> = img.pixels().map(|p| p[3] >= ON).collect();
+    for _ in 0..4 {
+        let snapshot = known.clone();
+        let src = filled.clone();
+        for y in 0..h {
+            for x in 0..w {
+                let i = (y * w + x) as usize;
+                if snapshot[i] {
+                    continue;
+                }
+                let (mut r, mut g, mut b, mut n) = (0u32, 0u32, 0u32, 0u32);
+                for (dx, dy) in [(-1i32, 0i32), (1, 0), (0, -1), (0, 1)] {
+                    let (nx, ny) = (x as i32 + dx, y as i32 + dy);
+                    if nx < 0 || ny < 0 || nx >= w as i32 || ny >= h as i32 {
+                        continue;
+                    }
+                    let j = (ny as u32 * w + nx as u32) as usize;
+                    if snapshot[j] {
+                        let q = src.get_pixel(nx as u32, ny as u32);
+                        r += q[0] as u32;
+                        g += q[1] as u32;
+                        b += q[2] as u32;
+                        n += 1;
+                    }
+                }
+                if n > 0 {
+                    let a = filled.get_pixel(x, y)[3];
+                    filled.put_pixel(x, y, image::Rgba([(r / n) as u8, (g / n) as u8, (b / n) as u8, a]));
+                    known[i] = true;
+                }
+            }
+        }
+    }
+    let mut opaque = filled.clone();
+    for p in opaque.pixels_mut() {
+        p[3] = 255;
+    }
+    let mut out = imageops::unsharpen(&opaque, 1.1, 2);
+    for (o, s) in out.pixels_mut().zip(img.pixels()) {
+        o[3] = s[3];
+    }
+    out
 }
 
 /// For a piece lying down: is its left end the thinner one? Compares how tall the piece is between 5%
@@ -169,10 +248,10 @@ fn thinner_end_is_left(c: &RgbaImage) -> bool {
     left < right
 }
 
-/// Read a cutout PNG, write the upright PNG beside it. Ok(false): not a pen-shaped photo, nothing written.
+/// Read a cutout PNG, write the upright (always upright, sharpened) PNG beside it. Ok(false): nothing in it.
 pub fn make_upright_file(cutout: &Path, out: &Path, flip: bool) -> anyhow::Result<bool> {
     let img = image::open(cutout)?.to_rgba8();
-    match stand_upright(&img, flip) {
+    match stand_upright_always(&img, flip) {
         Some(up) => {
             let tmp = out.with_extension("png.tmp");
             up.save_with_format(&tmp, image::ImageFormat::Png)?;
@@ -230,6 +309,27 @@ mod tests {
         let mut img = RgbaImage::new(400, 200);
         bar(&mut img, 20, 20, 380, 120);
         assert!(stand_upright(&img, false).is_none());
+    }
+
+    #[test]
+    fn always_stands_the_pen_and_leaves_the_box_out() {
+        let mut img = RgbaImage::new(600, 300);
+        bar(&mut img, 20, 20, 380, 140); // a box
+        bar(&mut img, 20, 220, 420, 240); // the pen lying below it
+        bar(&mut img, 420, 227, 450, 233);
+        assert!(stand_upright(&img, false).is_none(), "strict refuses a box");
+        let up = stand_upright_always(&img, false).expect("always");
+        assert!(up.height() > up.width(), "{}x{}", up.width(), up.height());
+        assert!(up.width() < 120, "the box was left out: {} wide", up.width());
+    }
+
+    #[test]
+    fn sharpen_keeps_the_see_through_parts() {
+        let mut img = RgbaImage::new(40, 40);
+        bar(&mut img, 10, 10, 30, 30);
+        let s = sharpen(&img);
+        assert_eq!(s.get_pixel(2, 2)[3], 0);
+        assert_eq!(s.get_pixel(20, 20)[3], 255);
     }
 
     #[test]
